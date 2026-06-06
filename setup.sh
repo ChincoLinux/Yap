@@ -27,6 +27,7 @@ sudo apt-get install -y -qq \
   build-essential cmake curl wget git pkg-config \
   python3 python3-pip \
   libnotify-bin notify-osd \
+  libcurl4-openssl-dev \
   --no-install-recommends
 
 # --- 2. Compilar llama.cpp ---
@@ -36,7 +37,7 @@ cd "$LLAMA_BUILD"
 git clone --depth 1 --branch "$LLAMACPP_BRANCH" "$LLAMACPP_REPO" 2>/dev/null
 cd llama.cpp
 mkdir -p build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DLLAMA_CUDA=OFF -DLLAMA_BLAS=OFF -DLLAMA_METAL=OFF
+cmake .. -DCMAKE_BUILD_TYPE=Release -DLLAMA_CUDA=OFF -DLLAMA_BLAS=OFF -DLLAMA_METAL=OFF -DLLAMA_CURL=OFF
 cmake --build . --config Release -j"$(nproc)" 2>&1 | tail -3
 sudo cp bin/llama-cli /usr/local/bin/llama-cli
 rm -rf "$LLAMA_BUILD"
