@@ -189,6 +189,7 @@ def interpret(user_input):
             rest = user_input[len(prefix):].strip().strip("\"'")
             if rest.startswith("http"):
                 return "webfetch", rest
+            return "search", rest
 
     return "query", user_input
 
@@ -209,6 +210,25 @@ def main():
 
     if action == "open_app":
         print(cmd_open_app(param))
+
+    elif action == "search":
+        query = param
+        wikipedia_url = (
+            "https://es.wikipedia.org/w/index.php?search="
+            + urllib.parse.quote(query)
+        )
+        print(f"Buscando '{query}' en Wikipedia...")
+        content = cmd_webfetch(wikipedia_url, feed_to_llm=True)
+        if isinstance(content, tuple):
+            text, _ = content
+            print(f"Contenido obtenido ({len(text)} chars). Resumiendo con LLM...")
+            response = cmd_query(
+                f"Resume el siguiente contenido sobre '{query}':",
+                context=text,
+            )
+            print(response)
+        else:
+            print(content)
 
     elif action == "webfetch":
         print("Obteniendo contenido web...")
