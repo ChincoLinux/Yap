@@ -59,7 +59,8 @@ Construir un sistema Debian estable ultraligero con un agente IA local (CPU-only
 1. El usuario escribe un comando en la terminal.
 2. El interprete analiza el texto y decide el tipo de accion:
    - Si comienza con "abre", "abrir", "open", "lanzar" o "iniciar": accion de apertura de app.
-   - Si comienza con "busca", "buscar", "fetch" o "webfetch" seguido de URL: accion de webfetch.
+   - Si comienza con "busca", "buscar", "fetch" o "webfetch" seguido de URL: accion de webfetch directo.
+   - Si comienza con "busca", "buscar", "fetch" o "webfetch" sin URL: busqueda en Wikipedia.
    - Cualquier otro texto: consulta al LLM.
 3. La accion se ejecuta contra la whitelist correspondiente.
 4. El resultado se muestra en pantalla y se emite una alerta grafica.
@@ -84,7 +85,7 @@ El instalador es un script Bash que automatiza la configuracion del entorno. Con
 | 42 | `cmake --build . --config Release -j"$(nproc)"` | Compila usando todos los nucleos disponibles. |
 | 43 | `sudo cp bin/llama-cli /usr/local/bin/llama-cli` | Copia el binario compilado estaticamente al PATH global. |
 | 50 | `if [ ! -f "$MODEL_FILE" ]` | Verifica si el modelo ya existe antes de descargar (reanudacion de instalacion). |
-| 63 | `sudo ln -sf "$YAP_DIR/yap.py" "$BIN_DIR/yap"` | Crea un enlace simbolico en /usr/local/bin para que el comando `yap` este disponible globalmente. |
+| 63 | `sudo ln -sf "$SCRIPT_DIR/yap.py" "$BIN_DIR/yap"` | Crea un enlace simbolico al archivo del repositorio. Al hacer `git pull`, el symlink apunta automaticamente a la version actualizada sin necesidad de copiar. |
 
 ### Python (yap.py)
 
@@ -92,16 +93,16 @@ El agente principal esta escrito en Python 3. Conceptos clave:
 
 | Linea(s) | Concepto | Explicacion |
 |---|---|---|
-| 4-9 | `import subprocess`, `urllib`, `shutil` | Ejecucion de comandos, peticiones HTTP, busqueda de binarios en PATH. |
-| 11-17 | Constantes de configuracion | Rutas a whitelist (`/etc/yap/`), modelo (`/opt/yap/models/`), tokens BOS/HEADER/FOOTER/EOT. |
-| 28-39 | `load_whitelist()` | Lee archivos apps.conf (clave:binarios). Soporta multiples binarios alternativos separados por coma. |
-| 41-49 | `load_domain_whitelist()` | Carga lista de dominios permitidos. Validacion estricta: coincidencia exacta o subdominio directo. |
-| 52-60 | `notify()` | Notificacion grafica via notify-send con 3 niveles de urgencia. |
-| 63-97 | `cmd_open_app()` | Busca el primer binario disponible de la whitelist usando `shutil.which()`, lo ejecuta y captura su version. |
-| 100-126 | `cmd_webfetch()` | Valida el dominio (exacto o subdominio), descarga contenido, elimina HTML y limita a 3000 chars. Puede retornar texto para resumen LLM. |
-| 129-163 | `cmd_query()` | Construye el prompt con tokens especiales Llama 3.2 Instruct, ejecuta llama-cli con -no-cnv y --no-display-prompt. Timeout 120s. Acepta contexto opcional de webfetch. |
-| 165-181 | `interpret()` | Analiza el texto del usuario: "abre" -> app, "busca"/"fetch" -> web, otro -> consulta LLM. |
-| 182-218 | `main()` | Punto de entrada: modo comando directo (argv) o modo interactivo (input loop). |
+| 4-10 | `import subprocess`, `urllib`, `re`, `shutil` | Ejecucion de comandos, peticiones HTTP, regex HTML, busqueda de binarios. |
+| 12-17 | Constantes de configuracion | Rutas a whitelist (`/etc/yap/`), modelo (`/opt/yap/models/`), tokens BOS/HEADER/FOOTER/EOT. |
+| 29-43 | `load_whitelist()` | Lee apps.conf (clave:binarios). Usa list comprehension con strip() para eliminar espacios en blancos. |
+| 45-53 | `load_domain_whitelist()` | Carga lista de dominios permitidos. Validacion estricta: coincidencia exacta o subdominio directo. |
+| 56-64 | `notify()` | Notificacion grafica via notify-send con 3 niveles de urgencia. |
+| 67-101 | `cmd_open_app()` | Busca el primer binario usando `shutil.which()`, lo ejecuta y captura version. Si la app no esta en whitelist, lista las apps disponibles (graceful blocking). |
+| 104-133 | `cmd_webfetch()` | Valida dominio, descarga contenido, elimina HTML via regex y limita a 3000 chars. Si el dominio esta bloqueado, lista los permitidos. |
+| 136-178 | `cmd_query()` | Construye prompt con tokens Llama 3.2 Instruct e historial de conversacion. store_history=False evita duplicar prompts de resumen en historial. |
+| 181-193 | `interpret()` | Analiza entrada: "abre" -> app, "busca <URL>" -> webfetch, "busca <texto>" -> busqueda Wikipedia, otro -> consulta LLM. |
+| 196-209 | `main()` / `handle_action()` | Modo comando directo o interactivo con loop. `handle_action` centraliza logica y gestiona historial. |
 
 Funcion de dominio (seguridad):
 - La validacion en `cmd_webfetch` (linea 107) usa coincidencia exacta o sufijo de subdominio: `domain == d or domain.endswith("." + d)`. Esto evita que `notwikipedia.org` coincida con `wikipedia.org` (bug corregido en commit 348e9b0).
@@ -222,7 +223,8 @@ Yap > Abre LibreOffice
 ```bash
 yap Abre LibreOffice
 yap Busca https://es.wikipedia.org/wiki/Linux
-yap Que es una particion de disco?
+yap Busca que es una particion de disco
+yap Que es Debian?
 ```
 
 ### Acciones soportadas
@@ -231,7 +233,8 @@ yap Que es una particion de disco?
 |---|---|---|
 | Abrir app | `yap Abre LibreOffice` | Abre la app si esta en whitelist (soporta multiples binarios alternativos). |
 | Webfetch + resumen | `yap Busca https://es.wikipedia.org/wiki/Linux` | Obtiene contenido del sitio, lo limpia de HTML y lo envia al LLM para resumir. |
-| Consulta LLM | `yap Que es Debian?` | Responde con el modelo LLM local usando formato de chat Llama 3.2 Instruct. |
+| Busqueda Wikipedia | `yap Busca que es Linux` | Busca el texto en Wikipedia via API REST, obtiene el extracto y lo resume con el LLM. Muestra la fuente al final. |
+| Consulta LLM | `yap Que es Debian?` | Responde con el modelo LLM local. Soporta historial de hasta 6 intercambios en modo interactivo. |
 
 ---
 

@@ -7,6 +7,7 @@ import os
 import shutil
 import urllib.request
 import urllib.parse
+import re
 
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
@@ -37,7 +38,7 @@ def load_whitelist(path):
                 if line and not line.startswith("#"):
                     parts = line.split(":", 1)
                     if len(parts) == 2:
-                        apps[parts[0].lower()] = parts[1].split(",")
+                        apps[parts[0].lower()] = [c.strip() for c in parts[1].split(",")]
     return apps
 
 
@@ -119,8 +120,6 @@ def cmd_webfetch(url, feed_to_llm=False):
     except Exception as e:
         return f"[ERROR] Error al obtener {url}: {e}"
 
-    # Strip HTML tags (basic)
-    import re
     text = re.sub(r"<[^>]+>", " ", raw)
     text = re.sub(r"\s+", " ", text).strip()
     text = text[:3000]
@@ -131,11 +130,11 @@ def cmd_webfetch(url, feed_to_llm=False):
     return f"Contenido obtenido ({len(text)} chars):\n{text[:1000]}..."
 
 
-def cmd_query(prompt, context=None):
+def cmd_query(prompt, context=None, store_history=True):
     parts = [BOS]
     parts.append(f"{HEADER}system{FOOTER}\n\n{SYSTEM_PROMPT}{EOT}")
 
-    # Add conversation history
+    # Add conversation history (store original user prompt, not fabricated ones)
     for user_msg, assistant_msg in HISTORY:
         parts.append(f"{HEADER}user{FOOTER}\n\n{user_msg}{EOT}")
         parts.append(f"{HEADER}assistant{FOOTER}\n\n{assistant_msg}{EOT}")
@@ -165,7 +164,7 @@ def cmd_query(prompt, context=None):
         out = out.strip()
         if not out:
             out = result.stderr.strip() or "(sin respuesta)"
-        else:
+        elif store_history:
             HISTORY.append((prompt, out))
             if len(HISTORY) > MAX_HISTORY:
                 HISTORY.pop(0)
@@ -197,40 +196,50 @@ def interpret(user_input):
 def main():
     if len(sys.argv) > 1:
         user_input = " ".join(sys.argv[1:])
+        action, param = interpret(user_input)
+        handle_action(action, param, user_input)
     else:
-        try:
-            user_input = input("Yap > ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            sys.exit(0)
-        if not user_input:
-            return
+        while True:
+            try:
+                user_input = input("Yap > ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                sys.exit(0)
+            if not user_input:
+                continue
+            action, param = interpret(user_input)
+            handle_action(action, param, user_input)
 
-    action, param = interpret(user_input)
 
+def handle_action(action, param, original_input):
     if action == "open_app":
         print(cmd_open_app(param))
 
     elif action == "search":
         query = param
-        wikipedia_url = (
+        wikipedia_api = (
             "https://es.wikipedia.org/w/api.php?action=query"
             "&prop=extracts&exintro=&explaintext=&exchars=2000"
             "&titles=" + urllib.parse.quote(query) + "&format=json"
         )
         print(f"Buscando '{query}' en Wikipedia...")
-        content = cmd_webfetch(wikipedia_url, feed_to_llm=True)
+        content = cmd_webfetch(wikipedia_api, feed_to_llm=True)
         if isinstance(content, tuple):
             text, _ = content
             print(f"Contenido obtenido ({len(text)} chars). Resumiendo con LLM...")
             response = cmd_query(
                 f"Resume el siguiente contenido sobre '{query}':",
                 context=text,
+                store_history=False,
             )
             print(response)
-            # Build a user-friendly source link
-            source = "https://es.wikipedia.org/wiki/" + urllib.parse.quote(query.replace(" ", "_"))
+            source = "https://es.wikipedia.org/wiki/" + query.replace(" ", "_")
             print(f"\nFuente: {source}")
+            # Store the real user query in history
+            if not response.startswith("[WARN]") and not response.startswith("[ERROR]"):
+                HISTORY.append((query, response))
+                if len(HISTORY) > MAX_HISTORY:
+                    HISTORY.pop(0)
         else:
             print(content)
 
@@ -243,14 +252,19 @@ def main():
             response = cmd_query(
                 f"Resume el siguiente contenido sobre '{param}':",
                 context=text,
+                store_history=False,
             )
             print(response)
+            if not response.startswith("[WARN]") and not response.startswith("[ERROR]"):
+                HISTORY.append((param, response))
+                if len(HISTORY) > MAX_HISTORY:
+                    HISTORY.pop(0)
         else:
             print(content)
 
     else:
         print("Consultando LLM...")
-        print(cmd_query(user_input))
+        print(cmd_query(original_input))
 
 
 if __name__ == "__main__":
