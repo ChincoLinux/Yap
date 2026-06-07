@@ -39,7 +39,7 @@ git clone --depth 1 --branch "$LLAMACPP_BRANCH" "$LLAMACPP_REPO" 2>/dev/null
 cd llama.cpp
 mkdir -p build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release -DLLAMA_CUDA=OFF -DLLAMA_BLAS=OFF -DLLAMA_METAL=OFF -DLLAMA_CURL=OFF
-cmake --build . --config Release -j"$(nproc)" 2>&1 | tail -3
+cmake --build . --config Release -j"$(nproc)" 2>&1
 sudo cp bin/llama-cli /usr/local/bin/llama-cli
 rm -rf "$LLAMA_BUILD"
 
@@ -48,7 +48,7 @@ echo "[3/6] Descargando modelo Llama 3.2 3B Instruct (GGUF Q4_K_M)..."
 sudo mkdir -p "$MODEL_DIR"
 MODEL_FILE="$MODEL_DIR/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
 if [ ! -f "$MODEL_FILE" ]; then
-  sudo wget -q --show-progress -O "$MODEL_FILE" "$MODEL_URL"
+  sudo wget --progress=bar:force -O "$MODEL_FILE" "$MODEL_URL"
 else
   echo "  Modelo ya existe, saltando descarga."
 fi
@@ -77,10 +77,10 @@ echo "=============================================="
 echo ""
 echo "  Componente        Estado"
 echo "  ----------------- -------"
-echo "  llama-cli         $(command -v llama-cli && echo '✓' || echo '✗')"
+echo "  llama-cli         $(command -v llama-cli && echo '[OK]' || echo '[FAIL]')"
 echo "  Modelo            $(ls -lh $MODEL_FILE 2>/dev/null | awk '{print $5}')"
-echo "  yap               $(command -v yap && echo '✓' || echo '✗')"
-echo "  notify-send       $(command -v notify-send && echo '✓' || echo '✗')"
+echo "  yap               $(command -v yap && echo '[OK]' || echo '[FAIL]')"
+echo "  notify-send       $(command -v notify-send && echo '[OK]' || echo '[FAIL]')"
 echo ""
 echo "  Whitelist apps:  $WHITELIST_DIR/apps.conf"
 echo "  Whitelist web:   $WHITELIST_DIR/web.conf"

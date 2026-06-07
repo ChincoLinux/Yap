@@ -7,8 +7,7 @@ import os
 import shutil
 import urllib.request
 import urllib.parse
-import json
-import tempfile
+
 
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
@@ -69,11 +68,11 @@ def cmd_open_app(app_name):
                 version = result.stdout.strip() or result.stderr.strip() or "(sin versión)"
             except Exception:
                 version = "(sin versión)"
-            app_title = app_name.strip().title()
-            notify(f"{app_title} abierta", f"Versión: {version}")
-            return f"✅ {app_title} abierta.\nInformación: {version}"
-        return f"❌ Binario '{binary}' no encontrado en el sistema"
-    return f"❌ '{app_name}' no está en la whitelist de aplicaciones"
+    app_title = app_name.strip().title()
+    notify(f"{app_title} abierta", f"Versión: {version}")
+    return f"[OK] {app_title} abierta.\nInformación: {version}"
+        return f"[ERROR] Binario '{binary}' no encontrado en el sistema"
+    return f"[ERROR] '{app_name}' no está en la whitelist de aplicaciones"
 
 
 def cmd_webfetch(url):
@@ -82,15 +81,15 @@ def cmd_webfetch(url):
     domain = parsed.netloc.lower()
     if domain.startswith("www."):
         domain = domain[4:]
-    if any(domain.endswith(d) or domain == d for d in domains):
+    if domain in domains or any(domain == d or domain.endswith("." + d) for d in domains):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Yap-ChincoLinux/1.0"})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 content = resp.read().decode("utf-8", errors="replace")[:2000]
             return f"Contenido obtenido ({len(content)} chars):\n{content[:500]}..."
         except Exception as e:
-            return f"❌ Error al obtener {url}: {e}"
-    return f"❌ Dominio '{domain}' no está en la whitelist"
+            return f"[ERROR] Error al obtener {url}: {e}"
+    return f"[ERROR] Dominio '{domain}' no está en la whitelist"
 
 
 def cmd_query(prompt):
@@ -108,9 +107,9 @@ def cmd_query(prompt):
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         return result.stdout.strip() or "(sin respuesta)"
     except subprocess.TimeoutExpired:
-        return "⚠️ Tiempo de espera agotado"
+        return "[WARN] Tiempo de espera agotado"
     except FileNotFoundError:
-        return "❌ llama-cli no instalado. Ejecuta el setup de Yap."
+        return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
 
 
 def interpret(user_input):
