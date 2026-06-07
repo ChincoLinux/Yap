@@ -60,7 +60,7 @@ sudo cp "$SCRIPT_DIR/whitelist/apps.conf" "$WHITELIST_DIR/"
 sudo cp "$SCRIPT_DIR/whitelist/web.conf" "$WHITELIST_DIR/"
 sudo cp "$SCRIPT_DIR/yap.py" "$YAP_DIR/yap.py"
 sudo chmod +x "$YAP_DIR/yap.py"
-sudo ln -sf "$YAP_DIR/yap.py" "$BIN_DIR/yap"
+sudo ln -sf "$SCRIPT_DIR/yap.py" "$BIN_DIR/yap"
 
 # --- 5. Instalar aplicaciones recomendadas ---
 echo "[5/6] Instalando aplicaciones sugeridas..."

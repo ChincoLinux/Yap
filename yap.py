@@ -13,6 +13,7 @@ WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
 WHITELIST_WEB = f"{CONFIG_DIR}/whitelist/web.conf"
 MODEL_PATH = "/opt/yap/models/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
 MAX_CTX = 4096
+MAX_HISTORY = 6
 
 BOS = "<|begin_of_text|>"
 HEADER = "<|start_header_id|>"
@@ -23,6 +24,8 @@ SYSTEM_PROMPT = (
     "Eres Yap, un asistente educativo en espanol para ChincoLinux. "
     "Responde de forma clara, breve y precisa. Si no sabes algo, dilo."
 )
+
+HISTORY = []
 
 
 def load_whitelist(path):
@@ -64,7 +67,8 @@ def cmd_open_app(app_name):
     apps = load_whitelist(WHITELIST_APPS)
     key = app_name.strip().lower()
     if key not in apps:
-        return f"[ERROR] '{app_name.strip().title()}' no esta en la whitelist de aplicaciones"
+        available = ", ".join(sorted(apps.keys(), key=str.title))
+        return f"[ERROR] '{app_name.strip().title()}' no disponible.\nApps permitidas: {available}"
 
     candidates = apps[key]
     bin_path = None
@@ -105,7 +109,8 @@ def cmd_webfetch(url, feed_to_llm=False):
         domain = domain[4:]
 
     if not (domain in domains or any(domain == d or domain.endswith("." + d) for d in domains)):
-        return f"[ERROR] Dominio '{domain}' no esta en la whitelist"
+        allowed = ", ".join(domains)
+        return f"[ERROR] Dominio '{domain}' bloqueado.\nDominios permitidos: {allowed}"
 
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Yap-ChincoLinux/1.0"})
@@ -129,6 +134,12 @@ def cmd_webfetch(url, feed_to_llm=False):
 def cmd_query(prompt, context=None):
     parts = [BOS]
     parts.append(f"{HEADER}system{FOOTER}\n\n{SYSTEM_PROMPT}{EOT}")
+
+    # Add conversation history
+    for user_msg, assistant_msg in HISTORY:
+        parts.append(f"{HEADER}user{FOOTER}\n\n{user_msg}{EOT}")
+        parts.append(f"{HEADER}assistant{FOOTER}\n\n{assistant_msg}{EOT}")
+
     if context:
         parts.append(f"{HEADER}user{FOOTER}\n\nContexto:\n{context}{EOT}")
     parts.append(f"{HEADER}user{FOOTER}\n\n{prompt}{EOT}")
@@ -149,12 +160,15 @@ def cmd_query(prompt, context=None):
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         out = result.stdout.strip()
-        # Strip special tokens that might leak into output
         for tok in [BOS, HEADER, FOOTER, EOT, "[end of text]"]:
             out = out.replace(tok, "")
         out = out.strip()
         if not out:
             out = result.stderr.strip() or "(sin respuesta)"
+        else:
+            HISTORY.append((prompt, out))
+            if len(HISTORY) > MAX_HISTORY:
+                HISTORY.pop(0)
         return out
     except subprocess.TimeoutExpired:
         return "[WARN] Tiempo de espera agotado (120s)"
