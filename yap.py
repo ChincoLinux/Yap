@@ -214,8 +214,9 @@ def main():
     elif action == "search":
         query = param
         wikipedia_url = (
-            "https://es.wikipedia.org/w/index.php?search="
-            + urllib.parse.quote(query)
+            "https://es.wikipedia.org/w/api.php?action=query"
+            "&prop=extracts&exintro=&explaintext=&exchars=2000"
+            "&titles=" + urllib.parse.quote(query) + "&format=json"
         )
         print(f"Buscando '{query}' en Wikipedia...")
         content = cmd_webfetch(wikipedia_url, feed_to_llm=True)
@@ -227,7 +228,9 @@ def main():
                 context=text,
             )
             print(response)
-            print(f"\nFuente: {wikipedia_url}")
+            # Build a user-friendly source link
+            source = "https://es.wikipedia.org/wiki/" + urllib.parse.quote(query.replace(" ", "_"))
+            print(f"\nFuente: {source}")
         else:
             print(content)
 
