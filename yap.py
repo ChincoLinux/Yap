@@ -127,7 +127,6 @@ def cmd_webfetch(url, feed_to_llm=False):
 
 
 def cmd_query(prompt, context=None):
-    # Build the chat-formatted prompt for Llama 3.2 Instruct
     parts = [BOS]
     parts.append(f"{HEADER}system{FOOTER}\n\n{SYSTEM_PROMPT}{EOT}")
     if context:
@@ -144,19 +143,21 @@ def cmd_query(prompt, context=None):
         "-n", "384",
         "--temp", "0.7",
         "--ctx-size", str(MAX_CTX),
+        "-no-cnv",
+        "--no-display-prompt",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         out = result.stdout.strip()
         # Strip special tokens that might leak into output
-        for tok in [BOS, HEADER, FOOTER, EOT, "<|assistant|>"]:
+        for tok in [BOS, HEADER, FOOTER, EOT, "[end of text]"]:
             out = out.replace(tok, "")
         out = out.strip()
         if not out:
             out = result.stderr.strip() or "(sin respuesta)"
         return out
     except subprocess.TimeoutExpired:
-        return "[WARN] Tiempo de espera agotado (180s)"
+        return "[WARN] Tiempo de espera agotado (120s)"
     except FileNotFoundError:
         return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
 
