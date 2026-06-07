@@ -25,7 +25,7 @@ Construir un sistema Debian estable ultraligero con un agente IA local (CPU-only
 | Runtime | llama.cpp (CPU-only, sin GPU) |
 | RAM minima | 8 GB (5-6 GB utiles para LLM + cache) |
 | Contexto | 4096 tokens por defecto |
-| Latencia estimada | 2-3 s primeras tokens en CPU |
+| Latencia estimada | 15-30 s primeras tokens en CPU (2 nucleos), ~20 tok/s |
 | Idioma | Espanol |
 | SO destino | Debian 13 (64-bit) |
 
@@ -80,10 +80,11 @@ El instalador es un script Bash que automatiza la configuracion del entorno. Con
 | 36 | `mktemp -d` | Crea un directorio temporal unico y seguro para compilar sin dejar residuos. |
 | 37 | `cd "$LLAMA_BUILD"` | Cambia al directorio temporal creado. |
 | 38 | `git clone --depth 1 --branch "$LLAMACPP_BRANCH"` | Clonado superficial (solo el ultimo commit) para ahorrar ancho de banda y disco. |
-| 41 | `cmake .. -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF` | Configura el proyecto CMake en modo Release y deshabilita funcionalidades no necesarias (CURL, CUDA, BLAS, Metal). |
+| 41 | `cmake .. -DCMAKE_BUILD_TYPE=Release -DLLAMA_CUDA=OFF -DLLAMA_BLAS=OFF -DLLAMA_METAL=OFF -DLLAMA_CURL=OFF -DLLAMA_STATIC=ON` | Configura el proyecto CMake en modo Release, deshabilita funcionalidades no necesarias y activa enlace estatico para evitar dependencia de libllama.so. |
 | 42 | `cmake --build . --config Release -j"$(nproc)"` | Compila usando todos los nucleos disponibles. |
+| 43 | `sudo cp bin/llama-cli /usr/local/bin/llama-cli` | Copia el binario compilado estaticamente al PATH global. |
 | 50 | `if [ ! -f "$MODEL_FILE" ]` | Verifica si el modelo ya existe antes de descargar (reanudacion de instalacion). |
-| 62-63 | `sudo ln -sf ...` | Crea un enlace simbolico en /usr/local/bin para que el comando `yap` este disponible globalmente. |
+| 63 | `sudo ln -sf "$YAP_DIR/yap.py" "$BIN_DIR/yap"` | Crea un enlace simbolico en /usr/local/bin para que el comando `yap` este disponible globalmente. |
 
 ### Python (yap.py)
 
@@ -91,38 +92,38 @@ El agente principal esta escrito en Python 3. Conceptos clave:
 
 | Linea(s) | Concepto | Explicacion |
 |---|---|---|
-| 4 | `import subprocess` | Permite ejecutar comandos del sistema (llamar a notify-send, abrir apps, ejecutar llama-cli). |
-| 8-9 | `import urllib.request, urllib.parse` | Para realizar peticiones HTTP (webfetch) y analizar URLs de forma segura. |
-| 13-16 | Constantes de configuracion | Rutas a archivos de whitelist y modelo, inmutables durante la ejecucion. |
-| 21-31 | `load_whitelist()` | Lee archivos de configuracion clave:valor, ignora comentarios y lineas vacias. |
-| 34-42 | `load_domain_whitelist()` | Carga la lista de dominios permitidos. |
-| 45-53 | `notify()` | Envia notificaciones graficas al escritorio mediante notify-send. |
-| 56-76 | `cmd_open_app()` | Verifica whitelist, busca el binario en PATH, lo ejecuta y obtiene su version. |
-| 79-93 | `cmd_webfetch()` | Valida el dominio contra la whitelist y descarga contenido textual limitado a 2000 caracteres. |
-| 96-113 | `cmd_query()` | Construye el prompt con formato de chat Llama 3.2 Instruct (tokens especiales BOS, HEADER, FOOTER, EOT) y lo envia a llama-cli. Acepta contexto opcional (webfetch) para resumir contenido externo. |
-| 116-127 | `interpret()` | Analiza el texto del usuario para determinar la intencion (abrir app, buscar web, o consultar LLM). |
-| 130-154 | `main()` | Punto de entrada: modo comando directo (argv) o modo interactivo (input loop). |
+| 4-9 | `import subprocess`, `urllib`, `shutil` | Ejecucion de comandos, peticiones HTTP, busqueda de binarios en PATH. |
+| 11-17 | Constantes de configuracion | Rutas a whitelist (`/etc/yap/`), modelo (`/opt/yap/models/`), tokens BOS/HEADER/FOOTER/EOT. |
+| 28-39 | `load_whitelist()` | Lee archivos apps.conf (clave:binarios). Soporta multiples binarios alternativos separados por coma. |
+| 41-49 | `load_domain_whitelist()` | Carga lista de dominios permitidos. Validacion estricta: coincidencia exacta o subdominio directo. |
+| 52-60 | `notify()` | Notificacion grafica via notify-send con 3 niveles de urgencia. |
+| 63-97 | `cmd_open_app()` | Busca el primer binario disponible de la whitelist usando `shutil.which()`, lo ejecuta y captura su version. |
+| 100-126 | `cmd_webfetch()` | Valida el dominio (exacto o subdominio), descarga contenido, elimina HTML y limita a 3000 chars. Puede retornar texto para resumen LLM. |
+| 129-163 | `cmd_query()` | Construye el prompt con tokens especiales Llama 3.2 Instruct, ejecuta llama-cli con -no-cnv y --no-display-prompt. Timeout 120s. Acepta contexto opcional de webfetch. |
+| 165-181 | `interpret()` | Analiza el texto del usuario: "abre" -> app, "busca"/"fetch" -> web, otro -> consulta LLM. |
+| 182-218 | `main()` | Punto de entrada: modo comando directo (argv) o modo interactivo (input loop). |
 
 Funcion de dominio (seguridad):
-- La validacion en `cmd_webfetch` usa coincidencia exacta o sufijo de subdominio: `domain == d or domain.endswith("." + d)`. Esto evita que `notwikipedia.org` coincida con `wikipedia.org` (bug corregido en commit 348e9b0).
+- La validacion en `cmd_webfetch` (linea 107) usa coincidencia exacta o sufijo de subdominio: `domain == d or domain.endswith("." + d)`. Esto evita que `notwikipedia.org` coincida con `wikipedia.org` (bug corregido en commit 348e9b0).
 
 ### llama.cpp y GGUF
 
 | Componente | Rol |
 |---|---|
-| llama.cpp | Runtime de inferencia para modelos Llama en CPU. Compilado desde fuente con optimizaciones nativas. |
+| llama.cpp | Runtime de inferencia para modelos Llama en CPU. Compilado desde fuente con optimizaciones nativas y enlace estatico (-DLLAMA_STATIC=ON). |
 | GGUF | Formato de archivo para modelos cuantizados. Q4_K_M significa cuantizacion de 4 bits con mezcla de precisiones para balancear calidad y rendimiento. |
-| llama-cli | Herramienta de linea de comandos que carga el modelo GGUF y genera texto. Parametros usados: -m (modelo), -p (prompt con formato chat Llama 3.2 Instruct), -n (384 tokens), --temp (0.7), --ctx-size (4096). |
+| llama-cli | Parametros usados: -m (modelo), -p (prompt con tokens especiales Llama 3.2 Instruct), -n (384 tokens), --temp (0.7), --ctx-size (4096), -no-cnv (desactiva modo conversacion automatico), --no-display-prompt (suprime eco del prompt en salida). |
 
 ### CMake
 
 | Parametro | Explicacion |
-|---|---|
+|---|---|---|
 | `-DCMAKE_BUILD_TYPE=Release` | Optimiza el binario para velocidad (sin debug symbols). |
 | `-DLLAMA_CURL=OFF` | Deshabilita soporte para descarga de modelos via CURL (no necesario, descargamos con wget). |
 | `-DLLAMA_CUDA=OFF` | Deshabilita soporte GPU NVIDIA (CPU-only). |
 | `-DLLAMA_BLAS=OFF` | Deshabilita aceleracion BLAS (no disponible en hardware basico). |
 | `-DLLAMA_METAL=OFF` | Deshabilita soporte para GPU Apple (no relevante). |
+| `-DLLAMA_STATIC=ON` | Compilacion estatica para evitar dependencia de libllama.so en tiempo de ejecucion. |
 
 ### VirtualBox y VBoxManage
 
@@ -190,11 +191,20 @@ bash setup.sh
 El instalador realiza automaticamente:
 
 1. Instalacion de dependencias del sistema (build-essential, cmake, python3, libnotify, libcurl).
-2. Compilacion de llama.cpp desde fuente.
+2. Compilacion de llama.cpp desde fuente con enlace estatico.
 3. Descarga del modelo Llama 3.2 3B Instruct (GGUF Q4_K_M, ~2 GB).
-4. Instalacion del agente Yap y sus listas blancas.
+4. Instalacion del agente Yap y sus listas blancas. El script se copia a `/opt/yap/yap.py` y se crea un enlace simbolico en `/usr/local/bin/yap`.
 5. Instalacion de aplicaciones sugeridas (LibreOffice, Firefox, Evince, Micro, Htop).
 6. Verificacion de componentes.
+
+### Actualizacion
+
+```bash
+cd ~/Yap
+git pull
+# El enlace simbolico en /usr/local/bin/yap apunta al repo,
+# no es necesario copiar.
+```
 
 ---
 
@@ -229,6 +239,7 @@ yap Que es una particion de disco?
 
 - Contexto limitado a 4096 tokens (~3000 palabras). Consultas largas pueden requerir resumen previo.
 - Sin conversacion persistente (cada consulta es independiente). Ver issue #2.
+- Timeout de 120s por consulta. En CPU con 2 nucleos, la primera respuesta puede tardar hasta 60s.
 - El modelo Llama 3.2 3B puede alucinar informacion. Se prefiere webfetch para datos factuales.
 - Solo optimizado para espanol. Otros idiomas pueden dar resultados inconsistentes.
 - Sin soporte GPU ni aceleracion hardware.
@@ -245,7 +256,11 @@ yap Que es una particion de disco?
 - [x] Whitelist configurable de apps y dominios.
 - [x] Demo funcional (abrir app + informacion).
 
-### Fase 2 — Proximos sprints
+### Fase 2 — En progreso
+- [x] Compilacion estatica de llama.cpp (sin dependencia de libllama.so).
+- [x] Correccion de seguridad en whitelist de dominios (commit 348e9b0).
+- [x] Soporte multi-binario en whitelist de apps (fallback firefox-esr -> firefox).
+- [x] Desactivacion de modo conversacion en llama-cli (-no-cnv, --no-display-prompt).
 - [ ] Capa de confirmacion humana para acciones sensibles.
 - [ ] Historial de contexto persistente (issue #2).
 - [ ] Sugerencias de apps alternativas al bloquear (issue #3).
