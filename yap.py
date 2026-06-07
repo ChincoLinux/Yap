@@ -183,12 +183,13 @@ def interpret(user_input):
             rest = user_input[len(prefix):].strip()
             return "open_app", rest
 
-    for prefix in ["busca ", "buscar ", "fetch ", "webfetch "]:
+    for prefix in ["busca ", "buscar "]:
         if text.startswith(prefix):
-            rest = user_input[len(prefix):].strip().strip("\"'")
-            if rest.startswith("http"):
-                return "webfetch", rest
-            return "search", rest
+            return "search", user_input[len(prefix):].strip()
+
+    for prefix in ["fetch ", "webfetch "]:
+        if text.startswith(prefix):
+            return "webfetch", user_input[len(prefix):].strip().strip("\"'")
 
     return "query", user_input
 
