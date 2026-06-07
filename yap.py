@@ -175,23 +175,48 @@ def cmd_query(prompt, context=None, store_history=True):
         return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
 
 
+def classify_intent(user_input):
+    """Use the LLM to determine user intent and extract parameters."""
+    prompt = (
+        f"{BOS}{HEADER}system{FOOTER}\n\n"
+        "Eres un clasificador de comandos. Responde SOLO con ACCION|PARAMETRO.\n"
+        "ACCION: open_app (abrir app), search (buscar en Wikipedia),\n"
+        "webfetch (obtener URL), query (preguntar al AI).\n"
+        "Ejemplo: 'abre firefox' -> open_app|firefox\n"
+        "Ejemplo: 'busca quien es vegetta777 en wikipedia' -> search|vegetta777\n"
+        "Ejemplo: 'busca linus torvalds' -> search|linus torvalds\n"
+        "Ejemplo: 'fetch https://ejemplo.com' -> webfetch|https://ejemplo.com\n"
+        "Ejemplo: 'que es debian?' -> query|que es debian?\n"
+        f"{EOT}"
+        f"{HEADER}user{FOOTER}\n\n{user_input}{EOT}"
+        f"{HEADER}assistant{FOOTER}\n\n"
+    )
+
+    cmd = [
+        "llama-cli", "-m", MODEL_PATH,
+        "-p", prompt, "-n", "15", "--temp", "0.1",
+        "--ctx-size", "256", "-no-cnv", "--no-display-prompt",
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        out = result.stdout.strip()
+        for tok in [BOS, HEADER, FOOTER, EOT]:
+            out = out.replace(tok, "")
+        out = out.strip().split("\n")[0]
+
+        if "|" in out:
+            action, param = out.split("|", 1)
+            action = action.strip().lower()
+            param = param.strip()
+            if action in ("open_app", "search", "webfetch", "query"):
+                return action, param
+    except subprocess.TimeoutExpired:
+        pass
+
+    return "query", user_input.strip()
+
 def interpret(user_input):
-    text = user_input.strip().lower()
-
-    for prefix in ["abre ", "abrir ", "open ", "lanzar ", "iniciar "]:
-        if text.startswith(prefix):
-            rest = user_input[len(prefix):].strip()
-            return "open_app", rest
-
-    for prefix in ["busca ", "buscar "]:
-        if text.startswith(prefix):
-            return "search", user_input[len(prefix):].strip()
-
-    for prefix in ["fetch ", "webfetch "]:
-        if text.startswith(prefix):
-            return "webfetch", user_input[len(prefix):].strip().strip("\"'")
-
-    return "query", user_input
+    return classify_intent(user_input)
 
 
 def main():
