@@ -227,6 +227,7 @@ def main():
                 context=text,
             )
             print(response)
+            print(f"\nFuente: {wikipedia_url}")
         else:
             print(content)
 
