@@ -233,8 +233,8 @@ yap Que es Debian?
 |---|---|---|
 | Abrir app | `yap Abre LibreOffice` | Abre la app si esta en whitelist (soporta multiples binarios alternativos). |
 | Webfetch + resumen | `yap Busca https://es.wikipedia.org/wiki/Linux` | Obtiene contenido del sitio, lo limpia de HTML y lo envia al LLM para resumir. |
-| Busqueda Wikipedia | `yap Busca que es Linux` | Busca el texto en Wikipedia via API REST, obtiene el extracto y lo resume con el LLM. Muestra la fuente al final. |
-| Consulta LLM | `yap Que es Debian?` | Responde con el modelo LLM local. Soporta historial de hasta 6 intercambios en modo interactivo. |
+| Busqueda Wikipedia | `yap Busca que es Linux` | Busca en Wikipedia via API REST, extrae el contenido y lo resume con el LLM. Muestra la fuente. Recomendado para informacion factual. |
+| Consulta LLM | `yap Que es Debian?` | Responde directamente con el modelo LLM local. Mas rapido pero sin fuente verificable. Soporta historial en modo interactivo. |
 
 ---
 

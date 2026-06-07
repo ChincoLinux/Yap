@@ -188,7 +188,7 @@ def interpret(user_input):
             rest = user_input[len(prefix):].strip().strip("\"'")
             if rest.startswith("http"):
                 return "webfetch", rest
-            return "query", rest
+            return "search", rest
 
     return "query", user_input
 
@@ -214,6 +214,33 @@ def main():
 def handle_action(action, param, original_input):
     if action == "open_app":
         print(cmd_open_app(param))
+
+    elif action == "search":
+        query = param
+        wikipedia_api = (
+            "https://es.wikipedia.org/w/api.php?action=query"
+            "&prop=extracts&exintro=&explaintext=&exchars=2000"
+            "&titles=" + urllib.parse.quote(query) + "&format=json"
+        )
+        print(f"Buscando '{query}' en Wikipedia...")
+        content = cmd_webfetch(wikipedia_api, feed_to_llm=True)
+        if isinstance(content, tuple):
+            text, _ = content
+            print(f"Contenido obtenido ({len(text)} chars). Resumiendo con LLM...")
+            response = cmd_query(
+                f"Resume el siguiente contenido sobre '{query}':",
+                context=text,
+                store_history=False,
+            )
+            print(response)
+            source = "https://es.wikipedia.org/wiki/" + query.replace(" ", "_")
+            print(f"\nFuente: {source}")
+            if not response.startswith("[WARN]") and not response.startswith("[ERROR]"):
+                HISTORY.append((query, response))
+                if len(HISTORY) > MAX_HISTORY:
+                    HISTORY.pop(0)
+        else:
+            print(content)
 
     elif action == "webfetch":
         print("Obteniendo contenido web...")
