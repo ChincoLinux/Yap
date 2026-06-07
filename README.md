@@ -99,7 +99,7 @@ El agente principal esta escrito en Python 3. Conceptos clave:
 | 45-53 | `notify()` | Envia notificaciones graficas al escritorio mediante notify-send. |
 | 56-76 | `cmd_open_app()` | Verifica whitelist, busca el binario en PATH, lo ejecuta y obtiene su version. |
 | 79-93 | `cmd_webfetch()` | Valida el dominio contra la whitelist y descarga contenido textual limitado a 2000 caracteres. |
-| 96-113 | `cmd_query()` | Envia el prompt al modelo LLM local a traves de llama-cli. |
+| 96-113 | `cmd_query()` | Construye el prompt con formato de chat Llama 3.2 Instruct (tokens especiales BOS, HEADER, FOOTER, EOT) y lo envia a llama-cli. Acepta contexto opcional (webfetch) para resumir contenido externo. |
 | 116-127 | `interpret()` | Analiza el texto del usuario para determinar la intencion (abrir app, buscar web, o consultar LLM). |
 | 130-154 | `main()` | Punto de entrada: modo comando directo (argv) o modo interactivo (input loop). |
 
@@ -112,7 +112,7 @@ Funcion de dominio (seguridad):
 |---|---|
 | llama.cpp | Runtime de inferencia para modelos Llama en CPU. Compilado desde fuente con optimizaciones nativas. |
 | GGUF | Formato de archivo para modelos cuantizados. Q4_K_M significa cuantizacion de 4 bits con mezcla de precisiones para balancear calidad y rendimiento. |
-| llama-cli | Herramienta de linea de comandos que carga el modelo GGUF y genera texto. Parametros usados: -m (modelo), -p (prompt), -n (tokens a generar), --temp (temperatura/creatividad), --ctx-size (tamanio del contexto). |
+| llama-cli | Herramienta de linea de comandos que carga el modelo GGUF y genera texto. Parametros usados: -m (modelo), -p (prompt con formato chat Llama 3.2 Instruct), -n (384 tokens), --temp (0.7), --ctx-size (4096). |
 
 ### CMake
 
@@ -152,7 +152,8 @@ El agente implementa dos capas de restriccion:
 
 1. **Whitelist de aplicaciones** (`/etc/yap/whitelist/apps.conf`):
    - Mapea nombres visibles a comandos del sistema.
-   - El agente solo puede ejecutar binarios listados aqui.
+   - Soporta multiples binarios alternativos separados por coma (ej. `firefox-esr,firefox`).
+   - El agente prueba cada binario en orden hasta encontrar uno disponible.
    - La busqueda del binario usa `shutil.which()`, que respeta el PATH del sistema.
 
 2. **Whitelist de dominios** (`/etc/yap/whitelist/web.conf`):
@@ -218,9 +219,9 @@ yap Que es una particion de disco?
 
 | Accion | Ejemplo | Descripcion |
 |---|---|---|
-| Abrir app | `yap Abre LibreOffice` | Abre la app si esta en whitelist. |
-| Webfetch | `yap Busca https://es.wikipedia.org/wiki/Linux` | Obtiene contenido del sitio si el dominio esta en whitelist. |
-| Consulta LLM | `yap Que es Debian?` | Responde con el modelo LLM local. |
+| Abrir app | `yap Abre LibreOffice` | Abre la app si esta en whitelist (soporta multiples binarios alternativos). |
+| Webfetch + resumen | `yap Busca https://es.wikipedia.org/wiki/Linux` | Obtiene contenido del sitio, lo limpia de HTML y lo envia al LLM para resumir. |
+| Consulta LLM | `yap Que es Debian?` | Responde con el modelo LLM local usando formato de chat Llama 3.2 Instruct. |
 
 ---
 
