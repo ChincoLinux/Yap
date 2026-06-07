@@ -57,13 +57,10 @@ Construir un sistema Debian estable ultraligero con un agente IA local (CPU-only
 ### Flujo de una consulta
 
 1. El usuario escribe un comando en la terminal.
-2. El interprete analiza el texto y decide el tipo de accion:
-   - Si comienza con "abre", "abrir", "open", "lanzar" o "iniciar": accion de apertura de app.
-   - Si comienza con "busca", "buscar", "fetch" o "webfetch" seguido de URL: accion de webfetch directo.
-   - Si comienza con "busca", "buscar", "fetch" o "webfetch" sin URL: busqueda en Wikipedia.
-   - Cualquier otro texto: consulta al LLM.
-3. La accion se ejecuta contra la whitelist correspondiente.
-4. El resultado se muestra en pantalla y se emite una alerta grafica.
+2. `classify_intent()` envia el texto al LLM con un prompt de clasificacion.
+3. El LLM responde con `ACCION|PARAMETRO`: open_app, search (Wikipedia), webfetch (URL directa), o query (consulta general).
+4. `handle_action()` ejecuta la accion contra la whitelist o el LLM segun corresponda.
+5. El resultado se muestra en pantalla.
 
 ---
 
@@ -101,11 +98,13 @@ El agente principal esta escrito en Python 3. Conceptos clave:
 | 67-101 | `cmd_open_app()` | Busca el primer binario usando `shutil.which()`, lo ejecuta y captura version. Si la app no esta en whitelist, lista las apps disponibles (graceful blocking). |
 | 104-133 | `cmd_webfetch()` | Valida dominio, descarga contenido, elimina HTML via regex y limita a 3000 chars. Si el dominio esta bloqueado, lista los permitidos. |
 | 136-178 | `cmd_query()` | Construye prompt con tokens Llama 3.2 Instruct e historial de conversacion. store_history=False evita duplicar prompts de resumen en historial. |
-| 181-193 | `interpret()` | Analiza entrada: "abre" -> app, "busca <URL>" -> webfetch, "busca <texto>" -> busqueda Wikipedia, otro -> consulta LLM. |
-| 196-209 | `main()` / `handle_action()` | Modo comando directo o interactivo con loop. `handle_action` centraliza logica y gestiona historial. |
+| 178-216 | `classify_intent()` | Envia el texto al LLM con prompt de clasificacion. LLM responde ACCION|PARAM (open_app, search, webfetch, query). Tolerante a errores ortograficos y sintaxis variada. |
+| 218-219 | `interpret()` | Wrapper que llama a `classify_intent()`. |
+| 222-236 | `main()` | Modo comando directo o interactivo con loop `while True`. |
+| 240-270 | `handle_action()` | Centraliza logica: open_app, search (Wikipedia+LLM+fuente), webfetch (URL+resumen), query (consulta directa al LLM). Gestiona historial. |
 
 Funcion de dominio (seguridad):
-- La validacion en `cmd_webfetch` (linea 107) usa coincidencia exacta o sufijo de subdominio: `domain == d or domain.endswith("." + d)`. Esto evita que `notwikipedia.org` coincida con `wikipedia.org` (bug corregido en commit 348e9b0).
+- La validacion en `cmd_webfetch` (linea 112) usa coincidencia exacta o sufijo de subdominio: `domain == d or domain.endswith("." + d)`. Esto evita que `notwikipedia.org` coincida con `wikipedia.org` (bug corregido en commit 348e9b0).
 
 ### llama.cpp y GGUF
 
