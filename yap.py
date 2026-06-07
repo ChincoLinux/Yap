@@ -200,7 +200,7 @@ def classify_intent(user_input):
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         out = result.stdout.strip()
-        for tok in [BOS, HEADER, FOOTER, EOT]:
+        for tok in [BOS, HEADER, FOOTER, EOT, "[end of text]"]:
             out = out.replace(tok, "")
         out = out.strip().split("\n")[0]
 
