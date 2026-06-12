@@ -234,11 +234,24 @@ yap Que es Debian?
 | Busqueda Wikipedia | `yap Busca que es Linux` | Busca en Wikipedia via API REST, extrae el contenido y lo resume con el LLM. Muestra la fuente. Recomendado para informacion factual. |
 | Consulta LLM | `yap Que es Debian?` | Responde directamente con el modelo LLM local. Mas rapido pero sin fuente verificable. Soporta historial en modo interactivo. |
 
+### Rama lowmem
+
+Para sistemas con solo 6GB RAM, existe la rama `lowmem` con ajustes que liberan ~400MB:
+
+| Rama | Contexto | KV Cache | Flash Attn | RAM total estimada |
+|---|---|---|---|---|
+| **master** (esta) | 4096 tokens | FP16 | No | ~3.5GB |
+| **lowmem** | 2048 tokens | Q8_0 | Si | ~3.1GB |
+
+```bash
+git checkout lowmem
+```
+
 ---
 
 ## Limitaciones conocidas
 
-- Contexto limitado a 4096 tokens (~3000 palabras). Consultas largas pueden requerir resumen previo.
+- Contexto limitado a 4096 tokens (~3000 palabras). La rama lowmem usa 2048 para ahorrar RAM.
 - Sin conversacion persistente (cada consulta es independiente). Ver issue #2.
 - Timeout de 120s por consulta. En CPU con 2 nucleos, la primera respuesta puede tardar hasta 60s.
 - El modelo Llama 3.2 3B puede alucinar informacion. Se prefiere webfetch para datos factuales.
