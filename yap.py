@@ -155,6 +155,7 @@ def cmd_query(prompt, context=None, store_history=True):
         "--ctx-size", str(MAX_CTX),
         "--cache-type-k", "q8_0",
         "--cache-type-v", "q8_0",
+        "--flash-attn",
         "--threads", "2",
         "-no-cnv",
         "--no-display-prompt",
@@ -201,6 +202,7 @@ def classify_intent(user_input):
         "--ctx-size", "256",
         "--cache-type-k", "q8_0",
         "--cache-type-v", "q8_0",
+        "--flash-attn",
         "--threads", "2",
         "-no-cnv", "--no-display-prompt",
     ]
