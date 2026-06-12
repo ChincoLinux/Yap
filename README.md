@@ -78,7 +78,7 @@ El instalador es un script Bash que automatiza la configuracion del entorno. Con
 | 36 | `mktemp -d` | Crea un directorio temporal unico y seguro para compilar sin dejar residuos. |
 | 37 | `cd "$LLAMA_BUILD"` | Cambia al directorio temporal creado. |
 | 38 | `git clone --depth 1 --branch "$LLAMACPP_BRANCH"` | Clonado superficial (solo el ultimo commit) para ahorrar ancho de banda y disco. |
-| 41 | `cmake .. -DCMAKE_BUILD_TYPE=Release -DLLAMA_CUDA=OFF -DLLAMA_BLAS=OFF -DLLAMA_METAL=OFF -DLLAMA_CURL=OFF -DLLAMA_STATIC=ON` | Configura el proyecto CMake en modo Release, deshabilita funcionalidades no necesarias y activa enlace estatico para evitar dependencia de libllama.so. |
+| 41 | `cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_CUDA=OFF -DLLAMA_METAL=OFF -DLLAMA_CURL=OFF` | Configura CMake en modo Release. BUILD_SHARED_LIBS=OFF evita construir .so, enlazando todo estaticamente en el binario. Sin dependencia de libllama.so. |
 | 42 | `cmake --build . --config Release -j"$(nproc)"` | Compila usando todos los nucleos disponibles. |
 | 43 | `sudo cp bin/llama-cli /usr/local/bin/llama-cli` | Copia el binario compilado estaticamente al PATH global. |
 | 50 | `if [ ! -f "$MODEL_FILE" ]` | Verifica si el modelo ya existe antes de descargar (reanudacion de instalacion). |
@@ -119,11 +119,10 @@ Funcion de dominio (seguridad):
 | Parametro | Explicacion |
 |---|---|---|
 | `-DCMAKE_BUILD_TYPE=Release` | Optimiza el binario para velocidad (sin debug symbols). |
+| `-DBUILD_SHARED_LIBS=OFF` | Impide la creacion de .so. Todas las bibliotecas se enlazan estaticamente en el binario. Sin dependencia externa. |
 | `-DLLAMA_CURL=OFF` | Deshabilita soporte para descarga de modelos via CURL (no necesario, descargamos con wget). |
 | `-DLLAMA_CUDA=OFF` | Deshabilita soporte GPU NVIDIA (CPU-only). |
-| `-DLLAMA_BLAS=OFF` | Deshabilita aceleracion BLAS (no disponible en hardware basico). |
 | `-DLLAMA_METAL=OFF` | Deshabilita soporte para GPU Apple (no relevante). |
-| `-DLLAMA_STATIC=ON` | Compilacion estatica para evitar dependencia de libllama.so en tiempo de ejecucion. |
 
 ### VirtualBox y VBoxManage
 

@@ -38,7 +38,7 @@ cd "$LLAMA_BUILD"
 git clone --depth 1 --branch "$LLAMACPP_BRANCH" "$LLAMACPP_REPO" 2>/dev/null
 cd llama.cpp
 mkdir -p build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DLLAMA_CUDA=OFF -DLLAMA_BLAS=OFF -DLLAMA_METAL=OFF -DLLAMA_CURL=OFF -DLLAMA_STATIC=ON
+cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_CUDA=OFF -DLLAMA_METAL=OFF -DLLAMA_CURL=OFF
 cmake --build . --config Release -j"$(nproc)" 2>&1
 sudo cp bin/llama-cli /usr/local/bin/llama-cli
 rm -rf "$LLAMA_BUILD"
