@@ -24,7 +24,7 @@ Construir un sistema Debian estable ultraligero con un agente IA local (CPU-only
 | Modelo | Llama 3.2 3B Instruct (GGUF Q4_K_M) |
 | Runtime | llama.cpp (CPU-only, sin GPU) |
 | RAM minima | 8 GB (5-6 GB utiles para LLM + cache) |
-| Contexto | 4096 tokens por defecto |
+| Contexto | 2048 tokens por defecto (configurable via MAX_CTX) |
 | Latencia estimada | 15-30 s primeras tokens en CPU (2 nucleos), ~20 tok/s |
 | Idioma | Espanol |
 | SO destino | Debian 13 (64-bit) |
@@ -112,7 +112,7 @@ Funcion de dominio (seguridad):
 |---|---|
 | llama.cpp | Runtime de inferencia para modelos Llama en CPU. Compilado desde fuente con optimizaciones nativas y enlace estatico (-DLLAMA_STATIC=ON). |
 | GGUF | Formato de archivo para modelos cuantizados. Q4_K_M significa cuantizacion de 4 bits con mezcla de precisiones para balancear calidad y rendimiento. |
-| llama-cli | Parametros usados: -m (modelo), -p (prompt con tokens especiales Llama 3.2 Instruct), -n (384 tokens), --temp (0.7), --ctx-size (4096), -no-cnv (desactiva modo conversacion automatico), --no-display-prompt (suprime eco del prompt en salida). |
+| llama-cli | Parametros usados: -m (modelo), -p (prompt), -n (384 tokens), --temp (0.7), --ctx-size (2048), --cache-type-k q8_0, --cache-type-v q8_0 (KV cache cuantizada a 8 bits, reduce uso de RAM a la mitad), --threads 2, -no-cnv, --no-display-prompt. |
 
 ### CMake
 
@@ -238,7 +238,7 @@ yap Que es Debian?
 
 ## Limitaciones conocidas
 
-- Contexto limitado a 4096 tokens (~3000 palabras). Consultas largas pueden requerir resumen previo.
+- Contexto limitado a 2048 tokens (~1500 palabras) con KV cache cuantizada Q8 para minimizar uso de RAM.
 - Sin conversacion persistente (cada consulta es independiente). Ver issue #2.
 - Timeout de 120s por consulta. En CPU con 2 nucleos, la primera respuesta puede tardar hasta 60s.
 - El modelo Llama 3.2 3B puede alucinar informacion. Se prefiere webfetch para datos factuales.
