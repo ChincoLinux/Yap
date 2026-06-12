@@ -225,6 +225,24 @@ yap Busca que es una particion de disco
 yap Que es Debian?
 ```
 
+### Ramas disponibles
+
+El proyecto mantiene dos ramas en Git con distinto balance de RAM/calidad:
+
+| Rama | Contexto | KV Cache | Flash Attn | RAM estimada | Uso recomendado |
+|---|---|---|---|---|---|
+| **master** | 4096 tokens | FP16 (default) | No | ~3.5GB | Maxima calidad, 8GB+ RAM |
+| **lowmem** | 2048 tokens | Q8_0 | Si | ~3.1GB | RAM limitada, 6GB tope |
+
+Para cambiar:
+```bash
+cd ~/Yap
+git checkout master   # modo normal
+git checkout lowmem   # modo ahorro
+```
+
+El symlink en `/usr/local/bin/yap` apunta al repo: el cambio es inmediato.
+
 ### Acciones soportadas
 
 | Accion | Ejemplo | Descripcion |
