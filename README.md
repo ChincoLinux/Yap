@@ -21,11 +21,11 @@ Construir un sistema Debian estable ultraligero con un agente IA local (CPU-only
 
 | Componente | Detalle |
 |---|---|
-| Modelo | Llama 3.2 3B Instruct (GGUF Q4_K_M) |
+| Modelo | Llama 3.2 1B Instruct (GGUF Q4_K_M) |
 | Runtime | llama.cpp (CPU-only, sin GPU) |
-| RAM minima | 8 GB (5-6 GB utiles para LLM + cache) |
+| RAM minima | 3 GB (2-2.5 GB utiles para LLM + cache) |
 | Contexto | 2048 tokens por defecto (configurable via MAX_CTX) |
-| Latencia estimada | 15-30 s primeras tokens en CPU (2 nucleos), ~20 tok/s |
+| Latencia estimada | 5-10 s primeras tokens en CPU (2 nucleos), ~40 tok/s |
 | Idioma | Espanol |
 | SO destino | Debian 13 (64-bit) |
 
@@ -227,18 +227,18 @@ yap Que es Debian?
 
 ### Ramas disponibles
 
-El proyecto mantiene dos ramas en Git con distinto balance de RAM/calidad:
-
-| Rama | Contexto | KV Cache | Flash Attn | RAM estimada | Uso recomendado |
+| Rama | Modelo | Contexto | KV Cache | RAM total | Ideal para |
 |---|---|---|---|---|---|
-| **master** | 4096 tokens | FP16 (default) | No | ~3.5GB | Maxima calidad, 8GB+ RAM |
-| **lowmem** | 2048 tokens | Q8_0 | Si | ~3.1GB | RAM limitada, 6GB tope |
+| **master** | 3B Q4_K_M (2.0 GB) | 4096 | FP16 | ~3.5GB | 8GB+ RAM |
+| **lowmem** | 3B Q4_K_M (2.0 GB) | 2048 | Q8_0 | ~3.1GB | 6GB RAM |
+| **ultra-lowmem** (esta) | 1B Q4_K_M (0.81 GB) | 2048 | Q8_0 | ~1.8GB | 3-4GB RAM |
 
 Para cambiar:
 ```bash
 cd ~/Yap
-git checkout master   # modo normal
-git checkout lowmem   # modo ahorro
+git checkout master        # maxima calidad
+git checkout lowmem        # balancedo
+git checkout ultra-lowmem  # minima RAM
 ```
 
 El symlink en `/usr/local/bin/yap` apunta al repo: el cambio es inmediato.
