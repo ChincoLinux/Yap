@@ -329,6 +329,19 @@ La funcion **`classify_intent()`** utiliza el propio LLM para determinar la acci
 - **Flexibilidad sintactica**: "busca sobre Linux" y "que es Linux" se distinguen correctamente.
 - **Historial de conversacion**: hasta 6 turnos almacenados en modo interactivo.
 
+### Rama lowmem
+
+Para sistemas con solo 6GB RAM, existe la rama `lowmem` con ajustes que liberan ~400MB:
+
+| Rama | Contexto | KV Cache | Flash Attn | RAM total estimada |
+|---|---|---|---|---|
+| **master** (esta) | 4096 tokens | FP16 | No | ~3.5GB |
+| **lowmem** | 2048 tokens | Q8_0 | Si | ~3.1GB |
+
+```bash
+git checkout lowmem
+```
+
 ---
 
 ## 9. Limitaciones
