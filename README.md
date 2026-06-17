@@ -1,6 +1,6 @@
 # Yap: Asistente de IA Local para Entornos Educativos con Recursos Limitados
 
-[![Yap CI](https://github.com/VECTORG99/Yap/actions/workflows/test.yml/badge.svg)](https://github.com/VECTORG99/Yap/actions/workflows/test.yml)
+**Version:** `1.0.0-beta` | [![Yap CI](https://github.com/VECTORG99/Yap/actions/workflows/test.yml/badge.svg)](https://github.com/VECTORG99/Yap/actions/workflows/test.yml)
 
 **Sistema de agente conversacional basado en **Llama 3.2**, ejecucion **CPU-only**, disenado para **Debian 13** con soporte de 3 a 8 GB de RAM mediante ramas de configuracion graduales.**
 
@@ -411,7 +411,7 @@ Cada `push` y `pull request` a `master`, `lowmem` o `ultra-lowmem` ejecuta autom
 
 | Job | Que hace |
 |---|---|
-| **unit-tests** | 49 pruebas en Python 3.10-3.13 + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
+| **unit-tests** | 49 pruebas en Python 3.12 + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
 | **branch-check** | Verifica que `MODEL_PATH` en cada rama apunte al modelo correcto |
 | **results** | Resumen del pipeline |
 
