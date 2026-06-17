@@ -4,6 +4,11 @@ set -euo pipefail
 # ============================================================
 # Yap — Instalación del Agente IA local para ChincoLinux
 # ============================================================
+# Este script se ejecuta UNA SOLA VEZ al instalar.
+# Al cambiar de rama (master ↔ lowmem ↔ ultra-lowmem),
+# solo se necesita re-ejecutarlo para descargar el modelo
+# faltante. El resto de pasos detectan lo ya instalado.
+# ============================================================
 
 YAP_VERSION="1.0.0"
 YAP_DIR="/opt/yap"
@@ -12,17 +17,53 @@ CONFIG_DIR="/etc/yap"
 WHITELIST_DIR="$CONFIG_DIR/whitelist"
 BIN_DIR="/usr/local/bin"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MODEL_URL="https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
 LLAMACPP_REPO="https://github.com/ggerganov/llama.cpp.git"
 LLAMACPP_BRANCH="b5097"
 
-echo "=============================================="
-echo "  YAP v$YAP_VERSION — ChincoLinux AI Agent"
-echo "=============================================="
+# Tamaños reales de cada modelo (para información al usuario)
+MODELO_3B_BYTES="1.9 GB"
+MODELO_1B_BYTES="0.81 GB"
+
+RAMAS=(master lowmem ultra-lowmem)
+RAMA_ACTUAL=$(git -C "$SCRIPT_DIR" branch --show-current 2>/dev/null || echo "desconocida")
+
+# Detectar si esto es una REINSTALACIÓN o primera instalación
+ES_REINSTALACION=false
+[ -f "$BIN_DIR/llama-cli" ] && ES_REINSTALACION=true
+
+echo "================================================================"
+echo "  YAP v$YAP_VERSION — Instalación del Agente IA Local"
+echo "================================================================"
+echo ""
+echo "  Rama activa:       $RAMA_ACTUAL"
+if $ES_REINSTALACION; then
+  echo "  Tipo de ejecución: REINSTALACIÓN (componentes ya existen)"
+else
+  echo "  Tipo de ejecución: INSTALACIÓN INICIAL"
+fi
 echo ""
 
 # --- 1. Dependencias del sistema ---
-echo "[1/6] Instalando dependencias del sistema..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  PASO 1/6 — Dependencias del sistema"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "  Propósito: Instalar los paquetes necesarios para compilar"
+echo "  llama.cpp y ejecutar el agente Yap."
+echo ""
+echo "  Paquetes a instalar:"
+echo "    • build-essential   — Compilador gcc/g++ y herramientas base"
+echo "    • cmake             — Generador de archivos de compilación"
+echo "    • curl, wget, git   — Descargas y control de versiones"
+echo "    • python3, pip      — Entorno Python del agente"
+echo "    • libnotify-bin     — Cliente notify-send (alertas gráficas)"
+echo "    • libcurl4-openssl-dev — Headers libcurl (requerido por llama.cpp)"
+echo ""
+echo "  ──────────────────────────────────────────────────────────────"
+echo "  ［EJECUTANDO］sudo apt-get install ..."
+echo "  ──────────────────────────────────────────────────────────────"
+echo ""
+
 sudo apt-get update -qq
 sudo apt-get install -y -qq \
   build-essential cmake curl wget git pkg-config \
@@ -31,30 +72,144 @@ sudo apt-get install -y -qq \
   libcurl4-openssl-dev \
   --no-install-recommends
 
-# --- 2. Compilar llama.cpp ---
-echo "[2/6] Compilando llama.cpp..."
-LLAMA_BUILD=$(mktemp -d)
-cd "$LLAMA_BUILD"
-git clone --depth 1 --branch "$LLAMACPP_BRANCH" "$LLAMACPP_REPO" 2>/dev/null
-cd llama.cpp
-mkdir -p build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_CUDA=OFF -DLLAMA_METAL=OFF -DLLAMA_CURL=OFF
-cmake --build . --config Release -j"$(nproc)" 2>&1
-sudo cp bin/llama-cli /usr/local/bin/llama-cli
-rm -rf "$LLAMA_BUILD"
+echo "  ✓ Dependencias instaladas correctamente."
+echo ""
 
-# --- 3. Descargar modelo ---
-echo "[3/6] Descargando modelo Llama 3.2 3B Instruct (GGUF Q4_K_M)..."
-sudo mkdir -p "$MODEL_DIR"
-MODEL_FILE="$MODEL_DIR/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
-if [ ! -f "$MODEL_FILE" ]; then
-  sudo wget --progress=bar:force -O "$MODEL_FILE" "$MODEL_URL"
+# --- 2. Compilar llama.cpp ---
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  PASO 2/6 — Compilación de llama.cpp"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+if $ES_REINSTALACION && [ -f "$BIN_DIR/llama-cli" ]; then
+  echo "  llama-cli ya está compilado en $BIN_DIR/llama-cli"
+  echo "  Saltando compilación (usar 'sudo rm $BIN_DIR/llama-cli' para forzar)."
+  echo ""
 else
-  echo "  Modelo ya existe, saltando descarga."
+  echo "  Propósito: Compilar el runtime de inferencia llama.cpp"
+  echo "  desde el código fuente con enlace estático."
+  echo ""
+  echo "  Repositorio:  $LLAMACPP_REPO"
+  echo "  Tag:          $LLAMACPP_BRANCH"
+  echo "  Clonado:      superficial (--depth 1) — solo el último commit"
+  echo "  Directorio:   temporal (se elimina al terminar)"
+  echo ""
+  echo "  Flags de compilación (CMake):"
+  echo "    • -DCMAKE_BUILD_TYPE=Release     → optimizado para velocidad"
+  echo "    • -DBUILD_SHARED_LIBS=OFF        → ENLACE ESTÁTICO"
+  echo "    • -DLLAMA_CUDA=OFF               → sin GPU NVIDIA"
+  echo "    • -DLLAMA_METAL=OFF              → sin GPU Apple"
+  echo "    • -DLLAMA_CURL=OFF               → sin soporte CURL"
+  echo ""
+  echo "  ────────────────────────────────────────────────────────────"
+  echo "  ［EJECUTANDO］git clone + cmake + cmake --build"
+  echo "  ────────────────────────────────────────────────────────────"
+  echo "  (la compilación puede tomar 5-15 minutos según el hardware)"
+  echo ""
+
+  LLAMA_BUILD=$(mktemp -d)
+  cd "$LLAMA_BUILD"
+  git clone --depth 1 --branch "$LLAMACPP_BRANCH" "$LLAMACPP_REPO" 2>/dev/null
+  cd llama.cpp
+  mkdir -p build && cd build
+  cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_CUDA=OFF -DLLAMA_METAL=OFF -DLLAMA_CURL=OFF
+  cmake --build . --config Release -j"$(nproc)" 2>&1
+  sudo cp bin/llama-cli /usr/local/bin/llama-cli
+  rm -rf "$LLAMA_BUILD"
+
+  echo ""
+  echo "  ✓ llama.cpp compilado e instalado en $BIN_DIR/llama-cli"
+  echo "    (binario estático — sin dependencia de libllama.so)"
+  echo ""
+fi
+
+# --- 3. Gestión de modelos ---
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  PASO 3/6 — Gestión del modelo de lenguaje"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# Detectar archivos de modelo existentes
+MODELOS_EXISTENTES=()
+shopt -s nullglob
+for f in "$MODEL_DIR"/*.gguf; do
+  MODELOS_EXISTENTES+=("$f")
+done
+shopt -u nullglob
+
+# Determinar qué modelo necesita esta rama
+MODEL_FILENAME=$(grep 'MODEL_PATH =' "$SCRIPT_DIR/yap.py" | sed "s|.*/||;s|\"||g")
+SIZE=$(echo "$MODEL_FILENAME" | sed 's/Llama-3.2-//;s/-Instruct-Q4_K_M.gguf//')
+MODEL_FILE="$MODEL_DIR/$MODEL_FILENAME"
+MODEL_URL="https://huggingface.co/bartowski/Llama-3.2-${SIZE}-Instruct-GGUF/resolve/main/${MODEL_FILENAME}"
+
+echo "  Modelo REQUERIDO por la rama '$RAMA_ACTUAL':"
+echo "    • Archivo:  $MODEL_FILENAME"
+TAM_MODELO=""; [ "$SIZE" = "3B" ] && TAM_MODELO="$MODELO_3B_BYTES"; [ "$SIZE" = "1B" ] && TAM_MODELO="$MODELO_1B_BYTES"
+echo "    • Tamaño:   $TAM_MODELO"
+echo "    • Formato:  GGUF Q4_K_M (cuantización 4 bits, mezcla K-quant)"
+echo "    • URL:      $MODEL_URL"
+echo ""
+
+if [ ${#MODELOS_EXISTENTES[@]} -gt 0 ]; then
+  echo "  Modelos YA EXISTENTES en $MODEL_DIR:"
+  for f in "${MODELOS_EXISTENTES[@]}"; do
+    BASENAME=$(basename "$f")
+    SIZE_BYTES=$(ls -lh "$f" | awk '{print $5}')
+    if [ "$BASENAME" = "$MODEL_FILENAME" ]; then
+      echo "    ✓ $BASENAME  ($SIZE_BYTES) ← ACTIVO (usado por esta rama)"
+    else
+      echo "    • $BASENAME  ($SIZE_BYTES) → INACTIVO (disponible para otras ramas)"
+    fi
+  done
+  echo ""
+  echo "  NOTA: Los modelos no utilizados NO se eliminan."
+  echo "  Al cambiar a otra rama que los necesite, estarán listos."
+  echo ""
+fi
+
+sudo mkdir -p "$MODEL_DIR"
+
+if [ -f "$MODEL_FILE" ]; then
+  echo "  ────────────────────────────────────────────────────────────"
+  echo "  ［CONFIRMACIÓN］El modelo requerido YA EXISTE."
+  echo "  ────────────────────────────────────────────────────────────"
+  echo ""
+  echo "  Tamaño: $(ls -lh "$MODEL_FILE" | awk '{print $5}')"
+  echo "  Ruta:   $MODEL_FILE"
+  echo ""
+else
+  echo "  ────────────────────────────────────────────────────────────"
+  echo "  ［EJECUTANDO］sudo wget — descargando modelo..."
+  echo "  ────────────────────────────────────────────────────────────"
+  echo "  (la descarga puede tomar varios minutos)"
+  echo ""
+  sudo wget --progress=bar:force -O "$MODEL_FILE" "$MODEL_URL"
+  echo ""
+  echo "  ✓ Descarga completa."
+  echo "    Tamaño: $(ls -lh "$MODEL_FILE" | awk '{print $5}')"
+  echo "    Ruta:   $MODEL_FILE"
+  echo ""
 fi
 
 # --- 4. Instalar agente Yap y whitelist ---
-echo "[4/6] Instalando agente Yap..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  PASO 4/6 — Instalación del agente y whitelists"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "  Archivos de configuración (whitelists):"
+echo "    • $WHITELIST_DIR/apps.conf  — Aplicaciones permitidas"
+echo "    • $WHITELIST_DIR/web.conf   — Dominios permitidos"
+echo ""
+echo "  Agente principal:"
+echo "    • $YAP_DIR/yap.py           — Copia del script (respaldo)"
+echo "    • $BIN_DIR/yap              — Enlace simbólico → $SCRIPT_DIR/yap.py"
+echo ""
+echo "  ──────────────────────────────────────────────────────────────"
+echo "  ［EJECUTANDO］sudo mkdir + cp + ln -sf + git config"
+echo "  ──────────────────────────────────────────────────────────────"
+echo ""
+
 sudo mkdir -p "$WHITELIST_DIR"
 sudo cp "$SCRIPT_DIR/whitelist/apps.conf" "$WHITELIST_DIR/"
 sudo cp "$SCRIPT_DIR/whitelist/web.conf" "$WHITELIST_DIR/"
@@ -62,31 +217,109 @@ sudo cp "$SCRIPT_DIR/yap.py" "$YAP_DIR/yap.py"
 sudo chmod +x "$YAP_DIR/yap.py"
 sudo ln -sf "$SCRIPT_DIR/yap.py" "$BIN_DIR/yap"
 
+# Configurar git hooks para mostrar información al cambiar de rama
+chmod +x "$SCRIPT_DIR/.githooks/post-checkout" 2>/dev/null || true
+(cd "$SCRIPT_DIR" && git config core.hooksPath .githooks 2>/dev/null) || true
+
+echo "  ✓ Agente instalado."
+echo "  ✓ Git hook post-checkout activado — mostrará información"
+echo "    al hacer 'git checkout <rama>'."
+echo ""
+echo "  ──────────────────────────────────────────────────────────────"
+echo "  ［MECANISMO DE ACTUALIZACIÓN］"
+echo "  ──────────────────────────────────────────────────────────────"
+echo "  El enlace simbólico $BIN_DIR/yap apunta directamente"
+echo "  al archivo $SCRIPT_DIR/yap.py dentro del repositorio."
+echo ""
+echo "  • Al hacer 'git pull' → el código se actualiza automáticamente"
+echo "  • Al hacer 'git checkout <rama>' → el agente cambia de rama"
+echo "    al instante y se muestra: rama anterior → rama actual,"
+echo "    cambios de modelo, y el siguiente paso recomendado."
+echo "  • NO es necesario re-ejecutar setup.sh al cambiar entre"
+echo "    master y lowmem (mismo modelo 3B)"
+echo ""
+
 # --- 5. Instalar aplicaciones recomendadas ---
-echo "[5/6] Instalando aplicaciones sugeridas..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  PASO 5/6 — Instalación de aplicaciones sugeridas"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "  Aplicaciones incluidas en la whitelist (instalación opcional):"
+echo "    • libreoffice    — Suite ofimática"
+echo "    • evince         — Visor de PDF"
+echo "    • firefox-esr    — Navegador web"
+echo "    • micro          — Editor de texto en terminal"
+echo "    • htop           — Monitor de procesos"
+echo ""
+echo "  ──────────────────────────────────────────────────────────────"
+echo "  ［EJECUTANDO］sudo apt-get install ..."
+echo "  ──────────────────────────────────────────────────────────────"
+echo ""
+
 sudo apt-get install -y -qq \
   libreoffice evince firefox-esr micro htop \
   --no-install-recommends 2>/dev/null || true
 
+echo "  ✓ Aplicaciones instaladas (o ya existentes)."
+echo ""
+
 # --- 6. Verificación ---
-echo "[6/6] Verificando instalación..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  PASO 6/6 — Verificación de la instalación"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "=============================================="
-echo "  YAP v$YAP_VERSION — Instalación completa"
-echo "=============================================="
+
+echo "  ──────────────────────────────────────────────────────────────"
+echo "  ［VERIFICANDO COMPONENTES］"
+echo "  ──────────────────────────────────────────────────────────────"
 echo ""
-echo "  Componente        Estado"
-echo "  ----------------- -------"
-echo "  llama-cli         $(command -v llama-cli && echo '[OK]' || echo '[FAIL]')"
-echo "  Modelo            $(ls -lh $MODEL_FILE 2>/dev/null | awk '{print $5}')"
-echo "  yap               $(command -v yap && echo '[OK]' || echo '[FAIL]')"
-echo "  notify-send       $(command -v notify-send && echo '[OK]' || echo '[FAIL]')"
+
+# Resumen de modelos
+echo "  Modelos disponibles en $MODEL_DIR:"
+shopt -s nullglob
+for f in "$MODEL_DIR"/*.gguf; do
+  BASENAME=$(basename "$f")
+  SIZE_H=$(ls -lh "$f" | awk '{print $5}')
+  if [ "$BASENAME" = "$MODEL_FILENAME" ]; then
+    echo "    ✓ $BASENAME  ($SIZE_H)  ← ACTIVO"
+  else
+    echo "    • $BASENAME  ($SIZE_H)  → INACTIVO (cambiar rama para usar)"
+  fi
+done
+shopt -u nullglob
 echo ""
-echo "  Whitelist apps:  $WHITELIST_DIR/apps.conf"
-echo "  Whitelist web:   $WHITELIST_DIR/web.conf"
+
+echo "  Estado de componentes:"
+echo "  +----------------------+--------------------------------+"
+LLAMA_OK=$(command -v llama-cli && echo "OK" || echo "FALLO")
+MODELO_OK=$(ls -lh "$MODEL_FILE" 2>/dev/null | awk '{print $5}' || echo "NO ENCONTRADO")
+YAP_OK=$(command -v yap && echo "OK" || echo "FALLO")
+NOTIFY_OK=$(command -v notify-send && echo "OK" || echo "FALLO")
+APPS_OK=$( [ -f $WHITELIST_DIR/apps.conf ] && echo "CONFIGURADO" || echo "FALTANTE")
+WEB_OK=$( [ -f $WHITELIST_DIR/web.conf ] && echo "CONFIGURADO" || echo "FALTANTE")
+printf "  | %-20s | %-30s |\n" "llama-cli"     "$LLAMA_OK"
+printf "  | %-20s | %-30s |\n" "Modelo activo" "$MODELO_OK"
+printf "  | %-20s | %-30s |\n" "yap (comando)"  "$YAP_OK"
+printf "  | %-20s | %-30s |\n" "notify-send"   "$NOTIFY_OK"
+printf "  | %-20s | %-30s |\n" "Whitelist apps" "$APPS_OK"
+printf "  | %-20s | %-30s |\n" "Whitelist web"  "$WEB_OK"
+echo "  +----------------------+--------------------------------+"
 echo ""
-echo "  Uso:"
-echo "    yap Abre LibreOffice"
-echo "    yap Busca https://es.wikipedia.org/wiki/Linux"
-echo "    yap ¿Qué es Debian?"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  ✓ YAP v$YAP_VERSION — Instalación completada"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "  Uso básico:"
+echo "    yap Abre LibreOffice               # Abrir aplicación"
+echo "    yap Busca https://wikipedia.org/...  # Webfetch + resumen"
+echo "    yap Busca qué es Linux              # Búsqueda Wikipedia"
+echo "    yap ¿Qué es Debian?                 # Consulta directa al LLM"
+echo ""
+echo "  Cambiar de rama:"
+echo "    git checkout master         # 3B, ctx 4096, FP16  → ~3.5 GB RAM"
+echo "    git checkout lowmem         # 3B, ctx 2048, Q8_0 → ~3.1 GB RAM"
+echo "    git checkout ultra-lowmem   # 1B, ctx 2048, Q8_0 → ~1.8 GB RAM"
+echo ""
+echo "  El symlink en /usr/local/bin/yap apunta al repositorio."
+echo "  El cambio de rama es inmediato, no requiere re-instalación."
 echo ""

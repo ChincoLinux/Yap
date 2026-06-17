@@ -12,8 +12,8 @@ import re
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
 WHITELIST_WEB = f"{CONFIG_DIR}/whitelist/web.conf"
-MODEL_PATH = "/opt/yap/models/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
-MAX_CTX = 4096
+MODEL_PATH = "/opt/yap/models/Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+MAX_CTX = 2048
 MAX_HISTORY = 6
 
 BOS = "<|begin_of_text|>"
@@ -153,6 +153,10 @@ def cmd_query(prompt, context=None, store_history=True):
         "-n", "384",
         "--temp", "0.7",
         "--ctx-size", str(MAX_CTX),
+        "--cache-type-k", "q8_0",
+        "--cache-type-v", "q8_0",
+        "--flash-attn",
+        "--threads", "2",
         "-no-cnv",
         "--no-display-prompt",
     ]
@@ -195,7 +199,12 @@ def classify_intent(user_input):
     cmd = [
         "llama-cli", "-m", MODEL_PATH,
         "-p", prompt, "-n", "15", "--temp", "0.1",
-        "--ctx-size", "256", "-no-cnv", "--no-display-prompt",
+        "--ctx-size", "256",
+        "--cache-type-k", "q8_0",
+        "--cache-type-v", "q8_0",
+        "--flash-attn",
+        "--threads", "2",
+        "-no-cnv", "--no-display-prompt",
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)

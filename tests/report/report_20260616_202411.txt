@@ -1,0 +1,30 @@
+========================================================================
+  YAP — Reporte de Pruebas
+  Fecha: 2026-06-16 20:24:10
+========================================================================
+
+Pruebas: 54/59 pasadas (92%)
+Requisitos: 16/19
+
+Requisitos:
+  ✗ CFG-01: Archivos de configuracion validos
+  ✗ CFG-02: Symlink al repositorio
+  ✗ CFG-03: llama-cli instalado
+  ✓ FUN-01: Apertura de apps multi-binario
+  ✓ FUN-02: Webfetch con limpieza HTML
+  ✓ FUN-03: Busqueda Wikipedia API REST
+  ✓ FUN-04: Consulta directa LLM
+  ✓ FUN-05: Clasificacion de intenciones
+  ✓ FUN-06: Historial de conversacion
+  ✓ FUN-07: Notificaciones notify-send
+  ✓ FUN-08: Modo interactivo y comando
+  ✓ SEG-01: cmd_open_app con whitelist
+  ✓ SEG-02: cmd_webfetch con whitelist de dominios
+  ✓ SEG-03: Sin shell=True, eval(), os.system()
+  ✓ SEG-04: Graceful blocking con alternativas
+  ✓ SEG-05: Validacion estricta de dominios
+  ✓ SEG-06: Sin escritura arbitraria
+  ✓ SEG-07: Timeout en subprocess
+  ✓ SEG-08: Limite de 3000 chars en webfetch
+
+Estado: 5 FALLARON
