@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+# post-checkout hook para Yap
+# Se ejecuta automaticamente despues de cada git checkout
+# Muestra la rama anterior, la nueva, el modelo que se usa y el siguiente paso
+#
+# Argumentos: $1 = SHA anterior, $2 = SHA nuevo, $3 = 1 si es checkout de rama
+
+set -euo pipefail
+
+# Solo mostrar en cambios de rama (no en checkout de archivos individuales)
+if [ "$3" != "1" ]; then
+  exit 0
+fi
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$(pwd)")
+MODEL_DIR="/opt/yap/models"
+
+# Obtener nombres de ramas
+# Usar reflog para obtener la rama anterior exacta (mas preciso que name-rev)
+OLD_BRANCH=$(git reflog -1 --format='%gs' 2>/dev/null | sed -n 's/.*from \([^ ]*\) to.*/\1/p')
+# Si no se pudo obtener del reflog, usar name-rev como fallback
+if [ -z "$OLD_BRANCH" ]; then
+  OLD_BRANCH=$(git name-rev --name-only "$1" 2>/dev/null | sed 's/^remotes\/origin\///')
+fi
+NEW_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
+
+# Si el nombre de la rama vieja es un hash, mostrar como "desconocido"
+if echo "$OLD_BRANCH" | grep -qE '^[0-9a-f]{7,}$'; then
+  OLD_BRANCH="(detached)"
+fi
+
+# La rama nueva siempre debe ser válida
+if [ "$NEW_BRANCH" = "HEAD" ]; then
+  exit 0
+fi
+
+# Obtener el modelo de la rama ANTERIOR (desde git)
+OLD_MODEL_FILE=""
+if git show "$1:yap.py" &>/dev/null; then
+  OLD_MODEL_FILE=$(git show "$1:yap.py" 2>/dev/null | grep 'MODEL_PATH =' | sed "s|.*/||;s|\"||g" || echo "")
+fi
+
+# Obtener el modelo de la rama NUEVA (archivo actual, HEAD ya apunta a nueva rama)
+NEW_MODEL_FILE=$(grep 'MODEL_PATH =' "$REPO_ROOT/yap.py" 2>/dev/null | sed "s|.*/||;s|\"||g" || echo "")
+
+# Tamaños conocidos
+MODELO_3B_NAME="Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+MODELO_1B_NAME="Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+
+get_model_info() {
+  local fname="$1"
+  case "$fname" in
+    *3B*) echo "1.9 GB | ~3.5 GB RAM total" ;;
+    *1B*) echo "0.81 GB | ~1.8 GB RAM total" ;;
+    *)    echo "desconocido" ;;
+  esac
+}
+
+get_ram_total() {
+  local fname="$1"
+  case "$fname" in
+    *3B*) echo "~3.5 GB" ;;
+    *1B*) echo "~1.8 GB" ;;
+    *)    echo "?" ;;
+  esac
+}
+
+# Separador visual
+sep() {
+  printf "  %s\n" "$1"
+}
+
+echo ""
+echo "  ╔══════════════════════════════════════════════════════════════╗"
+echo "  ║     YAP — Cambio de rama detectado                          ║"
+echo "  ╚══════════════════════════════════════════════════════════════╝"
+echo ""
+
+# Rama anterior
+echo "  Rama ANTERIOR:  $OLD_BRANCH"
+if [ -n "$OLD_MODEL_FILE" ]; then
+  OLD_INFO=$(get_model_info "$OLD_MODEL_FILE")
+  echo "    └─ Modelo: $OLD_MODEL_FILE  ($OLD_INFO)"
+else
+  echo "    └─ (no se pudo determinar el modelo anterior)"
+fi
+echo ""
+
+# Rama actual
+echo "  Rama ACTUAL:    $NEW_BRANCH"
+if [ -n "$NEW_MODEL_FILE" ]; then
+  NEW_INFO=$(get_model_info "$NEW_MODEL_FILE")
+  RAM_NEW=$(get_ram_total "$NEW_MODEL_FILE")
+  echo "    └─ Modelo: $NEW_MODEL_FILE  ($NEW_INFO)"
+else
+  echo "    └─ (no se pudo determinar el modelo)"
+fi
+echo ""
+
+# Comparar modelos
+if [ -n "$OLD_MODEL_FILE" ] && [ -n "$NEW_MODEL_FILE" ]; then
+  if [ "$OLD_MODEL_FILE" = "$NEW_MODEL_FILE" ]; then
+    echo "  ───────────────────────────────────────────────────────────────"
+    echo "   Mismo modelo: no requiere cambios."
+    echo "  ───────────────────────────────────────────────────────────────"
+    echo ""
+    exit 0
+  fi
+fi
+
+echo "  ═══════════════════════════════════════════════════════════════"
+echo "   VERIFICACIÓN DEL MODELO"
+echo "  ═══════════════════════════════════════════════════════════════"
+echo ""
+
+# Verificar si el modelo nuevo existe
+if [ -n "$NEW_MODEL_FILE" ]; then
+  MODEL_PATH="$MODEL_DIR/$NEW_MODEL_FILE"
+  if [ -f "$MODEL_PATH" ]; then
+    SIZE=$(ls -lh "$MODEL_PATH" | awk '{print $5}')
+    echo "   Modelo requerido: $NEW_MODEL_FILE"
+    echo "   Estado:          ✓ YA EXISTE en disco"
+    echo "   Tamaño:          $SIZE"
+    echo "   Ruta:            $MODEL_PATH"
+    echo ""
+
+    if [ -n "$OLD_MODEL_FILE" ] && [ "$OLD_MODEL_FILE" != "$NEW_MODEL_FILE" ]; then
+      echo "   Modelo ANTERIOR ($OLD_MODEL_FILE):"
+      if [ -f "$MODEL_DIR/$OLD_MODEL_FILE" ]; then
+        echo "     • Disponible en disco (NO se elimina)"
+        echo "     • Vuelve a el con: git checkout $OLD_BRANCH"
+      fi
+      echo ""
+    fi
+
+    echo "  ───────────────────────────────────────────────────────────────"
+    echo "   ▶ SIGUIENTE PASO: No es necesario ejecutar nada."
+    echo "     El symlink en /usr/local/bin/yap ya apunta a la rama activa."
+    echo "     Ejecuta 'yap' para usar el modelo $NEW_BRANCH ($RAM_NEW)."
+    echo "  ───────────────────────────────────────────────────────────────"
+  else
+    echo "   Modelo requerido: $NEW_MODEL_FILE"
+    echo "   Estado:          ✗ NO ENCONTRADO en disco"
+    echo "   Peso:            $( [ -n \"$NEW_MODEL_FILE\" ] && case "$NEW_MODEL_FILE" in *3B*) echo "1.9 GB" ;; *1B*) echo "0.81 GB" ;; esac || echo "?")"
+    echo ""
+
+    if [ -n "$OLD_MODEL_FILE" ] && [ -f "$MODEL_DIR/$OLD_MODEL_FILE" ]; then
+      OLD_SIZE=$(ls -lh "$MODEL_DIR/$OLD_MODEL_FILE" | awk '{print $5}')
+      echo "   Modelo ANTERIOR ($OLD_MODEL_FILE):"
+      echo "     • $OLD_SIZE — disponible en /opt/yap/models/"
+      echo "     • Sigue disponible para cuando vuelvas a esta rama"
+      echo ""
+    fi
+
+    echo "  ───────────────────────────────────────────────────────────────"
+    echo "   ▶ SIGUIENTE PASO: Descarga el modelo faltante con:"
+    echo ""
+    echo "       bash setup.sh"
+    echo ""
+    echo "     setup.sh detectara automaticamente el modelo que falta"
+    echo "     y lo descargara. Los demas pasos (compilacion, etc.)"
+    echo "     ya estan hechos y se saltaran."
+    echo ""
+    echo "     Alternativa manual:"
+    echo "     sudo wget -O $MODEL_PATH <URL>"
+    echo "  ───────────────────────────────────────────────────────────────"
+  fi
+fi
+echo ""
+echo "  ═══════════════════════════════════════════════════════════════"
+echo "   SYMLINK: /usr/local/bin/yap → $REPO_ROOT/yap.py"
+echo "  ═══════════════════════════════════════════════════════════════"
+echo ""
