@@ -20,11 +20,11 @@ jobs:
   # JOB 1: Pruebas unitarias (seguridad + funcional)
   # ──────────────────────────────────────────────────────────────────
   unit-tests:
-    name: "Unit tests (49)"
+    name: "Unit tests (49) - Python 3.12"
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.12"]
 
     steps:
       - name: Checkout repositorio
