@@ -59,8 +59,8 @@ def load_domain_whitelist(path):
 
 def cargar_ejercicios():
     """Carga ejercicios PSeInt desde archivo de configuracion.
-    Formato: Titulo:Descripcion
-    Retorna lista de (titulo, descripcion) o lista vacia si no existe.
+    Formato: Titulo:Descripcion|GuiaSolucion
+    Retorna lista de (titulo, descripcion, solucion) o lista vacia si no existe.
     """
     ejercicios = []
     if os.path.exists(PSEINT_EXERCISES):
@@ -68,9 +68,14 @@ def cargar_ejercicios():
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#"):
-                    parts = line.split(":", 1)
-                    if len(parts) == 2:
-                        ejercicios.append((parts[0].strip(), parts[1].strip()))
+                    # Formato: Titulo:Descripcion|Solucion
+                    rest = line.split(":", 1)
+                    if len(rest) >= 2:
+                        titulo = rest[0].strip()
+                        sub = rest[1].split("|", 1)
+                        desc = sub[0].strip()
+                        sol = sub[1].strip() if len(sub) > 1 else ""
+                        ejercicios.append((titulo, desc, sol))
     return ejercicios
 
 
@@ -103,15 +108,19 @@ def _generar_pdf_ejercicios(ejercicios, ruta_salida):
     add_text(10, margen, y, "=" * 60)
     y -= 24
 
-    for i, (titulo, desc) in enumerate(ejercicios, 1):
+    num = 0
+    for titulo, desc in ejercicios:
         if y < 70:
             add_text(10, margen, y, "[... ejercicios adicionales en el archivo de configuracion]")
             break
-        add_text(13, margen, y, f"{i}. {titulo}")
-        y -= 18
+        if titulo:
+            num += 1
+            add_text(13, margen, y, f"{num}. {titulo}")
+            y -= 18
         # Word-wrap description
         for wrapped in textwrap.wrap(desc, width=int(ancho_texto / 5.5)):
-            add_text(10, margen + 15, y, wrapped)
+            indent = margen + 15 if titulo else margen + 30
+            add_text(10, indent, y, wrapped)
             y -= 14
         y -= 8
 
@@ -323,7 +332,7 @@ def cmd_pseint(query):
 
 
 def cmd_intro_pseint():
-    """Tutorial interactivo de PSeInt: genera PDF, abre PSeInt y guia paso a paso."""
+    """Tutorial interactivo de PSeInt: genera PDF con guia, abre PSeInt y enseña paso a paso."""
     ejercicios = cargar_ejercicios()
     if not ejercicios:
         print("[ERROR] No hay ejercicios configurados en", PSEINT_EXERCISES)
@@ -331,78 +340,128 @@ def cmd_intro_pseint():
 
     total = len(ejercicios)
 
-    # 1. Generar PDF
+    # 1. Generar PDF con ejercicios + guias de resolucion
     pdf_dir = os.path.join(tempfile.gettempdir(), "yap_pseint")
     os.makedirs(pdf_dir, exist_ok=True)
     pdf_path = os.path.join(pdf_dir, "ejercicios_pseint.pdf")
-    _generar_pdf_ejercicios(ejercicios, pdf_path)
+
+    # Construir contenido del PDF: titulo + desc + pasos de solucion
+    pdf_contenido = []
+    for titulo, desc, solucion in ejercicios:
+        pdf_contenido.append((f"EJERCICIO: {titulo}", desc))
+        if solucion:
+            pasos = solucion.split(";")
+            for p in pasos:
+                p = p.strip()
+                if p:
+                    pdf_contenido.append(("", p))
+        pdf_contenido.append(("", "-" * 40))
+    _generar_pdf_ejercicios(pdf_contenido, pdf_path)
 
     # 2. Abrir PDF
     try:
         subprocess.Popen(["xdg-open", pdf_path],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print(f"[OK] Guia de ejercicios generada: {pdf_path}")
+        print(f"[OK] Guia de resolucion generada: {pdf_path}")
     except FileNotFoundError:
         print(f"[INFO] PDF disponible en: {pdf_path}")
 
     # 3. Abrir PSeInt (si esta instalado)
     print(cmd_open_app("pseint"))
 
-    # 4. Tutorial interactivo
+    # 4. Tutorial interactivo paso a paso
     print("\n" + "=" * 56)
-    print("  INTRODUCCION A PSEINT — TUTOR INTERACTIVO")
+    print("  TUTOR INTERACTIVO PSEINT — PASO A PASO")
     print("=" * 56)
 
     idx = 0
     while 0 <= idx < total:
-        titulo, desc = ejercicios[idx]
-        print(f"\n--- Ejercicio {idx + 1}/{total}: {titulo} ---")
-        print(desc)
-        print()
+        titulo, desc, solucion = ejercicios[idx]
+        print(f"\n╔══ EJERCICIO {idx + 1}/{total}: {titulo}")
+        print(f"║   {desc}")
+        print(f"╚{'═' * 50}")
 
-        while True:
-            try:
-                resp = input(
-                    "Opciones:\n"
-                    "  [pregunta]  Escribe tu duda sobre este ejercicio\n"
-                    "  ayuda       Muestra una pista\n"
-                    "  siguiente   Pasar al siguiente ejercicio\n"
-                    "  salir       Terminar el tutorial\n"
-                    "> "
-                ).strip()
-            except (EOFError, KeyboardInterrupt):
-                print("\n\nTutorial interrumpido.")
-                return
+        if not solucion:
+            print("\n(Sin guia de resolucion. Pregunta al tutor.)")
+            while True:
+                try:
+                    resp = input("  > ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    print("\nTutorial interrumpido.")
+                    return
+                if resp.lower() == "siguiente":
+                    idx += 1
+                    break
+                elif resp.lower() == "salir":
+                    print("\nTutorial finalizado.")
+                    return
+                elif resp:
+                    print("\n[ASISTENCIA]")
+                    print(cmd_pseint(
+                        f"Ejercicio: '{titulo}' — {desc}.\n"
+                        f"Duda del estudiante: {resp}"
+                    ))
+            continue
 
-            if not resp:
-                continue
+        # Mostrar guia de resolucion paso a paso
+        pasos_guia = [p.strip() for p in solucion.split(";") if p.strip()]
+        paso_actual = 0
+        while paso_actual < len(pasos_guia):
+            paso = pasos_guia[paso_actual]
+            print(f"\n  >> {paso}")
 
-            lower = resp.lower()
+            while True:
+                try:
+                    resp = input(
+                        "  [Enter = continuar] [pregunta] [siguiente] [salir]\n  > "
+                    ).strip()
+                except (EOFError, KeyboardInterrupt):
+                    print("\n\nTutorial interrumpido.")
+                    return
 
-            if lower == "salir":
-                print("\nTutorial finalizado. ¡Sigue practicando!")
-                return
+                if not resp:
+                    paso_actual += 1
+                    break
 
-            if lower == "siguiente":
-                idx += 1
+                lower = resp.lower()
+
+                if lower == "salir":
+                    print("\nTutorial finalizado. ¡Sigue practicando!")
+                    return
+
+                if lower == "siguiente":
+                    paso_actual = len(pasos_guia)  # salir del bucle de pasos
+                    idx += 1
+                    break
+
+                # El estudiante tiene una duda — la IA responde con contexto completo
+                guia_completa = " ; ".join(pasos_guia)
+                print("\n[ASISTENCIA]")
+                print(cmd_pseint(
+                    f"EJERCICIO: {titulo}\n"
+                    f"Descripcion: {desc}\n"
+                    f"Guia de resolucion paso a paso: {guia_completa}\n\n"
+                    f"El estudiante esta en el {paso}.\n"
+                    f"Duda del estudiante: {resp}"
+                ))
+
+            # Si llegamos al final de los pasos de este ejercicio
+            if paso_actual >= len(pasos_guia) and lower != "siguiente":
+                print(f"\n  ✓ Completaste el ejercicio '{titulo}'")
+                while True:
+                    try:
+                        resp = input("  [siguiente] [salir]\n  > ").strip()
+                    except (EOFError, KeyboardInterrupt):
+                        return
+                    if resp.lower() == "siguiente":
+                        idx += 1
+                        break
+                    elif resp.lower() == "salir":
+                        print("\nTutorial finalizado.")
+                        return
                 break
 
-            if lower == "ayuda":
-                print("\n[PISTA]")
-                print(cmd_pseint(
-                    f"El estudiante esta en el ejercicio '{titulo}': {desc}. "
-                    f"Dale una pista breve sin resolverlo completamente."
-                ))
-                continue
-
-            # Es una pregunta del estudiante
-            print("\n[ASISTENCIA]")
-            print(cmd_pseint(
-                f"Ejercicio actual del estudiante: '{titulo}' — {desc}.\n"
-                f"Duda del estudiante: {resp}"
-            ))
-
-    print(f"\n¡Felicidades! Completaste los {total} ejercicios.")
+    print(f"\n✓ ¡Felicidades! Completaste los {total} ejercicios.")
     print("Para mas ayuda, escribe tu pregunta sobre PSeInt en cualquier momento.")
 
 

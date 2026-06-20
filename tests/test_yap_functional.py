@@ -301,12 +301,12 @@ class TestPSeIntConfig:
     def test_cargar_ejercicios_devuelve_lista(self):
         with open(self.exercises_path, "w") as f:
             f.write("Hola Mundo:Escribe un programa\n")
-            f.write("Suma:Suma dos numeros\n")
+            f.write("Suma:Suma dos numeros|Paso 1; Paso 2\n")
         with patch.object(yap, "PSEINT_EXERCISES", self.exercises_path):
             ej = yap.cargar_ejercicios()
         assert len(ej) == 2
-        assert ej[0] == ("Hola Mundo", "Escribe un programa")
-        assert ej[1] == ("Suma", "Suma dos numeros")
+        assert ej[0] == ("Hola Mundo", "Escribe un programa", "")
+        assert ej[1] == ("Suma", "Suma dos numeros", "Paso 1; Paso 2")
 
     def test_cargar_ignora_comentarios(self):
         with open(self.exercises_path, "w") as f:
@@ -429,7 +429,7 @@ class TestIntroduccionPSeInt:
     def test_tutorial_ayuda_pide_pista(
         self, mock_input, mock_popen, mock_open_app, mock_cmd_pseint
     ):
-        """'ayuda' must call cmd_pseint for a hint."""
+        """'ayuda' must call cmd_pseint with exercise context."""
         mock_input.side_effect = ["ayuda", "salir"]
         mock_open_app.return_value = "[OK] PSeInt abierta."
         mock_cmd_pseint.return_value = "Pista: piensa en Escribir..."
@@ -437,7 +437,8 @@ class TestIntroduccionPSeInt:
             yap.cmd_intro_pseint()
         mock_cmd_pseint.assert_called_once()
         call_arg = mock_cmd_pseint.call_args[0][0]
-        assert "pista" in call_arg.lower()
+        assert "Hola Mundo" in call_arg, "Missing exercise context"
+        assert "ayuda" in call_arg.lower(), "Missing student text"
 
     @patch("yap.cmd_pseint")
     @patch("yap.cmd_open_app")
