@@ -503,7 +503,7 @@ Pipeline definido en `.github/workflows/test.yml`.
 | **TestNotifications** | `test_notify_enviado` | `notify()` llama a `notify-send` con titulo y mensaje |
 | | `test_notify_urgency_levels` | Soporta `-u critical`, `-u normal` |
 | **TestPSeIntTutor** | `test_cmd_pseint_respuesta_exitosa` | Tutor PSeInt devuelve guia paso a paso |
-| **TestArchitecture** | `test_*_existe` | Verifica que `main()`, `handle_action()`, `interpret()`, `load_whitelist()`, `load_domain_whitelist()`, `cmd_pseint()`, `cmd_intro_pseint()`, `cargar_ejercicios()`, `_generar_pdf_ejercicios()` existen y son callables |
+| **TestArchitecture** | `test_*_existe` | Verifica que `main()`, `handle_action()`, `interpret()`, `load_whitelist()`, `load_domain_whitelist()`, `cmd_pseint()`, `cmd_intro_pseint()`, `cargar_ejercicios()`, `cargar_ejercicios()` existen y son callables |
 | **TestPSeIntConfig** | `test_cargar_ejercicios_*` | Carga de ejercicios desde archivo de configuracion PSeInt |
 | **TestIntroduccionPSeInt** | `test_tutorial_*` | Tutorial interactivo: navegacion, ayuda, preguntas al tutor, finalizacion |
 
