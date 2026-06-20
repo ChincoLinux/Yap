@@ -202,6 +202,10 @@ echo "  Archivos de configuracion (whitelists):"
 echo "    • $WHITELIST_DIR/apps.conf  — Aplicaciones permitidas"
 echo "    • $WHITELIST_DIR/web.conf   — Dominios permitidos"
 echo "    • $PSEINT_DIR/ejercicios.conf  — Ejercicios PSeInt"
+echo "    • $PSEINT_DIR/guia_ejercicios.pdf  — Guia visual de ejercicios"
+echo ""
+echo "  Herramienta educativa:"
+echo "    • PSeInt                     — Instalado via .run en /opt/pseint/"
 echo ""
 echo "  Agente principal:"
 echo "    • $YAP_DIR/yap.py           — Copia del script (respaldo)"
@@ -217,6 +221,7 @@ sudo cp "$SCRIPT_DIR/whitelist/apps.conf" "$WHITELIST_DIR/"
 sudo cp "$SCRIPT_DIR/whitelist/web.conf" "$WHITELIST_DIR/"
 sudo mkdir -p "$PSEINT_DIR"
 sudo cp "$SCRIPT_DIR/whitelist/pseint/ejercicios.conf" "$PSEINT_DIR/"
+sudo cp "$SCRIPT_DIR/whitelist/pseint/guia_ejercicios.pdf" "$PSEINT_DIR/"
 sudo cp "$SCRIPT_DIR/yap.py" "$YAP_DIR/yap.py"
 sudo chmod +x "$YAP_DIR/yap.py"
 sudo ln -sf "$SCRIPT_DIR/yap.py" "$BIN_DIR/yap"
@@ -248,16 +253,37 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  PASO 5/6 — Instalación de aplicaciones sugeridas"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "  Aplicaciones incluidas en la whitelist (instalación opcional):"
-echo "    • libreoffice    — Suite ofimática"
+echo "  Aplicaciones incluidas en la whitelist (instalacion opcional):"
+echo "    • libreoffice    — Suite ofimatica"
 echo "    • evince         — Visor de PDF"
 echo "    • firefox-esr    — Navegador web"
 echo "    • micro          — Editor de texto en terminal"
 echo "    • htop           — Monitor de procesos"
+echo "    • pseint         — Entorno de programacion (via .run)"
 echo ""
 echo "  ──────────────────────────────────────────────────────────────"
-echo "  ［EJECUTANDO］sudo apt-get install ..."
+echo "  [EJECUTANDO] Instalacion de PSeInt + apt-get"
 echo "  ──────────────────────────────────────────────────────────────"
+echo ""
+
+# Instalar PSeInt via .run (detecta si ya esta instalado)
+PSEINT_RUN="/opt/pseint/pseint"
+if [ ! -x "$PSEINT_RUN" ]; then
+    echo "    Descargando e instalando PSeInt..."
+    PSEINT_TMP=$(mktemp -d)
+    sudo wget -q "https://downloads.sourceforge.net/project/pseint/20230531/pseint-l64-20230531.tgz" -O "$PSEINT_TMP/pseint.tgz" 2>/dev/null || true
+    if [ -f "$PSEINT_TMP/pseint.tgz" ]; then
+        sudo mkdir -p /opt/pseint
+        sudo tar xzf "$PSEINT_TMP/pseint.tgz" -C /opt/pseint 2>/dev/null || true
+        rm -rf "$PSEINT_TMP"
+        echo "    PSeInt instalado en /opt/pseint/"
+    else
+        echo "    [AVISO] No se pudo descargar PSeInt. Instalalo manualmente desde pseint.sourceforge.net"
+        echo "            El tutorial funcionara igual sin PSeInt grafico."
+    fi
+else
+    echo "    PSeInt ya instalado en /opt/pseint/"
+fi
 echo ""
 
 sudo apt-get install -y -qq \

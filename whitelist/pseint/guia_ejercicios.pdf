@@ -1,0 +1,79 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F18 5 0 R /F13 6 0 R /F10 7 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 3916 >>
+stream
+BT /F18 18 Tf 50 742 Td (Guia de Ejercicios PSeInt) Tj ET
+BT /F10 10 Tf 50 712 Td (============================================================) Tj ET
+BT /F13 13 Tf 50 688 Td (1. EJERCICIO: Hola Mundo) Tj ET
+BT /F10 10 Tf 65 670 Td (Escribe un programa que muestre "Hola, mundo" en pantalla.) Tj ET
+BT /F10 10 Tf 80 648 Td (Paso 1: Haz clic en el botón Nuevo \(ícono de hoja en blanco\) o presiona Ctrl+N. Aparecerá un) Tj ET
+BT /F10 10 Tf 80 634 Td (lienzo vacío.) Tj ET
+BT /F10 10 Tf 80 612 Td (Paso 2: En la primera línea del lienzo, escribe exactamente: Algoritmo HolaMundo. La palabra) Tj ET
+BT /F10 10 Tf 80 598 Td (HolaMundo no lleva tilde porque PSeInt no acepta acentos en nombres de algoritmos. Presiona) Tj ET
+BT /F10 10 Tf 80 584 Td (Enter.) Tj ET
+BT /F10 10 Tf 80 562 Td (Paso 3: En la siguiente línea escribe exactamente: Escribir "Hola, mundo". Incluye las) Tj ET
+BT /F10 10 Tf 80 548 Td (comillas dobles. No lleves punto y coma al final porque PSeInt no lo requiere. Presiona) Tj ET
+BT /F10 10 Tf 80 534 Td (Enter.) Tj ET
+BT /F10 10 Tf 80 512 Td (Paso 4: En la línea siguiente escribe exactamente: FinAlgoritmo. No lleva punto ni nada más.) Tj ET
+BT /F10 10 Tf 80 498 Td (Presiona Enter.) Tj ET
+BT /F10 10 Tf 80 476 Td (Paso 5: Haz clic en el botón verde con triángulo \(Ejecutar\) en la barra superior, o presiona) Tj ET
+BT /F10 10 Tf 80 462 Td (la tecla F9. Se abrirá una ventana mostrando "Hola, mundo".) Tj ET
+BT /F10 10 Tf 80 440 Td (Paso 6: Para guardar, haz clic en Archivo, luego en Guardar como. Escribe "hola_mundo" como) Tj ET
+BT /F10 10 Tf 80 426 Td (nombre y haz clic en Guardar. La extensión .psc se agrega automáticamente.) Tj ET
+BT /F10 10 Tf 80 404 Td (----------------------------------------) Tj ET
+BT /F13 13 Tf 50 382 Td (2. EJERCICIO: Suma de dos números) Tj ET
+BT /F10 10 Tf 65 364 Td (Pide dos números al usuario y muestra su suma.) Tj ET
+BT /F10 10 Tf 80 342 Td (Paso 1: Haz clic en Nuevo \(Ctrl+N\) para crear un algoritmo en blanco.) Tj ET
+BT /F10 10 Tf 80 320 Td (Paso 2: Escribe en la primera línea: Algoritmo Suma. Presiona Enter dos veces para dejar) Tj ET
+BT /F10 10 Tf 80 306 Td (espacio, luego escribe: FinAlgoritmo.) Tj ET
+BT /F10 10 Tf 80 284 Td (Paso 3: Entre Algoritmo y FinAlgoritmo, escribe en una línea vacía: Definir a,b,resultado) Tj ET
+BT /F10 10 Tf 80 270 Td (Como Entero. Esto crea tres variables para guardar números enteros. La coma entre) Tj ET
+BT /F10 10 Tf 80 256 Td (a,b,resultado separa los nombres de las variables. Presiona Enter.) Tj ET
+BT /F10 10 Tf 80 234 Td (Paso 4: En la siguiente línea escribe: Escribir "Ingrese el primer número:". Esto mostrará un) Tj ET
+BT /F10 10 Tf 80 220 Td (mensaje al usuario. En la línea de abajo escribe: Leer a. Esto pausa el programa y espera que) Tj ET
+BT /F10 10 Tf 80 206 Td (el usuario escriba un número. Repite para la variable b: primero escribe Escribir "Ingrese el) Tj ET
+BT /F10 10 Tf 80 192 Td (segundo número:" y debajo escribe Leer b.) Tj ET
+BT /F10 10 Tf 80 170 Td (Paso 5: En una nueva línea escribe: resultado = a + b. El signo = asigna el valor de la suma) Tj ET
+BT /F10 10 Tf 80 156 Td (a la variable resultado. No coloques espacios alrededor del signo =.) Tj ET
+BT /F10 10 Tf 80 134 Td (Paso 6: En la siguiente línea escribe: Escribir "La suma es: ", resultado. La coma dentro de) Tj ET
+BT /F10 10 Tf 80 120 Td (Escribir concatena \(une\) el texto "La suma es: " con el valor de la variable resultado,) Tj ET
+BT /F10 10 Tf 80 106 Td (mostrándolos juntos en pantalla.) Tj ET
+BT /F10 10 Tf 80 84 Td (Paso 7: Presiona F9 o haz clic en el botón verde Ejecutar. Cuando aparezca la ventana de) Tj ET
+BT /F10 10 Tf 80 70 Td (entrada, escribe un número \(por ejemplo: 5\) y presiona Enter. Luego escribe otro número \(por) Tj ET
+BT /F10 10 Tf 80 56 Td (ejemplo: 3\) y presiona Enter. Debe mostrar: La suma es: 8.) Tj ET
+BT /F10 10 Tf 50 34 Td ([... mas ejercicios en archivo de configuracion]) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000264 00000 n 
+0000004232 00000 n 
+0000004334 00000 n 
+0000004431 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+4536
+%%EOF

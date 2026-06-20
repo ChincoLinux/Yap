@@ -8,14 +8,13 @@ import shutil
 import urllib.request
 import urllib.parse
 import re
-import tempfile
-import textwrap
 
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
 WHITELIST_WEB = f"{CONFIG_DIR}/whitelist/web.conf"
 PSEINT_DIR = f"{CONFIG_DIR}/pseint"
 PSEINT_EXERCISES = f"{PSEINT_DIR}/ejercicios.conf"
+PSEINT_GUIA_PDF = f"{PSEINT_DIR}/guia_ejercicios.pdf"
 MODEL_PATH = "/opt/yap/models/Llama-3.2-1B-Instruct-Q4_K_M.gguf"
 MAX_CTX = 2048
 MAX_HISTORY = 6
@@ -77,85 +76,6 @@ def cargar_ejercicios():
                         sol = sub[1].strip() if len(sub) > 1 else ""
                         ejercicios.append((titulo, desc, sol))
     return ejercicios
-
-
-def _generar_pdf_ejercicios(ejercicios, ruta_salida):
-    """Genera un PDF valido con la lista de ejercicios usando solo la stdlib.
-    El PDF resultante puede abrirse con cualquier visor de PDF.
-    """
-    import textwrap
-
-    ancho_pag = 612   # US Letter
-    alto_pag = 792
-    margen = 50
-    ancho_texto = ancho_pag - 2 * margen  # 512px
-
-    def esc(txt):
-        """Escapa texto para PDF (parentesis y backslash)."""
-        s = txt.encode("latin-1", errors="replace").decode("latin-1")
-        return s.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-
-    # Construir el stream de contenido
-    stream_lines = []
-    y = alto_pag - margen
-
-    def add_text(size, x, yy, txt):
-        stream_lines.append(f"BT /F{size} {size} Tf {x} {yy} Td ({esc(txt)}) Tj ET")
-
-    # Titulo
-    add_text(18, margen, y, "Guia de Ejercicios PSeInt")
-    y -= 30
-    add_text(10, margen, y, "=" * 60)
-    y -= 24
-
-    num = 0
-    for titulo, desc in ejercicios:
-        if y < 70:
-            add_text(10, margen, y, "[... ejercicios adicionales en el archivo de configuracion]")
-            break
-        if titulo:
-            num += 1
-            add_text(13, margen, y, f"{num}. {titulo}")
-            y -= 18
-        # Word-wrap description
-        for wrapped in textwrap.wrap(desc, width=int(ancho_texto / 5.5)):
-            indent = margen + 15 if titulo else margen + 30
-            add_text(10, indent, y, wrapped)
-            y -= 14
-        y -= 8
-
-    content = "\n".join(stream_lines)
-    content_bytes = content.encode("latin-1", errors="replace")
-
-    # Construir objetos del PDF
-    objs = [
-        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
-        b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
-        (
-            f"3 0 obj\n<< /Type /Page /Parent 2 0 R"
-            f" /MediaBox [0 0 {ancho_pag} {alto_pag}]"
-            f" /Contents 4 0 R"
-            f" /Resources << /Font << /F18 5 0 R /F13 6 0 R /F10 7 0 R >> >> >>\nendobj\n"
-        ).encode(),
-        b"4 0 obj\n<< /Length " + str(len(content_bytes)).encode() + b" >>\nstream\n" + content_bytes + b"\nendstream\nendobj\n",
-        b"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj\n",
-        b"6 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n",
-        b"7 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>\nendobj\n",
-    ]
-
-    # Escribir archivo con xref table
-    with open(ruta_salida, "wb") as f:
-        f.write(b"%PDF-1.4\n")
-        offsets = []
-        for obj_data in objs:
-            offsets.append(f.tell())
-            f.write(obj_data)
-        xref_offset = f.tell()
-        n = len(objs) + 1
-        f.write(f"xref\n0 {n}\n0000000000 65535 f \n".encode())
-        for off in offsets:
-            f.write(f"{off:010d} 00000 n \n".encode())
-        f.write(f"trailer\n<< /Size {n} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode())
 
 
 def notify(title, msg, urgency="normal"):
@@ -332,7 +252,7 @@ def cmd_pseint(query):
 
 
 def cmd_intro_pseint():
-    """Tutorial interactivo de PSeInt: genera PDF con guia, abre PSeInt y enseña paso a paso."""
+    """Tutorial interactivo de PSeInt: abre PDF estatico con guia, abre PSeInt y enseña paso a paso."""
     ejercicios = cargar_ejercicios()
     if not ejercicios:
         print("[ERROR] No hay ejercicios configurados en", PSEINT_EXERCISES)
@@ -340,36 +260,21 @@ def cmd_intro_pseint():
 
     total = len(ejercicios)
 
-    # 1. Generar PDF con ejercicios + guias de resolucion
-    pdf_dir = os.path.join(tempfile.gettempdir(), "yap_pseint")
-    os.makedirs(pdf_dir, exist_ok=True)
-    pdf_path = os.path.join(pdf_dir, "ejercicios_pseint.pdf")
+    # 1. Abrir PDF estatico con la guia de ejercicios
+    if os.path.exists(PSEINT_GUIA_PDF):
+        try:
+            subprocess.Popen(["xdg-open", PSEINT_GUIA_PDF],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(f"[OK] Guia de ejercicios abierta")
+        except FileNotFoundError:
+            print(f"[INFO] PDF disponible en: {PSEINT_GUIA_PDF}")
+    else:
+        print(f"[INFO] Guia PDF no encontrada en {PSEINT_GUIA_PDF}")
 
-    # Construir contenido del PDF: titulo + desc + pasos de solucion
-    pdf_contenido = []
-    for titulo, desc, solucion in ejercicios:
-        pdf_contenido.append((f"EJERCICIO: {titulo}", desc))
-        if solucion:
-            pasos = solucion.split(";")
-            for p in pasos:
-                p = p.strip()
-                if p:
-                    pdf_contenido.append(("", p))
-        pdf_contenido.append(("", "-" * 40))
-    _generar_pdf_ejercicios(pdf_contenido, pdf_path)
-
-    # 2. Abrir PDF
-    try:
-        subprocess.Popen(["xdg-open", pdf_path],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print(f"[OK] Guia de resolucion generada: {pdf_path}")
-    except FileNotFoundError:
-        print(f"[INFO] PDF disponible en: {pdf_path}")
-
-    # 3. Abrir PSeInt (si esta instalado)
+    # 2. Abrir PSeInt (si esta instalado)
     print(cmd_open_app("pseint"))
 
-    # 4. Tutorial interactivo paso a paso
+    # 3. Tutorial interactivo paso a paso
     print("\n" + "=" * 56)
     print("  TUTOR INTERACTIVO PSEINT — PASO A PASO")
     print("=" * 56)
@@ -377,9 +282,9 @@ def cmd_intro_pseint():
     idx = 0
     while 0 <= idx < total:
         titulo, desc, solucion = ejercicios[idx]
-        print(f"\n╔══ EJERCICIO {idx + 1}/{total}: {titulo}")
-        print(f"║   {desc}")
-        print(f"╚{'═' * 50}")
+        print(f"\n┌── EJERCICIO {idx + 1}/{total}: {titulo}")
+        print(f"│   {desc}")
+        print(f"└{'─' * 50}")
 
         if not solucion:
             print("\n(Sin guia de resolucion. Pregunta al tutor.)")
@@ -398,7 +303,7 @@ def cmd_intro_pseint():
                 elif resp:
                     print("\n[ASISTENCIA]")
                     print(cmd_pseint(
-                        f"Ejercicio: '{titulo}' — {desc}.\n"
+                        f"Ejercicio: '{titulo}' - {desc}.\n"
                         f"Duda del estudiante: {resp}"
                     ))
             continue
@@ -430,11 +335,11 @@ def cmd_intro_pseint():
                     return
 
                 if lower == "siguiente":
-                    paso_actual = len(pasos_guia)  # salir del bucle de pasos
+                    paso_actual = len(pasos_guia)
                     idx += 1
                     break
 
-                # El estudiante tiene una duda — la IA responde con contexto completo
+                # El estudiante tiene una duda - la IA responde con contexto completo
                 guia_completa = " ; ".join(pasos_guia)
                 print("\n[ASISTENCIA]")
                 print(cmd_pseint(
@@ -445,7 +350,6 @@ def cmd_intro_pseint():
                     f"Duda del estudiante: {resp}"
                 ))
 
-            # Si llegamos al final de los pasos de este ejercicio
             if paso_actual >= len(pasos_guia) and lower != "siguiente":
                 print(f"\n  ✓ Completaste el ejercicio '{titulo}'")
                 while True:

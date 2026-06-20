@@ -327,33 +327,6 @@ class TestPSeIntConfig:
 # 8. GENERACION DE PDF
 # ============================================================
 
-class TestPdfGenerator:
-    """Pruebas para generacion de PDF."""
-
-    def setup_method(self):
-        self.tmp_dir = tempfile.mkdtemp()
-
-    def teardown_method(self):
-        import shutil
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
-
-    def test_generar_pdf_crea_archivo_valido(self):
-        ejercicios = [("Hola Mundo", "Escribe un programa"), ("Suma", "Suma dos numeros")]
-        ruta = os.path.join(self.tmp_dir, "test.pdf")
-        yap._generar_pdf_ejercicios(ejercicios, ruta)
-        with open(ruta, "rb") as f:
-            header = f.read(8)
-        assert header.startswith(b"%PDF-"), "PDF header missing"
-        size = os.path.getsize(ruta)
-        assert size > 200, f"PDF too small: {size} bytes"
-
-    def test_generar_pdf_ejercicios_vacios(self):
-        ruta = os.path.join(self.tmp_dir, "vacio.pdf")
-        yap._generar_pdf_ejercicios([], ruta)
-        with open(ruta, "rb") as f:
-            header = f.read(8)
-        assert header.startswith(b"%PDF-")
-
 
 # ============================================================
 # 9. TUTORIAL INTERACTIVO PSEINT
@@ -518,9 +491,6 @@ class TestArchitecture:
 
     def test_cargar_ejercicios_existe(self):
         assert hasattr(yap, "cargar_ejercicios") and callable(yap.cargar_ejercicios)
-
-    def test_generar_pdf_existe(self):
-        assert hasattr(yap, "_generar_pdf_ejercicios") and callable(yap._generar_pdf_ejercicios)
 
 
 if __name__ == "__main__":

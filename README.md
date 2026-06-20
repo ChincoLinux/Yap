@@ -322,7 +322,7 @@ yap Que es Debian?
 | **Consulta LLM** | `yap Que es Debian?` | Responde directamente con el modelo LLM local. Mas rapido pero sin fuente verificable. Soporta historial en modo interactivo |
 | **Ayuda** | `yap ayuda` / `yap como usar yap` | Muestra lista de comandos disponibles con descripciones |
 | **Tutor PSeInt** | `yap como hago un ciclo mientras` | Consulta al tutor de programacion PSeInt. Responde paso a paso sin historial de conversacion. Contexto reducido (1024 tokens) para minimizar RAM |
-| **Tutorial PSeInt** | `yap quiero aprender pseint` | Inicia tutorial interactivo: genera PDF con ejercicios y guia de resolucion paso a paso (WinAnsiEncoding para tildes), abre PSeInt, y presenta cada paso. El estudiante puede preguntar dudas; la IA recibe el contexto completo de la guia para responder con precision. |
+| **Tutorial PSeInt** | `yap quiero aprender pseint` | Inicia tutorial interactivo: abre el PDF estatico con la guia de ejercicios, lanza PSeInt, y presenta cada paso de la guia en la terminal. El estudiante puede preguntar dudas; la IA recibe el contexto completo de la guia para responder con precision. |
 
 ### 8.4 Clasificacion de intenciones
 
@@ -331,7 +331,7 @@ La funcion **`classify_intent()`** utiliza el propio LLM para determinar la acci
 - **Tolerancia a errores ortograficos**: "Abre" y "abre" y "abrir" se clasifican como `open_app`.
 - **Flexibilidad sintactica**: "busca sobre Linux" y "que es Linux" se distinguen correctamente.
 - **Modo tutor PSeInt**: preguntas sobre programacion/PSeInt se clasifican como `pseint` y responden con guias paso a paso sin historial de conversacion.
-- **Tutorial PSeInt**: 'Quiero aprender PSeInt' inicia el tutorial interactivo. Genera un PDF con la guia de resolucion detallada (cada click, cada linea de codigo). La IA presenta los pasos uno a uno y, si el estudiante pregunta, recibe el contexto completo de la solucion para responder con precision sobre el paso exacto donde esta atascado.
+- **Tutorial PSeInt**: 'Quiero aprender PSeInt' inicia el tutorial interactivo. Abre un PDF estatico con la guia de resolucion detallada (cada click, cada linea de codigo). La IA presenta los pasos uno a uno y, si el estudiante pregunta, recibe el contexto completo de la solucion para responder con precision sobre el paso exacto donde esta atascado.
 - **Historial de conversacion**: hasta 6 turnos almacenados en modo interactivo.
 
 ### 8.5 Flujo del tutorial PSeInt
@@ -339,7 +339,7 @@ La funcion **`classify_intent()`** utiliza el propio LLM para determinar la acci
 Al ejecutar `yap quiero aprender pseint` o seleccionar "Introduccion PSeInt" desde el menu de ayuda, el sistema ejecuta el siguiente flujo:
 
 1. **Carga de ejercicios**: `cargar_ejercicios()` lee `/etc/yap/pseint/ejercicios.conf` (formato `Titulo:Descripcion|GuiaSolucion`).
-2. **Generacion de PDF**: `_generar_pdf_ejercicios()` crea un PDF con el listado de ejercicios y sus guias de resolucion paso a paso, usando fuentes Helvetica con `WinAnsiEncoding` para renderizar correctamente tildes y enies.
+2. **Apertura del PDF**: El sistema abre el archivo `guia_ejercicios.pdf` (pre-generado, instalado por `setup.sh` en `/etc/yap/pseint/`) que contiene los ejercicios y sus guias de resolucion paso a paso con formato profesional.
 3. **Apertura de PSeInt**: `cmd_open_app("pseint")` lanza el entorno PSeInt desde la whitelist.
 4. **Presentacion paso a paso**: El tutorial muestra cada paso de la guia uno por uno. El estudiante presiona Enter para avanzar.
 5. **Bucle de asistencia**: En cualquier momento, el estudiante puede escribir una pregunta. `cmd_pseint()` recibe el contexto completo: titulo del ejercicio, descripcion, guia de resolucion completa (todos los pasos) y el paso actual. Asi la IA responde con precision sobre exactamente donde esta atascado el estudiante.
@@ -420,7 +420,7 @@ Este proyecto se distribuye bajo **licencia MIT**. El modelo **Llama 3.2** esta 
 ```
 tests/
 ├── test_yap_security.py     # 25 pruebas — seguridad y configuracion
-├── test_yap_functional.py   # 35 pruebas — funcionalidad del agente
+├── test_yap_functional.py   # 32 pruebas — funcionalidad del agente
 ├── run_tests.py             # Ejecutor integrado con reporte
 ├── report/                  # Reportes generados con --report
 └── README.md                # Documentacion de las pruebas
@@ -430,7 +430,7 @@ Las pruebas usan **`pytest`** con mocking de `subprocess`, `urllib` y `shutil` p
 
 ```bash
 pip install pytest             # Solo requiere pytest
-python3 -m pytest tests/ -v    # 60 pruebas
+python3 -m pytest tests/ -v    # 57 pruebas
 python3 tests/run_tests.py --report   # Reporte TXT con mapeo de requisitos
 ```
 
@@ -440,7 +440,7 @@ Cada `push` y `pull request` a `master`, `lowmem` o `ultra-lowmem` ejecuta autom
 
 | Job | Que hace |
 |---|---|
-| **unit-tests** | 60 pruebas en Python 3.12 + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
+| **unit-tests** | 57 pruebas en Python 3.12 + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
 | **branch-check** | Verifica que `MODEL_PATH` en cada rama apunte al modelo correcto |
 | **results** | Resumen del pipeline |
 
@@ -505,7 +505,6 @@ Pipeline definido en `.github/workflows/test.yml`.
 | **TestPSeIntTutor** | `test_cmd_pseint_respuesta_exitosa` | Tutor PSeInt devuelve guia paso a paso |
 | **TestArchitecture** | `test_*_existe` | Verifica que `main()`, `handle_action()`, `interpret()`, `load_whitelist()`, `load_domain_whitelist()`, `cmd_pseint()`, `cmd_intro_pseint()`, `cargar_ejercicios()`, `_generar_pdf_ejercicios()` existen y son callables |
 | **TestPSeIntConfig** | `test_cargar_ejercicios_*` | Carga de ejercicios desde archivo de configuracion PSeInt |
-| **TestPdfGenerator** | `test_generar_pdf_*` | Generacion de PDF valido con lista de ejercicios |
 | **TestIntroduccionPSeInt** | `test_tutorial_*` | Tutorial interactivo: navegacion, ayuda, preguntas al tutor, finalizacion |
 
 ### 12.5 Mecanismo de pruebas
@@ -529,9 +528,9 @@ python3 tests/run_tests.py --vm --report
 | Categoria | Pruebas | Resultado |
 |---|---|---|
 | Seguridad (whitelist, injection, dominios) | 25/25 | ✓ 100% |
-| Funcional (apps, webfetch, LLM, historial, PSeInt, PDF, tutorial) | 35/35 | ✓ 100% |
+| Funcional (apps, webfetch, LLM, historial, PSeInt, PDF, tutorial) | 32/32 | ✓ 100% |
 | Infraestructura (symlink, binarios, whitelist en disco) | 5/5 | ✓ 100% (en VM) |
-| **Total** | **65/65** | **✓ 100%** |
+| **Total** | **62/62** | **✓ 100%** |
 
 ---
 
