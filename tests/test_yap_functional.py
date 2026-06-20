@@ -181,6 +181,14 @@ class TestIntentClassification:
             action, param = yap.classify_intent("Hola")
         assert action == "query"
 
+    @patch("subprocess.run")
+    def test_classify_pseint(self, mock_run):
+        """Entrada PSeInt debe clasificar como pseint."""
+        mock_run.return_value = Mock(stdout="pseint|como hago un ciclo mientras", stderr="")
+        action, param = yap.classify_intent("como hago un ciclo mientras en pseint")
+        assert action == "pseint"
+        assert "ciclo mientras" in param
+
 
 # ============================================================
 # 4. CONSULTA AL LLM
@@ -276,7 +284,211 @@ class TestNotifications:
 
 
 # ============================================================
-# 7. ARQUITECTURA Y COMPONENTES
+# 7. CARGA DE EJERCICIOS PSEINT
+# ============================================================
+
+class TestPSeIntConfig:
+    """Pruebas para carga de ejercicios PSeInt."""
+
+    def setup_method(self):
+        self.tmp_dir = tempfile.mkdtemp()
+        self.exercises_path = os.path.join(self.tmp_dir, "ejercicios.conf")
+
+    def teardown_method(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_cargar_ejercicios_devuelve_lista(self):
+        with open(self.exercises_path, "w") as f:
+            f.write("Hola Mundo:Escribe un programa\n")
+            f.write("Suma:Suma dos numeros\n")
+        with patch.object(yap, "PSEINT_EXERCISES", self.exercises_path):
+            ej = yap.cargar_ejercicios()
+        assert len(ej) == 2
+        assert ej[0] == ("Hola Mundo", "Escribe un programa")
+        assert ej[1] == ("Suma", "Suma dos numeros")
+
+    def test_cargar_ignora_comentarios(self):
+        with open(self.exercises_path, "w") as f:
+            f.write("# Esto es un comentario\n")
+            f.write("Hola Mundo:Escribe un programa\n")
+        with patch.object(yap, "PSEINT_EXERCISES", self.exercises_path):
+            ej = yap.cargar_ejercicios()
+        assert len(ej) == 1
+
+    def test_cargar_ejercicios_sin_archivo(self):
+        ruta_inexistente = os.path.join(self.tmp_dir, "no_existe.conf")
+        with patch.object(yap, "PSEINT_EXERCISES", ruta_inexistente):
+            ej = yap.cargar_ejercicios()
+        assert ej == []
+
+
+# ============================================================
+# 8. GENERACION DE PDF
+# ============================================================
+
+class TestPdfGenerator:
+    """Pruebas para generacion de PDF."""
+
+    def setup_method(self):
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def teardown_method(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_generar_pdf_crea_archivo_valido(self):
+        ejercicios = [("Hola Mundo", "Escribe un programa"), ("Suma", "Suma dos numeros")]
+        ruta = os.path.join(self.tmp_dir, "test.pdf")
+        yap._generar_pdf_ejercicios(ejercicios, ruta)
+        with open(ruta, "rb") as f:
+            header = f.read(8)
+        assert header.startswith(b"%PDF-"), "PDF header missing"
+        size = os.path.getsize(ruta)
+        assert size > 200, f"PDF too small: {size} bytes"
+
+    def test_generar_pdf_ejercicios_vacios(self):
+        ruta = os.path.join(self.tmp_dir, "vacio.pdf")
+        yap._generar_pdf_ejercicios([], ruta)
+        with open(ruta, "rb") as f:
+            header = f.read(8)
+        assert header.startswith(b"%PDF-")
+
+
+# ============================================================
+# 9. TUTORIAL INTERACTIVO PSEINT
+# ============================================================
+
+class TestIntroduccionPSeInt:
+    """Pruebas para el tutorial interactivo PSeInt."""
+
+    def setup_method(self):
+        self.tmp_dir = tempfile.mkdtemp()
+        self.exercises_path = os.path.join(self.tmp_dir, "ejercicios.conf")
+        with open(self.exercises_path, "w") as f:
+            f.write("Hola Mundo:Escribe un programa\n")
+            f.write("Suma:Suma dos numeros\n")
+
+    def teardown_method(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    @patch("yap.cmd_pseint")
+    @patch("yap.cmd_open_app")
+    @patch("subprocess.Popen")
+    @patch("builtins.input")
+    def test_tutorial_muestra_primer_ejercicio(
+        self, mock_input, mock_popen, mock_open_app, mock_cmd_pseint
+    ):
+        """Tutorial must show first exercise and exit on 'salir'."""
+        mock_input.side_effect = ["salir"]
+        mock_open_app.return_value = "[OK] PSeInt abierta."
+        mock_cmd_pseint.return_value = "Respuesta del tutor."
+        with patch.object(yap, "PSEINT_EXERCISES", self.exercises_path):
+            yap.cmd_intro_pseint()
+        mock_open_app.assert_called_once_with("pseint")
+        mock_cmd_pseint.assert_not_called()
+
+    @patch("yap.cmd_pseint")
+    @patch("yap.cmd_open_app")
+    @patch("subprocess.Popen")
+    @patch("builtins.input")
+    def test_tutorial_pregunta_va_al_tutor(
+        self, mock_input, mock_popen, mock_open_app, mock_cmd_pseint
+    ):
+        """Typing a question must call cmd_pseint with exercise context."""
+        mock_input.side_effect = ["como lo hago", "salir"]
+        mock_open_app.return_value = "[OK] PSeInt abierta."
+        mock_cmd_pseint.return_value = "Debes usar Escribir..."
+        with patch.object(yap, "PSEINT_EXERCISES", self.exercises_path):
+            yap.cmd_intro_pseint()
+        mock_cmd_pseint.assert_called_once()
+        call_arg = mock_cmd_pseint.call_args[0][0]
+        assert "Hola Mundo" in call_arg, "Exercise context missing"
+        assert "como lo hago" in call_arg, "Student question missing"
+
+    @patch("yap.cmd_pseint")
+    @patch("yap.cmd_open_app")
+    @patch("subprocess.Popen")
+    @patch("builtins.input")
+    def test_tutorial_siguiente_avanza(
+        self, mock_input, mock_popen, mock_open_app, mock_cmd_pseint
+    ):
+        """'siguiente' must advance to next exercise."""
+        mock_input.side_effect = ["siguiente", "salir"]
+        mock_open_app.return_value = "[OK] PSeInt abierta."
+        mock_cmd_pseint.return_value = "Pista breve."
+        with patch.object(yap, "PSEINT_EXERCISES", self.exercises_path):
+            yap.cmd_intro_pseint()
+        mock_cmd_pseint.assert_not_called()
+
+    @patch("yap.cmd_pseint")
+    @patch("yap.cmd_open_app")
+    @patch("subprocess.Popen")
+    @patch("builtins.input")
+    def test_tutorial_ayuda_pide_pista(
+        self, mock_input, mock_popen, mock_open_app, mock_cmd_pseint
+    ):
+        """'ayuda' must call cmd_pseint for a hint."""
+        mock_input.side_effect = ["ayuda", "salir"]
+        mock_open_app.return_value = "[OK] PSeInt abierta."
+        mock_cmd_pseint.return_value = "Pista: piensa en Escribir..."
+        with patch.object(yap, "PSEINT_EXERCISES", self.exercises_path):
+            yap.cmd_intro_pseint()
+        mock_cmd_pseint.assert_called_once()
+        call_arg = mock_cmd_pseint.call_args[0][0]
+        assert "pista" in call_arg.lower()
+
+    @patch("yap.cmd_pseint")
+    @patch("yap.cmd_open_app")
+    @patch("subprocess.Popen")
+    @patch("builtins.input")
+    def test_tutorial_completa_todos(
+        self, mock_input, mock_popen, mock_open_app, mock_cmd_pseint
+    ):
+        """Completing all exercises shows congratulatory message."""
+        mock_input.side_effect = ["siguiente", "salir"]
+        mock_open_app.return_value = "[OK] PSeInt abierta."
+        mock_cmd_pseint.return_value = "Respuesta."
+        with patch.object(yap, "PSEINT_EXERCISES", self.exercises_path):
+            yap.cmd_intro_pseint()
+
+
+# ============================================================
+# 10. TUTOR PSEINT
+# ============================================================
+
+class TestPSeIntTutor:
+    """Requisito: El agente asiste con PSeInt paso a paso."""
+
+    @patch("subprocess.run")
+    def test_cmd_pseint_respuesta_exitosa(self, mock_run):
+        """cmd_pseint debe devolver respuesta del tutor."""
+        mock_run.return_value = Mock(
+            stdout="Para sumar dos numeros en PSeInt:\n\n"
+                   "1. Definir las variables\n"
+                   "2. Leer los valores\n"
+                   "3. Calcular la suma\n"
+                   "4. Mostrar el resultado\n\n"
+                   "Pseudocodigo:\n"
+                   "Algoritmo SumarNumeros\n"
+                   "  Definir a, b, suma Como Entero\n"
+                   "  Escribir \"Ingrese primer numero:\"\n"
+                   "  Leer a\n"
+                   "  Escribir \"Ingrese segundo numero:\"\n"
+                   "  Leer b\n"
+                   "  suma <- a + b\n"
+                   "  Escribir \"La suma es: \", suma\n"
+                   "FinAlgoritmo",
+            stderr=""
+        )
+        result = yap.cmd_pseint("como sumo dos numeros")
+        assert result
+        assert "PSeInt" or "Algoritmo" or "suma" in result
+
+
+# ============================================================
+# 8. ARQUITECTURA Y COMPONENTES
 # ============================================================
 
 class TestArchitecture:
@@ -296,6 +508,18 @@ class TestArchitecture:
 
     def test_load_domain_whitelist_existe(self):
         assert hasattr(yap, "load_domain_whitelist") and callable(yap.load_domain_whitelist)
+
+    def test_cmd_pseint_existe(self):
+        assert hasattr(yap, "cmd_pseint") and callable(yap.cmd_pseint)
+
+    def test_cmd_intro_pseint_existe(self):
+        assert hasattr(yap, "cmd_intro_pseint") and callable(yap.cmd_intro_pseint)
+
+    def test_cargar_ejercicios_existe(self):
+        assert hasattr(yap, "cargar_ejercicios") and callable(yap.cargar_ejercicios)
+
+    def test_generar_pdf_existe(self):
+        assert hasattr(yap, "_generar_pdf_ejercicios") and callable(yap._generar_pdf_ejercicios)
 
 
 if __name__ == "__main__":

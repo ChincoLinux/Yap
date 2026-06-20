@@ -5,7 +5,7 @@
 ```
 tests/
 ├── test_yap_security.py     # 25 pruebas de seguridad y configuracion
-├── test_yap_functional.py   # 24 pruebas funcionales
+├── test_yap_functional.py   # 35 pruebas funcionales
 ├── run_tests.py             # Ejecutor con reporte integrado
 ├── report/                  # Reportes generados (--report)
 └── README.md                # Este archivo
@@ -50,6 +50,10 @@ python3 tests/run_tests.py --vm --report
 | FUN-06 | Historial de conversacion | `TestHistory` |
 | FUN-07 | Notificaciones notify-send | `TestNotifications` |
 | FUN-08 | Modo interactivo y comando | `TestArchitecture` |
+| FUN-09 | Tutor PSeInt paso a paso | `TestPSeIntTutor` |
+| FUN-10 | Tutorial interactivo PSeInt | `TestIntroduccionPSeInt` |
+| SEC-01 | Carga de ejercicios PSeInt | `TestPSeIntConfig` |
+| SEC-02 | Generacion de PDF | `TestPdfGenerator` |
 | CFG-01 | Archivos de configuracion validos | `TestRealConfig` |
 | CFG-02 | Symlink al repositorio | `run_tests.py` (infraestructura) |
 | CFG-03 | llama-cli instalado | `run_tests.py` (infraestructura) |

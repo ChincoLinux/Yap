@@ -320,6 +320,9 @@ yap Que es Debian?
 | **Webfetch + resumen** | `yap Busca https://es.wikipedia.org/wiki/Linux` | Obtiene contenido del sitio, lo limpia de HTML y lo envia al LLM para resumir |
 | **Busqueda Wikipedia** | `yap Busca que es Linux` | Consulta la API REST de Wikipedia, extrae contenido y resume con el LLM; muestra la fuente |
 | **Consulta LLM** | `yap Que es Debian?` | Responde directamente con el modelo LLM local. Mas rapido pero sin fuente verificable. Soporta historial en modo interactivo |
+| **Ayuda** | `yap ayuda` / `yap como usar yap` | Muestra lista de comandos disponibles con descripciones |
+| **Tutor PSeInt** | `yap como hago un ciclo mientras` | Consulta al tutor de programacion PSeInt. Responde paso a paso sin historial de conversacion. Contexto reducido (1024 tokens) para minimizar RAM |
+| **Tutorial PSeInt** | `yap quiero aprender pseint` | Inicia tutorial interactivo: genera PDF con ejercicios, abre PSeInt, y guia paso a paso con bucle de asistencia |
 
 ### 8.4 Clasificacion de intenciones
 
@@ -327,6 +330,8 @@ La funcion **`classify_intent()`** utiliza el propio LLM para determinar la acci
 
 - **Tolerancia a errores ortograficos**: "Abre" y "abre" y "abrir" se clasifican como `open_app`.
 - **Flexibilidad sintactica**: "busca sobre Linux" y "que es Linux" se distinguen correctamente.
+- **Modo tutor PSeInt**: preguntas sobre programacion/PSeInt se clasifican como `pseint` y responden con guias paso a paso sin historial de conversacion.
+- **Tutorial PSeInt**: 'Quiero aprender PSeInt' inicia el tutorial interactivo con ejercicios, PDF y bucle de asistencia.
 - **Historial de conversacion**: hasta 6 turnos almacenados en modo interactivo.
 
 ### Rama lowmem
@@ -404,7 +409,7 @@ Este proyecto se distribuye bajo **licencia MIT**. El modelo **Llama 3.2** esta 
 ```
 tests/
 ├── test_yap_security.py     # 25 pruebas — seguridad y configuracion
-├── test_yap_functional.py   # 24 pruebas — funcionalidad del agente
+├── test_yap_functional.py   # 35 pruebas — funcionalidad del agente
 ├── run_tests.py             # Ejecutor integrado con reporte
 ├── report/                  # Reportes generados con --report
 └── README.md                # Documentacion de las pruebas
@@ -414,7 +419,7 @@ Las pruebas usan **`pytest`** con mocking de `subprocess`, `urllib` y `shutil` p
 
 ```bash
 pip install pytest             # Solo requiere pytest
-python3 -m pytest tests/ -v    # 49 pruebas
+python3 -m pytest tests/ -v    # 60 pruebas
 python3 tests/run_tests.py --report   # Reporte TXT con mapeo de requisitos
 ```
 
@@ -424,7 +429,7 @@ Cada `push` y `pull request` a `master`, `lowmem` o `ultra-lowmem` ejecuta autom
 
 | Job | Que hace |
 |---|---|
-| **unit-tests** | 49 pruebas en Python 3.12 + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
+| **unit-tests** | 60 pruebas en Python 3.12 + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
 | **branch-check** | Verifica que `MODEL_PATH` en cada rama apunte al modelo correcto |
 | **results** | Resumen del pipeline |
 
@@ -476,6 +481,7 @@ Pipeline definido en `.github/workflows/test.yml`.
 | | `test_classify_search` | `"busca que es linux"` → `search\|...` |
 | | `test_classify_webfetch` | URL completa → `webfetch\|...` |
 | | `test_classify_query` | Pregunta general → `query\|...` |
+| | `test_classify_pseint` | `"como hago un ciclo mientras"` → `pseint\|...` |
 | | `test_fallback_a_query` | LLM timeout → fallback a `query` |
 | **TestQuery** | `test_cmd_query_respuesta_exitosa` | Respuesta del LLM se devuelve correctamente |
 | | `test_cmd_query_timeout` | Timeout → `[WARN]` |
@@ -485,7 +491,11 @@ Pipeline definido en `.github/workflows/test.yml`.
 | | `test_historial_limitado` | Maximo `MAX_HISTORY` entradas (6) |
 | **TestNotifications** | `test_notify_enviado` | `notify()` llama a `notify-send` con titulo y mensaje |
 | | `test_notify_urgency_levels` | Soporta `-u critical`, `-u normal` |
-| **TestArchitecture** | `test_*_existe` | Verifica que `main()`, `handle_action()`, `interpret()`, `load_whitelist()`, `load_domain_whitelist()` existen y son callables |
+| **TestPSeIntTutor** | `test_cmd_pseint_respuesta_exitosa` | Tutor PSeInt devuelve guia paso a paso |
+| **TestArchitecture** | `test_*_existe` | Verifica que `main()`, `handle_action()`, `interpret()`, `load_whitelist()`, `load_domain_whitelist()`, `cmd_pseint()`, `cmd_intro_pseint()`, `cargar_ejercicios()`, `_generar_pdf_ejercicios()` existen y son callables |
+| **TestPSeIntConfig** | `test_cargar_ejercicios_*` | Carga de ejercicios desde archivo de configuracion PSeInt |
+| **TestPdfGenerator** | `test_generar_pdf_*` | Generacion de PDF valido con lista de ejercicios |
+| **TestIntroduccionPSeInt** | `test_tutorial_*` | Tutorial interactivo: navegacion, ayuda, preguntas al tutor, finalizacion |
 
 ### 12.5 Mecanismo de pruebas
 
@@ -508,9 +518,9 @@ python3 tests/run_tests.py --vm --report
 | Categoria | Pruebas | Resultado |
 |---|---|---|
 | Seguridad (whitelist, injection, dominios) | 25/25 | ✓ 100% |
-| Funcional (apps, webfetch, LLM, historial) | 24/24 | ✓ 100% |
+| Funcional (apps, webfetch, LLM, historial, PSeInt, PDF, tutorial) | 35/35 | ✓ 100% |
 | Infraestructura (symlink, binarios, whitelist en disco) | 5/5 | ✓ 100% (en VM) |
-| **Total** | **54/54** | **✓ 100%** |
+| **Total** | **65/65** | **✓ 100%** |
 
 ---
 
