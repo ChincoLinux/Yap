@@ -8,10 +8,14 @@ import shutil
 import urllib.request
 import urllib.parse
 import re
+import tempfile
+import textwrap
 
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
 WHITELIST_WEB = f"{CONFIG_DIR}/whitelist/web.conf"
+PSEINT_DIR = f"{CONFIG_DIR}/pseint"
+PSEINT_EXERCISES = f"{PSEINT_DIR}/ejercicios.conf"
 MODEL_PATH = "/opt/yap/models/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
 MAX_CTX = 2048
 MAX_HISTORY = 6
@@ -51,6 +55,98 @@ def load_domain_whitelist(path):
                 if line and not line.startswith("#"):
                     domains.append(line.lower())
     return domains
+
+
+def cargar_ejercicios():
+    """Carga ejercicios PSeInt desde archivo de configuracion.
+    Formato: Titulo:Descripcion
+    Retorna lista de (titulo, descripcion) o lista vacia si no existe.
+    """
+    ejercicios = []
+    if os.path.exists(PSEINT_EXERCISES):
+        with open(PSEINT_EXERCISES, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    parts = line.split(":", 1)
+                    if len(parts) == 2:
+                        ejercicios.append((parts[0].strip(), parts[1].strip()))
+    return ejercicios
+
+
+def _generar_pdf_ejercicios(ejercicios, ruta_salida):
+    """Genera un PDF valido con la lista de ejercicios usando solo la stdlib.
+    El PDF resultante puede abrirse con cualquier visor de PDF.
+    """
+    import textwrap
+
+    ancho_pag = 612   # US Letter
+    alto_pag = 792
+    margen = 50
+    ancho_texto = ancho_pag - 2 * margen  # 512px
+
+    def esc(txt):
+        """Escapa texto para PDF (parentesis y backslash)."""
+        s = txt.encode("latin-1", errors="replace").decode("latin-1")
+        return s.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+    # Construir el stream de contenido
+    stream_lines = []
+    y = alto_pag - margen
+
+    def add_text(size, x, yy, txt):
+        stream_lines.append(f"BT /F{size} Tf {x} {yy} Td ({esc(txt)}) Tj ET")
+
+    # Titulo
+    add_text(18, margen, y, "Guia de Ejercicios PSeInt")
+    y -= 30
+    add_text(10, margen, y, "=" * 60)
+    y -= 24
+
+    for i, (titulo, desc) in enumerate(ejercicios, 1):
+        if y < 70:
+            add_text(10, margen, y, "[... ejercicios adicionales en el archivo de configuracion]")
+            break
+        add_text(13, margen, y, f"{i}. {titulo}")
+        y -= 18
+        # Word-wrap description
+        for wrapped in textwrap.wrap(desc, width=int(ancho_texto / 5.5)):
+            add_text(10, margen + 15, y, wrapped)
+            y -= 14
+        y -= 8
+
+    content = "\n".join(stream_lines)
+    content_bytes = content.encode("latin-1", errors="replace")
+
+    # Construir objetos del PDF
+    objs = [
+        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+        b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+        (
+            f"3 0 obj\n<< /Type /Page /Parent 2 0 R"
+            f" /MediaBox [0 0 {ancho_pag} {alto_pag}]"
+            f" /Contents 4 0 R"
+            f" /Resources << /Font << /F18 5 0 R /F13 6 0 R /F10 7 0 R >> >> >>\nendobj\n"
+        ).encode(),
+        b"4 0 obj\n<< /Length " + str(len(content_bytes)).encode() + b" >>\nstream\n" + content_bytes + b"\nendstream\nendobj\n",
+        b"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n",
+        b"6 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+        b"7 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>\nendobj\n",
+    ]
+
+    # Escribir archivo con xref table
+    with open(ruta_salida, "wb") as f:
+        f.write(b"%PDF-1.4\n")
+        offsets = []
+        for obj_data in objs:
+            offsets.append(f.tell())
+            f.write(obj_data)
+        xref_offset = f.tell()
+        n = len(objs) + 1
+        f.write(f"xref\n0 {n}\n0000000000 65535 f \n".encode())
+        for off in offsets:
+            f.write(f"{off:010d} 00000 n \n".encode())
+        f.write(f"trailer\n<< /Size {n} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode())
 
 
 def notify(title, msg, urgency="normal"):
@@ -179,17 +275,156 @@ def cmd_query(prompt, context=None, store_history=True):
         return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
 
 
+def cmd_pseint(query):
+    """Tutor de PSeInt: responde paso a paso sin historial de contexto."""
+    pseint_prompt = (
+        "Eres un tutor de programacion que ensena con PSeInt en espanol. "
+        "Cuando un estudiante te pregunte sobre un problema o concepto: "
+        "1) Explica el concepto de forma sencilla. "
+        "2) Muestra el pseudocodigo PSeInt completo paso a paso. "
+        "3) Incluye las palabras clave: Algoritmo, Definir, Escribir, Leer, "
+        "Si-Entonces-Sino, Mientras, Repetir, Para, Segun, Arreglo. "
+        "4) Usa indentacion clara en el pseudocodigo. "
+        "5) Responde SOLO con la guia, sin divagaciones."
+    )
+    parts = [BOS]
+    parts.append(f"{HEADER}system{FOOTER}\n\n{pseint_prompt}{EOT}")
+    parts.append(f"{HEADER}user{FOOTER}\n\n{query}{EOT}")
+    parts.append(f"{HEADER}assistant{FOOTER}\n\n")
+
+    full_prompt = "".join(parts)
+
+    cmd = [
+        "llama-cli", "-m", MODEL_PATH,
+        "-p", full_prompt,
+        "-n", "512",
+        "--temp", "0.5",
+        "--ctx-size", "1024",
+        "--cache-type-k", "q8_0",
+        "--cache-type-v", "q8_0",
+        "--flash-attn",
+        "--threads", "2",
+        "-no-cnv",
+        "--no-display-prompt",
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        out = result.stdout.strip()
+        for tok in [BOS, HEADER, FOOTER, EOT, "[end of text]"]:
+            out = out.replace(tok, "")
+        out = out.strip()
+        if not out:
+            out = result.stderr.strip() or "(sin respuesta)"
+        return out
+    except subprocess.TimeoutExpired:
+        return "[WARN] Tiempo de espera agotado (120s)"
+    except FileNotFoundError:
+        return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
+
+
+def cmd_intro_pseint():
+    """Tutorial interactivo de PSeInt: genera PDF, abre PSeInt y guia paso a paso."""
+    ejercicios = cargar_ejercicios()
+    if not ejercicios:
+        print("[ERROR] No hay ejercicios configurados en", PSEINT_EXERCISES)
+        return
+
+    total = len(ejercicios)
+
+    # 1. Generar PDF
+    pdf_dir = os.path.join(tempfile.gettempdir(), "yap_pseint")
+    os.makedirs(pdf_dir, exist_ok=True)
+    pdf_path = os.path.join(pdf_dir, "ejercicios_pseint.pdf")
+    _generar_pdf_ejercicios(ejercicios, pdf_path)
+
+    # 2. Abrir PDF
+    try:
+        subprocess.Popen(["xdg-open", pdf_path],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"[OK] Guia de ejercicios generada: {pdf_path}")
+    except FileNotFoundError:
+        print(f"[INFO] PDF disponible en: {pdf_path}")
+
+    # 3. Abrir PSeInt (si esta instalado)
+    print(cmd_open_app("pseint"))
+
+    # 4. Tutorial interactivo
+    print("\n" + "=" * 56)
+    print("  INTRODUCCION A PSEINT — TUTOR INTERACTIVO")
+    print("=" * 56)
+
+    idx = 0
+    while 0 <= idx < total:
+        titulo, desc = ejercicios[idx]
+        print(f"\n--- Ejercicio {idx + 1}/{total}: {titulo} ---")
+        print(desc)
+        print()
+
+        while True:
+            try:
+                resp = input(
+                    "Opciones:\n"
+                    "  [pregunta]  Escribe tu duda sobre este ejercicio\n"
+                    "  ayuda       Muestra una pista\n"
+                    "  siguiente   Pasar al siguiente ejercicio\n"
+                    "  salir       Terminar el tutorial\n"
+                    "> "
+                ).strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\n\nTutorial interrumpido.")
+                return
+
+            if not resp:
+                continue
+
+            lower = resp.lower()
+
+            if lower == "salir":
+                print("\nTutorial finalizado. ¡Sigue practicando!")
+                return
+
+            if lower == "siguiente":
+                idx += 1
+                break
+
+            if lower == "ayuda":
+                print("\n[PISTA]")
+                print(cmd_pseint(
+                    f"El estudiante esta en el ejercicio '{titulo}': {desc}. "
+                    f"Dale una pista breve sin resolverlo completamente."
+                ))
+                continue
+
+            # Es una pregunta del estudiante
+            print("\n[ASISTENCIA]")
+            print(cmd_pseint(
+                f"Ejercicio actual del estudiante: '{titulo}' — {desc}.\n"
+                f"Duda del estudiante: {resp}"
+            ))
+
+    print(f"\n¡Felicidades! Completaste los {total} ejercicios.")
+    print("Para mas ayuda, escribe tu pregunta sobre PSeInt en cualquier momento.")
+
+
 def classify_intent(user_input):
     """Use the LLM to determine user intent and extract parameters."""
     prompt = (
         f"{BOS}{HEADER}system{FOOTER}\n\n"
         "Eres un clasificador de comandos. Responde SOLO con ACCION|PARAMETRO.\n"
         "ACCION: open_app (abrir app), search (buscar en Wikipedia),\n"
-        "webfetch (obtener URL), query (preguntar al AI).\n"
+        "webfetch (obtener URL), pseint (tutor PSeInt/programacion),\n"
+        "introduccion_pseint (tutorial interactivo con ejercicios),\n"
+        "help (mostrar ayuda/opciones), query (preguntar al AI).\n"
         "Ejemplo: 'abre firefox' -> open_app|firefox\n"
         "Ejemplo: 'busca quien es vegetta777 en wikipedia' -> search|vegetta777\n"
         "Ejemplo: 'busca linus torvalds' -> search|linus torvalds\n"
         "Ejemplo: 'fetch https://ejemplo.com' -> webfetch|https://ejemplo.com\n"
+        "Ejemplo: 'como hago un ciclo mientras' -> pseint|como hago un ciclo mientras\n"
+        "Ejemplo: 'explica los arreglos en pseint' -> pseint|explica los arreglos en pseint\n"
+        "Ejemplo: 'quiero aprender pseint' -> introduccion_pseint|inicio\n"
+        "Ejemplo: 'ejercicios pseint' -> introduccion_pseint|inicio\n"
+        "Ejemplo: 'ayuda' -> help|ayuda\n"
+        "Ejemplo: 'como usar yap' -> help|como usar yap\n"
         "Ejemplo: 'que es debian?' -> query|que es debian?\n"
         f"{EOT}"
         f"{HEADER}user{FOOTER}\n\n{user_input}{EOT}"
@@ -217,7 +452,7 @@ def classify_intent(user_input):
             action, param = out.split("|", 1)
             action = action.strip().lower()
             param = param.strip()
-            if action in ("open_app", "search", "webfetch", "query"):
+            if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "help", "query"):
                 return action, param
     except subprocess.TimeoutExpired:
         pass
@@ -234,6 +469,9 @@ def main():
         action, param = interpret(user_input)
         handle_action(action, param, user_input)
     else:
+        print("Yap — Asistente educativo para ChincoLinux")
+        print("Escribe 'ayuda' para ver opciones, o haz tu pregunta.")
+        print()
         while True:
             try:
                 user_input = input("Yap > ").strip()
@@ -295,6 +533,22 @@ def handle_action(action, param, original_input):
                     HISTORY.pop(0)
         else:
             print(content)
+
+    elif action == "pseint":
+        print("Consultando tutor PSeInt...")
+        print(cmd_pseint(param))
+
+    elif action == "introduccion_pseint":
+        cmd_intro_pseint()
+
+    elif action == "help":
+        print("\nYap — Comandos disponibles:")
+        print("  Preguntar:     Cualquier pregunta directa al AI")
+        print("  Abrir app:     'Abre [aplicacion]' (Firefox, Terminal, etc.)")
+        print("  Wikipedia:     'Busca [tema]' (resumen desde Wikipedia)")
+        print("  Tutor PSeInt:  Preguntas sobre programacion con PSeInt")
+        print("  Introduccion:  'Quiero aprender PSeInt' — tutorial interactivo")
+        print()
 
     else:
         print("Consultando LLM...")
