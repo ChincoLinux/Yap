@@ -322,7 +322,7 @@ yap Que es Debian?
 | **Consulta LLM** | `yap Que es Debian?` | Responde directamente con el modelo LLM local. Mas rapido pero sin fuente verificable. Soporta historial en modo interactivo |
 | **Ayuda** | `yap ayuda` / `yap como usar yap` | Muestra lista de comandos disponibles con descripciones |
 | **Tutor PSeInt** | `yap como hago un ciclo mientras` | Consulta al tutor de programacion PSeInt. Responde paso a paso sin historial de conversacion. Contexto reducido (1024 tokens) para minimizar RAM |
-| **Tutorial PSeInt** | `yap quiero aprender pseint` | Inicia tutorial interactivo: genera PDF con ejercicios, abre PSeInt, y guia paso a paso con bucle de asistencia |
+| **Tutorial PSeInt** | `yap quiero aprender pseint` | Inicia tutorial interactivo: genera PDF con ejercicios y guia de resolucion paso a paso (WinAnsiEncoding para tildes), abre PSeInt, y presenta cada paso. El estudiante puede preguntar dudas; la IA recibe el contexto completo de la guia para responder con precision. |
 
 ### 8.4 Clasificacion de intenciones
 
@@ -331,8 +331,19 @@ La funcion **`classify_intent()`** utiliza el propio LLM para determinar la acci
 - **Tolerancia a errores ortograficos**: "Abre" y "abre" y "abrir" se clasifican como `open_app`.
 - **Flexibilidad sintactica**: "busca sobre Linux" y "que es Linux" se distinguen correctamente.
 - **Modo tutor PSeInt**: preguntas sobre programacion/PSeInt se clasifican como `pseint` y responden con guias paso a paso sin historial de conversacion.
-- **Tutorial PSeInt**: 'Quiero aprender PSeInt' inicia el tutorial interactivo con ejercicios, PDF y bucle de asistencia.
+- **Tutorial PSeInt**: 'Quiero aprender PSeInt' inicia el tutorial interactivo. Genera un PDF con la guia de resolucion detallada (cada click, cada linea de codigo). La IA presenta los pasos uno a uno y, si el estudiante pregunta, recibe el contexto completo de la solucion para responder con precision sobre el paso exacto donde esta atascado.
 - **Historial de conversacion**: hasta 6 turnos almacenados en modo interactivo.
+
+### 8.5 Flujo del tutorial PSeInt
+
+Al ejecutar `yap quiero aprender pseint` o seleccionar "Introduccion PSeInt" desde el menu de ayuda, el sistema ejecuta el siguiente flujo:
+
+1. **Carga de ejercicios**: `cargar_ejercicios()` lee `/etc/yap/pseint/ejercicios.conf` (formato `Titulo:Descripcion|GuiaSolucion`).
+2. **Generacion de PDF**: `_generar_pdf_ejercicios()` crea un PDF con el listado de ejercicios y sus guias de resolucion paso a paso, usando fuentes Helvetica con `WinAnsiEncoding` para renderizar correctamente tildes y enies.
+3. **Apertura de PSeInt**: `cmd_open_app("pseint")` lanza el entorno PSeInt desde la whitelist.
+4. **Presentacion paso a paso**: El tutorial muestra cada paso de la guia uno por uno. El estudiante presiona Enter para avanzar.
+5. **Bucle de asistencia**: En cualquier momento, el estudiante puede escribir una pregunta. `cmd_pseint()` recibe el contexto completo: titulo del ejercicio, descripcion, guia de resolucion completa (todos los pasos) y el paso actual. Asi la IA responde con precision sobre exactamente donde esta atascado el estudiante.
+6. **Comandos**: `ayuda` (pista), `siguiente` (siguiente ejercicio), `salir` (terminar).
 
 ### Rama lowmem
 
