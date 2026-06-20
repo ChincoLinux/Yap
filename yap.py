@@ -95,7 +95,7 @@ def _generar_pdf_ejercicios(ejercicios, ruta_salida):
     y = alto_pag - margen
 
     def add_text(size, x, yy, txt):
-        stream_lines.append(f"BT /F{size} Tf {x} {yy} Td ({esc(txt)}) Tj ET")
+        stream_lines.append(f"BT /F{size} {size} Tf {x} {yy} Td ({esc(txt)}) Tj ET")
 
     # Titulo
     add_text(18, margen, y, "Guia de Ejercicios PSeInt")
