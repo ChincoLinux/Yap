@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "ADEV.md"
+  ],
+  "mcp": {
+    "semgrep": {
+      "enabled": true
+    },
+    "postgres": {
+      "enabled": false
+    }
+  }
+}

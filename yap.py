@@ -342,6 +342,15 @@ def cmd_webfetch(url, feed_to_llm=False):
     return f"Contenido obtenido ({len(text)} chars):\n{text[:1000]}..."
 
 
+def _clean_output(result):
+    """Strip BOS/EOT/header tokens from llama-cli stdout. Falls back to stderr."""
+    out = result.stdout.strip()
+    for tok in [BOS, HEADER, FOOTER, EOT, "[end of text]"]:
+        out = out.replace(tok, "")
+    out = out.strip()
+    return out if out else (result.stderr.strip() or "(sin respuesta)")
+
+
 def cmd_query(prompt, context=None, store_history=True):
     parts = [BOS]
     parts.append(f"{HEADER}system{FOOTER}\n\n{SYSTEM_PROMPT}{EOT}")
@@ -374,13 +383,8 @@ def cmd_query(prompt, context=None, store_history=True):
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        out = result.stdout.strip()
-        for tok in [BOS, HEADER, FOOTER, EOT, "[end of text]"]:
-            out = out.replace(tok, "")
-        out = out.strip()
-        if not out:
-            out = result.stderr.strip() or "(sin respuesta)"
-        elif store_history:
+        out = _clean_output(result)
+        if store_history and out not in ("(sin respuesta)", ""):
             HISTORY.append((prompt, out))
             if len(HISTORY) > MAX_HISTORY:
                 HISTORY.pop(0)
@@ -425,13 +429,7 @@ def cmd_pseint(query):
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        out = result.stdout.strip()
-        for tok in [BOS, HEADER, FOOTER, EOT, "[end of text]"]:
-            out = out.replace(tok, "")
-        out = out.strip()
-        if not out:
-            out = result.stderr.strip() or "(sin respuesta)"
-        return out
+        return _clean_output(result)
     except subprocess.TimeoutExpired:
         return "[WARN] Tiempo de espera agotado (120s)"
     except FileNotFoundError:
@@ -588,7 +586,7 @@ def classify_intent(user_input):
     cmd = [
         "llama-cli", "-m", MODEL_PATH,
         "-p", prompt, "-n", "15", "--temp", "0.1",
-        "--ctx-size", "256",
+        "--ctx-size", "512",
         "--cache-type-k", "q8_0",
         "--cache-type-v", "q8_0",
         "--flash-attn",
