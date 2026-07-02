@@ -718,6 +718,8 @@ def handle_action(action, param, original_input):
         print("  Wikipedia:     'Busca [tema]' (resumen desde Wikipedia)")
         print("  Tutor PSeInt:  Preguntas sobre programacion con PSeInt")
         print("  Introduccion:  'Quiero aprender PSeInt' — tutorial interactivo")
+        print("  Curso:         'curso FPY1101' — acceder al plan de estudio")
+        print("  Iniciar EA:    'iniciar EA1' — comenzar experiencia de aprendizaje")
         print()
 
     else:
