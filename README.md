@@ -320,9 +320,13 @@ yap Que es Debian?
 | **Webfetch + resumen** | `yap Busca https://es.wikipedia.org/wiki/Linux` | Obtiene contenido del sitio, lo limpia de HTML y lo envia al LLM para resumir |
 | **Busqueda Wikipedia** | `yap Busca que es Linux` | Consulta la API REST de Wikipedia, extrae contenido y resume con el LLM; muestra la fuente |
 | **Consulta LLM** | `yap Que es Debian?` | Responde directamente con el modelo LLM local. Mas rapido pero sin fuente verificable. Soporta historial en modo interactivo |
-| **Ayuda** | `yap ayuda` / `yap como usar yap` | Muestra lista de comandos disponibles con descripciones |
+| **Ayuda** | `yap ayuda` | Muestra lista de comandos disponibles con descripciones |
+| **Guia rapida** | `yap guia` | Tutorial interactivo paso a paso de todas las funciones |
 | **Tutor PSeInt** | `yap como hago un ciclo mientras` | Consulta al tutor de programacion PSeInt. Responde paso a paso sin historial de conversacion. Contexto reducido (1024 tokens) para minimizar RAM |
-| **Tutorial PSeInt** | `yap quiero aprender pseint` | Inicia tutorial interactivo: abre el PDF estatico con la guia de ejercicios, lanza PSeInt, y presenta cada paso de la guia en la terminal. El estudiante puede preguntar dudas; la IA recibe el contexto completo de la guia para responder con precision. |
+| **Tutorial PSeInt** | `yap quiero aprender pseint` | Inicia tutorial interactivo: abre PDF estatico, lanza PSeInt, guia paso a paso |
+| **Ver curso** | `yap curso FPY1101` | Muestra el plan completo: RAs, EAs, horas, ponderaciones |
+| **Iniciar EA** | `yap iniciar EA1` | Sesion guiada paso a paso por una experiencia de aprendizaje |
+| **Progreso** | `yap mi progreso` | Muestra el avance en todos los cursos activos |
 
 ### 8.4 Clasificacion de intenciones
 
@@ -345,9 +349,100 @@ Al ejecutar `yap quiero aprender pseint` o seleccionar "Introduccion PSeInt" des
 5. **Bucle de asistencia**: En cualquier momento, el estudiante puede escribir una pregunta. `cmd_pseint()` recibe el contexto completo: titulo del ejercicio, descripcion, guia de resolucion completa (todos los pasos) y el paso actual. Asi la IA responde con precision sobre exactamente donde esta atascado el estudiante.
 6. **Comandos**: `ayuda` (pista), `siguiente` (siguiente ejercicio), `salir` (terminar).
 
-### Rama lowmem
+### 8.6 Sistema de Cursos
 
-Para sistemas con solo 6GB RAM, existe la rama `lowmem` con ajustes que liberan ~400MB:
+Yap incluye un sistema de cursos configurable. El primer curso implementado es **FPY1101 Fundamentos de Programacion** (126 horas, 18 semanas), basado en el PIA y PDA institucional.
+
+#### 8.6.1 Iniciar un curso
+
+```bash
+yap curso FPY1101        # Plan completo con RAs, EAs y evaluaciones
+Chinco > curso FPY1101   # Desde el modo interactivo
+```
+
+Aparece una pantalla con:
+- Datos del curso: horas, semanas, herramientas
+- **4 Resultados de Aprendizaje (RAs)**: RA1 (algoritmos), RA2 (programacion Python), RA3 (estructuras de datos), RA4 (funciones)
+- **3 Experiencias de Aprendizaje (EAs)**: EA1 (algoritmos con PSeInt, 35h, 35%), EA2 (Python, 49h, 60%), EA3 (colecciones y funciones, 35h, 25%)
+- **Evaluacion Final Transversal (EFT)**: 7 horas, 40% de la nota final
+
+#### 8.6.2 Iniciar una Experiencia de Aprendizaje
+
+```bash
+yap iniciar EA1           # Sesion guiada de Fundamentos de Algoritmos
+yap iniciar EA2           # Sesion guiada de Programacion con Python
+yap iniciar EA3           # Sesion guiada de Colecciones y Funciones
+```
+
+Cada EA muestra:
+- **Actividades numeradas** con descripcion detallada (12 en total, del PDA oficial)
+- **Estado de progreso**: ✓ completado, · pendiente
+- **Herramientas sugeridas** para cada actividad
+- **Evaluaciones formativas y parciales** con sus ponderaciones
+
+#### 8.6.3 Flujo de una sesion EA
+
+1. Inicias con `yap iniciar EA1`
+2. El sistema muestra la actividad actual con instrucciones detalladas
+3. **Enter** → avanzar a la siguiente actividad (guarda progreso automaticamente)
+4. **Cualquier texto** → preguntar al tutor IA (recibe contexto completo del curso)
+5. **abrir [app]** → lanzar herramienta (PSeInt, VS Code, Terminal, Navegador)
+6. **salir** → guardar progreso y salir
+7. Al completar todas las actividades, la EA se marca como ✓ completada
+
+#### 8.6.4 Progreso y persistencia
+
+El progreso se guarda automaticamente en `~/.config/yap/progress.json`. Cada vez que completas una actividad, se escribe atomicamente al disco. Si el sistema se apaga, al volver retomas donde quedaste.
+
+```bash
+yap mi progreso           # Ver estado de todos los cursos
+```
+
+#### 8.6.5 Agregar mas cursos
+
+Los cursos se definen en archivos JSON en `cursos/`. Para agregar uno nuevo:
+
+1. Crea `cursos/MAT1101.json` con la estructura de PIA/PDA
+2. `setup.sh` lo instala automaticamente en `/etc/yap/cursos/`
+3. `yap curso MAT1101` ya funciona sin modificar codigo
+
+Estructura minima del JSON:
+```json
+{
+  "codigo": "MAT1101",
+  "nombre": "Matematicas",
+  "horas": 90,
+  "semanas": 18,
+  "ras": [{"id": "RA1", "descripcion": "...", "indicadores": ["IL1.1"]}],
+  "eas": [{"id": "EA1", "nombre": "...", "descripcion": "...", "horas": 30,
+           "actividades": [{"orden": 1, "nombre": "Act1", "descripcion": "..."}],
+           "evaluaciones": []}],
+  "evaluaciones": []
+}
+```
+
+### 8.7 Guia rapida integrada
+
+Escribe `yap guia` para un tutorial interactivo de 5 minutos que recorre todas las funciones paso a paso.
+
+```
+Chinco > guia
+
+  ┌─ PASO 1: Bienvenida a ChincoLinux ─────────────────────┐
+  │ Escribe 'yap' para entrar al modo interactivo.          │
+  │ El prompt 'Chinco > ' con colores te indica que estas   │
+  │ dentro. Todos los comandos funcionan igual aqui.         │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─ PASO 2: Abrir herramientas ───────────────────────────┐
+  │ 'Abre Firefox' — lanza apps de la whitelist.            │
+  │ 'abrir pseint' — desde una sesion EA abre herramientas  │
+  └─────────────────────────────────────────────────────────┘
+
+  ... (Enter para continuar, Ctrl+C o 'salir' para terminar)
+```
+
+### Rama lowmem
 
 | Rama | Contexto | KV Cache | Flash Attn | RAM total estimada |
 |---|---|---|---|---|

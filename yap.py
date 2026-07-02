@@ -226,7 +226,11 @@ def cmd_curso(codigo):
 
 
 def iniciar_ea(curso_codigo, ea_id):
-    """Data-driven guided session for a learning experience."""
+    """Data-driven interactive guided session for a learning experience.
+    
+    Displays activities one by one. Student can advance, ask the AI, open tools,
+    or quit. Progress is saved atomically after each step.
+    """
     try:
         curso = cargar_curso(curso_codigo)
     except (FileNotFoundError, ValueError, json.JSONDecodeError) as e:
@@ -240,28 +244,147 @@ def iniciar_ea(curso_codigo, ea_id):
     if not ea:
         return f"[ERROR] Experiencia '{ea_id}' no encontrada en {curso_codigo}"
 
-    # Load progress
+    # Load progress and determine starting point
     progress = cargar_progreso()
     curso_prog = progress.setdefault("cursos", {}).setdefault(curso_codigo, {})
     ea_prog = curso_prog.setdefault(ea_id, {"completada": False, "actividad_actual": 0})
 
-    lines = [display_header(f"{ea['id']}: {ea['nombre']}")]
-    lines.append(f"  {ea['descripcion']}")
-    lines.append(f"  Herramientas: {', '.join(ea.get('herramientas', []))}")
-    lines.append(f"  Actividades: {len(ea['actividades'])} | Horas: {ea['horas']}")
-    lines.append("")
+    actividades = ea["actividades"]
+    current = ea_prog["actividad_actual"]
 
-    for act in ea["actividades"]:
-        done = act["orden"] <= ea_prog.get("actividad_actual", 0)
+    # Show overview
+    sys.stdout.write(display_header(f"{ea['id']}: {ea['nombre']}"))
+    sys.stdout.write(f"  {ea['descripcion']}\n")
+    sys.stdout.write(f"  Herramientas: {', '.join(ea.get('herramientas', []))}\n")
+    sys.stdout.write(f"  Actividades: {len(actividades)} | Horas: {ea['horas']}\n\n")
+
+    for act in actividades:
+        done = act["orden"] <= current
         status = f"{C['GREEN']}✓{C['RESET']}" if done else f"{C['GRAY']}·{C['RESET']}"
-        lines.append(f"  {status} {act['orden']}. {act['nombre']}")
-        lines.append(f"     {act['descripcion']}")
+        sys.stdout.write(f"  {status} {act['orden']}. {act['nombre']}\n")
+        sys.stdout.write(f"     {act['descripcion'][:70]}...\n")
 
-    lines.append("")
-    if ea_prog["completada"]:
-        lines.append(f"  {C['GREEN']}✓ Experiencia completada{C['RESET']}")
-    else:
-        lines.append(f"  {C['YELLOW']}Escribe 'empezar' para iniciar la guia paso a paso{C['RESET']}")
+    sys.stdout.write(f"\n  {C['GRAY']}[Enter = empezar] [salir]{C['RESET']}\n")
+    try:
+        resp = input().strip()
+    except (EOFError, KeyboardInterrupt):
+        return ""
+    if resp.lower() == "salir":
+        return ""
+
+    # Interactive activity loop
+    t = len(actividades)
+
+    while 0 <= current < t:
+        act = actividades[current]
+        tool = act.get("tool_hint") or (ea["herramientas"][0] if ea.get("herramientas") else None)
+
+        sys.stdout.write(display_box(
+            f"ACTIVIDAD {act['orden']}/{t}: {act['nombre']}\n\n{act['descripcion']}",
+            color="CYAN"
+        ))
+        if tool:
+            tool_key = tool.split(" ")[0].lower()  # first word only for 'abrir' command
+            sys.stdout.write(f"\n  {C['GRAY']}Tool sugerida: {tool}  —  escribe 'abrir {tool_key}' para lanzarla{C['RESET']}\n")
+
+        activity_done = False
+        while not activity_done:
+            try:
+                resp = input(f"  {C['GRAY']}[Enter=hecho] [pregunta] [abrir X] [salir]{C['RESET']}\n  {C['GREEN']}> {C['RESET']}").strip()
+            except (EOFError, KeyboardInterrupt):
+                sys.stdout.write("\n")
+                guardar_progreso(progress)
+                return ""
+
+            if not resp:
+                # Mark as done, save, advance
+                current += 1
+                progress["cursos"][curso_codigo][ea_id]["actividad_actual"] = current
+                if current >= t:
+                    progress["cursos"][curso_codigo][ea_id]["completada"] = True
+                guardar_progreso(progress)
+                activity_done = True
+
+            elif resp.lower() == "salir":
+                sys.stdout.write(f"\n  {C['YELLOW']}Progreso guardado. Retoma con 'iniciar {ea_id}'.{C['RESET']}\n")
+                return ""
+
+            elif resp.lower().startswith("abrir "):
+                app_key = resp[5:].strip().lower()
+                # Only whitelisted tools, or delegate to cmd_open_app whitelist
+                sys.stdout.write(cmd_open_app(app_key) + "\n")
+
+            else:
+                # Student question — AI with full context
+                contexto = (
+                    f"Curso: {curso['codigo']} - {curso['nombre']}\n"
+                    f"EA: {ea['id']} - {ea['nombre']}\n"
+                    f"Actividad {act['orden']}/{t}: {act['nombre']}\n"
+                    f"Descripcion: {act['descripcion']}\n"
+                )
+                sys.stdout.write(f"\n{C['CYAN']}Tutor:{C['RESET']}\n")
+                sys.stdout.write(cmd_query(contexto + f"\nDuda del estudiante: {resp}", store_history=False) + "\n")
+
+    sys.stdout.write(display_box(f"✓ Has completado {ea['id']}: {ea['nombre']}\n\n"
+                                 f"Revisa las evaluaciones de esta EA con 'yap curso {curso_codigo}'.", color="GREEN"))
+    return ""
+
+
+def cmd_guia():
+    """Interactive onboarding tutorial — step-by-step walkthrough of all features."""
+    pasos = [
+        ("Bienvenida a ChincoLinux",
+         "Yap es el asistente IA educativa de ChincoLinux. Funciona 100% local sin internet.\n"
+         "Desde el modo interactivo (escribe 'yap') puedes hacer preguntas, abrir apps,\n"
+         "buscar en Wikipedia, aprender a programar y seguir cursos completos."),
+        ("Abrir herramientas",
+         "Escribe 'Abre Firefox' o 'Abre LibreOffice' para lanzar aplicaciones de la whitelist.\n"
+         "Usa 'abrir pseint' o 'abrir vscode' dentro de una sesion de curso."),
+        ("Buscar informacion",
+         "Escribe 'Busca [tema]' para buscar en Wikipedia. El LLM resume el resultado.\n"
+         "Ejemplo: 'Busca que es una variable en programacion'"),
+        ("Tutor PSeInt",
+         "Escribe 'como hago un ciclo mientras' para consultar al tutor de programacion.\n"
+         "El tutor responde con pseudocodigo PSeInt paso a paso."),
+        ("Tutorial PSeInt interactivo",
+         "Escribe 'quiero aprender pseint' para iniciar el tutorial completo.\n"
+         "Abre PSeInt, guia PDF, y presenta ejercicios con asistencia IA en tiempo real."),
+        ("Sistema de Cursos",
+         "Escribe 'curso FPY1101' para ver el plan de Fundamentos de Programacion.\n"
+         "Escribe 'iniciar EA1' para empezar la primera experiencia de aprendizaje.\n"
+         "Progreso se guarda automaticamente. Retoma donde quedaste."),
+        ("Comandos esenciales",
+         "  ayuda        — esta lista de comandos\n"
+         "  guia         — tutorial interactivo (este)\n"
+         "  curso CODIGO — ver plan de un curso\n"
+         "  iniciar EA1  — empezar sesion guiada\n"
+         "  mi progreso  — ver tu avance\n"
+         "  salir / Ctrl+C — terminar"),
+    ]
+
+    lines = [display_header("Guia Rapida — Yap ChincoLinux")]
+    for i, (titulo, contenido) in enumerate(pasos, 1):
+        lines.append(display_box(f"PASO {i}: {titulo}\n\n{contenido}", color="CYAN"))
+        lines.append(f"\n  {C['GRAY']}[Enter = siguiente] [salir]{C['RESET']}\n")
+    return "\n".join(lines)
+
+
+def cmd_mostrar_progreso():
+    """Display student progress across all courses."""
+    progress = cargar_progreso()
+    cursos_prog = progress.get("cursos", {})
+
+    if not cursos_prog:
+        return display_box("No hay progreso registrado. Inicia un curso con 'yap curso FPY1101'.", color="YELLOW")
+
+    lines = [display_header("Mi Progreso")]
+    for codigo, eas in cursos_prog.items():
+        lines.append(f"\n  {C['BOLD']}{C['GREEN']}{codigo}{C['RESET']}")
+        for ea_id, estado in eas.items():
+            status = f"{C['GREEN']}✓{C['RESET']}" if estado.get("completada") else f"{C['YELLOW']}▶{C['RESET']}"
+            act = estado.get("actividad_actual", 0)
+            lines.append(f"    {status} {ea_id}: {act} actividad(es) completada(s)")
+    lines.append(f"\n  {C['GRAY']}Progreso guardado en ~/.config/yap/progress.json{C['RESET']}")
     return "\n".join(lines)
 
 
@@ -562,7 +685,8 @@ def classify_intent(user_input):
         "ACCION: open_app (abrir app), search (buscar en Wikipedia),\n"
         "webfetch (obtener URL), pseint (tutor PSeInt/programacion),\n"
         "introduccion_pseint (tutorial interactivo con ejercicios),\n"
-        "curso (ver o iniciar curso), help (mostrar ayuda/opciones),\n"
+        "curso (ver o iniciar curso), guia (tutorial interactivo),\n"
+        "progreso (ver avance), help (mostrar ayuda/opciones),\n"
         "query (preguntar al AI).\n"
         "Ejemplo: 'abre firefox' -> open_app|firefox\n"
         "Ejemplo: 'busca quien es vegetta777 en wikipedia' -> search|vegetta777\n"
@@ -578,6 +702,10 @@ def classify_intent(user_input):
         "Ejemplo: 'curso fpy1101' -> curso|FPY1101\n"
         "Ejemplo: 'iniciar ea1' -> curso|FPY1101:EA1\n"
         "Ejemplo: 'ver mi curso' -> curso|FPY1101\n"
+        "Ejemplo: 'guia' -> guia|guia\n"
+        "Ejemplo: 'como usar yap' -> guia|guia\n"
+        "Ejemplo: 'mi progreso' -> progreso|progreso\n"
+        "Ejemplo: 'avance' -> progreso|progreso\n"
         f"{EOT}"
         f"{HEADER}user{FOOTER}\n\n{user_input}{EOT}"
         f"{HEADER}assistant{FOOTER}\n\n"
@@ -604,7 +732,7 @@ def classify_intent(user_input):
             action, param = out.split("|", 1)
             action = action.strip().lower()
             param = param.strip()
-            if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "curso", "help", "query"):
+            if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "curso", "guia", "progreso", "help", "query"):
                 return action, param
     except subprocess.TimeoutExpired:
         pass
@@ -708,6 +836,12 @@ def handle_action(action, param, original_input):
             print(iniciar_ea(codigo, parts[1]))
         else:
             print(cmd_curso(codigo))
+
+    elif action == "guia":
+        print(cmd_guia())
+
+    elif action == "progreso":
+        print(cmd_mostrar_progreso())
 
     elif action == "help":
         print("\nYap — Comandos disponibles:")

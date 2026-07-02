@@ -731,11 +731,17 @@ class TestCursoCommand:
         assert "ERROR" in result
 
     @patch("shutil.get_terminal_size", return_value=Mock(columns=80, lines=24))
-    def test_iniciar_ea_muestra_actividades(self, mock_size):
-        result = yap.iniciar_ea("TEST101", "EA1")
-        assert "EA1" in result
-        assert "Act1" in result
-        assert "Test EA" in result
+    @patch("builtins.input", side_effect=["salir"] + ["salir"] * 10)  # overview prompt, then activities
+    def test_iniciar_ea_muestra_actividades(self, mock_input, mock_size):
+        import io
+        captured = io.StringIO()
+        with patch("sys.stdout.write", captured.write):
+            result = yap.iniciar_ea("TEST101", "EA1")
+        output = captured.getvalue()
+        assert "EA1" in output
+        assert "Act1" in output
+        assert "Test EA" in output
+        assert result == ""  # returns empty on clean exit
 
     @patch("shutil.get_terminal_size", return_value=Mock(columns=80, lines=24))
     def test_iniciar_ea_inexistente(self, mock_size):
