@@ -6,6 +6,8 @@ import sys
 import os
 import shutil
 import textwrap
+import json
+import glob
 import urllib.request
 import urllib.parse
 import re
@@ -16,6 +18,7 @@ WHITELIST_WEB = f"{CONFIG_DIR}/whitelist/web.conf"
 PSEINT_DIR = f"{CONFIG_DIR}/pseint"
 PSEINT_EXERCISES = f"{PSEINT_DIR}/ejercicios.conf"
 PSEINT_GUIA_PDF = f"{PSEINT_DIR}/guia_ejercicios.pdf"
+CURSOS_DIR = f"{CONFIG_DIR}/cursos"
 
 # ── ChincoLinux TUI ──────────────────────────────────────────
 # ponytail: ANSI escape codes, no Rich/Textual dependency
@@ -118,6 +121,58 @@ def cargar_ejercicios():
                         sol = sub[1].strip() if len(sub) > 1 else ""
                         ejercicios.append((titulo, desc, sol))
     return ejercicios
+
+
+def cargar_curso(codigo):
+    """Load a course by code from CURSOS_DIR. Validates required keys."""
+    path = os.path.join(CURSOS_DIR, f"{codigo}.json")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Curso '{codigo}' no encontrado en {CURSOS_DIR}")
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    _validar_curso(codigo, data)
+    return data
+
+
+REQUIRED_CURSO_KEYS = {"codigo", "nombre", "horas", "semanas", "ras", "eas", "evaluaciones"}
+REQUIRED_RA_KEYS = {"id", "descripcion", "indicadores"}
+REQUIRED_EA_KEYS = {"id", "nombre", "descripcion", "horas", "actividades", "evaluaciones"}
+
+def _validar_curso(codigo, data):
+    """Validate course structure has required keys. Raises ValueError if not."""
+    # ponytail: plain dict key checks, no JSON Schema dependency
+    missing = REQUIRED_CURSO_KEYS - data.keys()
+    if missing:
+        raise ValueError(
+            f"Curso '{codigo}': faltan claves requeridas: {', '.join(sorted(missing))}")
+    for i, ra in enumerate(data.get("ras", [])):
+        m = REQUIRED_RA_KEYS - ra.keys()
+        if m:
+            raise ValueError(
+                f"Curso '{codigo}', RA#{i}: faltan {', '.join(sorted(m))}")
+    for i, ea in enumerate(data.get("eas", [])):
+        m = REQUIRED_EA_KEYS - ea.keys()
+        if m:
+            raise ValueError(
+                f"Curso '{codigo}', EA#{i}: faltan {', '.join(sorted(m))}")
+
+
+def listar_cursos():
+    """Discover available courses by scanning CURSOS_DIR for *.json files."""
+    if not os.path.isdir(CURSOS_DIR):
+        return []
+    pattern = os.path.join(CURSOS_DIR, "*.json")
+    files = sorted(glob.glob(pattern))
+    cursos = []
+    for f in files:
+        name = os.path.basename(f).replace(".json", "")
+        try:
+            data = cargar_curso(name)
+            cursos.append((name, data.get("nombre", name)))
+        except (json.JSONDecodeError, ValueError, FileNotFoundError):
+            pass  # skip malformed files
+    return cursos
+
 
 
 def notify(title, msg, urgency="normal"):

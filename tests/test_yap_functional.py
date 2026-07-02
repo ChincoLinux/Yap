@@ -15,6 +15,7 @@ Ejecucion: python3 -m pytest tests/test_yap_functional.py -v
 import pytest
 import sys
 import os
+import json
 import tempfile
 from unittest.mock import Mock, patch, MagicMock, ANY
 
@@ -562,6 +563,86 @@ class TestChincoTUI:
         # ponytail: on 5-col terminal (1 char internal width), chars split
         # per line. Main assertion: no crash.
         assert "┌" in result
+
+
+# ============================================================
+# 10. SISTEMA DE CURSOS
+# ============================================================
+
+class TestCourseSystem:
+    """Tests for course loading and listing."""
+
+    VALID_COURSE = {
+        "codigo": "TEST101",
+        "nombre": "Curso de Prueba",
+        "horas": 50,
+        "semanas": 10,
+        "ras": [{"id": "RA1", "descripcion": "Test RA", "indicadores": ["IL1.1"]}],
+        "eas": [{"id": "EA1", "nombre": "Test EA", "descripcion": "Desc",
+                 "horas": 20,
+                 "actividades": [{"nombre": "Act1"}],
+                 "evaluaciones": []}],
+        "evaluaciones": [{"nombre": "Eval Final", "tipo": "transversal", "ponderacion": 40}],
+    }
+
+    def setup_method(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.patcher = patch("yap.CURSOS_DIR", self.tmpdir)
+        self.patcher.start()
+
+    def teardown_method(self):
+        self.patcher.stop()
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_cargar_curso_valido(self):
+        path = os.path.join(self.tmpdir, "TEST101.json")
+        with open(path, "w") as f:
+            json.dump(self.VALID_COURSE, f)
+        result = yap.cargar_curso("TEST101")
+        assert result["codigo"] == "TEST101"
+        assert len(result["ras"]) == 1
+
+    def test_cargar_curso_inexistente(self):
+        with pytest.raises(FileNotFoundError):
+            yap.cargar_curso("NOEXISTE")
+
+    def test_cargar_curso_corrupto(self):
+        path = os.path.join(self.tmpdir, "BAD.json")
+        with open(path, "w") as f:
+            f.write("not json")
+        with pytest.raises(json.JSONDecodeError):
+            yap.cargar_curso("BAD")
+
+    def test_cargar_curso_faltan_claves(self):
+        path = os.path.join(self.tmpdir, "INCOMPLETO.json")
+        with open(path, "w") as f:
+            json.dump({"codigo": "X"}, f)
+        with pytest.raises(ValueError, match="faltan"):
+            yap.cargar_curso("INCOMPLETO")
+
+    def test_listar_cursos_descubre_archivos(self):
+        for code, name in [("A101", "Alpha"), ("B202", "Beta")]:
+            data = dict(self.VALID_COURSE, codigo=code, nombre=name)
+            path = os.path.join(self.tmpdir, f"{code}.json")
+            with open(path, "w") as f:
+                json.dump(data, f)
+        cursos = yap.listar_cursos()
+        assert len(cursos) == 2
+        codes = [c[0] for c in cursos]
+        assert "A101" in codes
+        assert "B202" in codes
+
+    def test_listar_cursos_salta_malformados(self):
+        path = os.path.join(self.tmpdir, "BUENO.json")
+        with open(path, "w") as f:
+            json.dump(self.VALID_COURSE, f)
+        path2 = os.path.join(self.tmpdir, "MALO.json")
+        with open(path2, "w") as f:
+            f.write("{corrupt")
+        cursos = yap.listar_cursos()
+        assert len(cursos) == 1
+        assert cursos[0][0] == "BUENO"
 
 
 if __name__ == "__main__":
