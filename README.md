@@ -420,7 +420,7 @@ Este proyecto se distribuye bajo **licencia MIT**. El modelo **Llama 3.2** esta 
 ```
 tests/
 ├── test_yap_security.py     # 25 pruebas — seguridad y configuracion
-├── test_yap_functional.py   # 32 pruebas — funcionalidad del agente
+├── test_yap_functional.py   # 56 pruebas — funcionalidad + TUI + cursos
 ├── run_tests.py             # Ejecutor integrado con reporte
 ├── report/                  # Reportes generados con --report
 └── README.md                # Documentacion de las pruebas
@@ -430,7 +430,7 @@ Las pruebas usan **`pytest`** con mocking de `subprocess`, `urllib` y `shutil` p
 
 ```bash
 pip install pytest             # Solo requiere pytest
-python3 -m pytest tests/ -v    # 57 pruebas
+python3 -m pytest tests/ -v    # 81 pruebas
 python3 tests/run_tests.py --report   # Reporte TXT con mapeo de requisitos
 ```
 
@@ -440,7 +440,7 @@ Cada `push` y `pull request` a `master`, `lowmem` o `ultra-lowmem` ejecuta autom
 
 | Job | Que hace |
 |---|---|
-| **unit-tests** | 57 pruebas en Python 3.12 + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
+| **unit-tests** | 81 pruebas en Python 3.12 + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
 | **branch-check** | Verifica que `MODEL_PATH` en cada rama apunte al modelo correcto |
 | **results** | Resumen del pipeline |
 
@@ -528,9 +528,9 @@ python3 tests/run_tests.py --vm --report
 | Categoria | Pruebas | Resultado |
 |---|---|---|
 | Seguridad (whitelist, injection, dominios) | 25/25 | ✓ 100% |
-| Funcional (apps, webfetch, LLM, historial, PSeInt, PDF, tutorial) | 32/32 | ✓ 100% |
+| Funcional (apps, webfetch, LLM, historial, PSeInt, tutorial, TUI, cursos, progreso) | 56/56 | ✓ 100% |
 | Infraestructura (symlink, binarios, whitelist en disco) | 5/5 | ✓ 100% (en VM) |
-| **Total** | **62/62** | **✓ 100%** |
+| **Total** | **81/81** | **✓ 100%** |
 
 ---
 
