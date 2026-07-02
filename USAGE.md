@@ -15,7 +15,7 @@ Ver requisitos detallados en [README.md](README.md#61-requisitos-del-sistema).
 
 | Comando | Descripcion |
 |---------|-------------|
-| `yap` | Modo interactivo (REPL). Escribe preguntas o comandos. |
+| `yap` | Modo interactivo TUI (curses, 0 dependencias). Escribe preguntas o comandos. |
 | `yap guia` | Tutorial interactivo de 7 pasos. |
 | `yap ayuda` | Lista de comandos disponibles. |
 | `yap progreso` | Progreso de cursos. |
@@ -28,7 +28,9 @@ Ver requisitos detallados en [README.md](README.md#61-requisitos-del-sistema).
 
 ## Modo interactivo
 
-Ejecuta `yap` sin argumentos para entrar al REPL. Desde ahi puedes:
+Ejecuta `yap` sin argumentos para abrir la TUI interactiva (curses, 0 dependencias externas). Pantalla dividida con output arriba e input abajo, prompt "Chinco > ", historial con flechas.
+
+Si la terminal no soporta curses, cae en REPL clasico:
 
 ```
 Chinco > abre firefox         → Abre Firefox

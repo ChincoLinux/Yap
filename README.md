@@ -298,11 +298,22 @@ Para una referencia rapida de todos los comandos, ejemplos y solucion de problem
 
 ## 8. Uso
 
-### 8.1 Modo interactivo
+### 8.1 Modo interactivo (TUI)
 
 ```bash
 yap
-Yap > Abre LibreOffice
+```
+
+Abre la TUI interactiva nativa (curses, 0 dependencias externas): pantalla dividida con
+salida arriba, entrada abajo, prompt **Chinco >** , historial con flechas,
+scroll con RePág/AvPág y Tab para completar comandos.
+
+Si la terminal no soporta curses, cae en el REPL clasico de texto.
+
+```text
+Chinco > Abre LibreOffice
+Chinco > busca variable en programacion
+Chinco > salir
 ```
 
 ### 8.2 Modo comando directo
