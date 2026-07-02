@@ -11,6 +11,7 @@ import glob
 import urllib.request
 import urllib.parse
 import re
+import atexit
 
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
@@ -690,6 +691,7 @@ def cmd_intro_pseint():
 
     print(f"\n✓ ¡Felicidades! Completaste los {total} ejercicios.")
     print("Para mas ayuda, escribe tu pregunta sobre PSeInt en cualquier momento.")
+    return ""
 
 
 def classify_intent(user_input):
@@ -783,252 +785,31 @@ def interpret(user_input):
     return classify_intent(user_input)
 
 
-def tui_run():
-    """TUI curses: split-view, Chinco prompt, historial, scroll."""
-    import curses
-    import curses.textpad
-    import io
-    import traceback
-
-    def _run(stdscr):
-        curses.use_default_colors()
-        curses.curs_set(1)
-        # colores: 1=cyan, 2=green, 3=yellow, 4=red, 5=gray
-        curses.init_pair(1, curses.COLOR_CYAN, -1)
-        curses.init_pair(2, curses.COLOR_GREEN, -1)
-        curses.init_pair(3, curses.COLOR_YELLOW, -1)
-        curses.init_pair(4, curses.COLOR_RED, -1)
-        curses.init_pair(5, curses.COLOR_BLACK, -1)
-
-        buf = []       # lineas de output
-        scroll = 0
-        inp = ""
-        pos = 0        # cursor dentro de inp
-        hist = []      # historial de comandos
-        hist_idx = -1
-
-        def add_out(text, color=0):
-            for line in text.rstrip("\n").split("\n"):
-                buf.append((line, color))
-
-        def _show_chinco_info(add_out):
-            add_out("")
-            for line in CHINCO_ART:
-                add_out(line, 4)
-            add_out("")
-            add_out(f"  {'═' * 50}", 5)
-            add_out("  Comandos disponibles:", 0)
-            for line in [
-                "  guia            Tutorial interactivo",
-                "  curso N         Plan de estudio (ej: curso FPY1101)",
-                "  ayuda           Lista completa de comandos",
-                "  abre [app]      Abrir aplicacion permitida",
-                "  busca [tema]    Buscar en Wikipedia",
-                "  progreso        Ver progreso del curso activo",
-                "  iniciar EA[N]   Iniciar sesion de ejercicios",
-                "  salir           Terminar sesion",
-            ]:
-                add_out(line, 3)
-            add_out("")
-            add_out(f"  {'─' * 50}", 5)
-            add_out("  Atajos de teclado:", 0)
-            for line in [
-                "  Tab/Ctrl+I  Esta ayuda (prompt vacio) / autocompletar",
-                "  F1          Esta ayuda",
-                "  ?           Esta ayuda (prompt vacio)",
-                "  ↑ ↓         Navegar historial de comandos",
-                "  RePág AvPág Desplazar salida",
-                "  Ctrl+C/D    Salir",
-            ]:
-                add_out(line, 0)
-            add_out("")
-
-        def refresh_view():
-            curses.curs_set(0)  # ocultar cursor durante redibujo
-            h, w = stdscr.getmaxyx()
-            ih = h - 2  # output height: 2 lines for separator + prompt
-
-            # ── Separador ──
-            stdscr.move(ih, 0)
-            stdscr.clrtoeol()
-            stdscr.hline(ih, 0, curses.ACS_HLINE, w, curses.color_pair(5))
-
-            # ── Input line ──
-            prompt = " Chinco > "
-            stdscr.attrset(curses.color_pair(2))
-            stdscr.addstr(ih + 1, 0, prompt)
-            stdscr.attrset(0)
-            max_inp = w - len(prompt) - 2
-            visible = inp if len(inp) <= max_inp else inp[-(max_inp):]
-            stdscr.addstr(ih + 1, len(prompt), visible + " ")
-
-            # ── Output area ──
-            max_scroll = max(0, len(buf) - ih)
-            scroll_clamped = min(scroll, max_scroll)
-            for y in range(ih):
-                idx = scroll_clamped + y
-                if idx < len(buf):
-                    text, color = buf[idx]
-                    text = text[:w]
-                    if color:
-                        style = curses.color_pair(color)
-                        if text.startswith("> "):
-                            style |= curses.A_BOLD
-                        stdscr.addstr(y, 0, text, style)
-                        stdscr.clrtoeol()
-                    else:
-                        stdscr.addstr(y, 0, text[:w])
-                        stdscr.clrtoeol()
-                else:
-                    stdscr.addstr(y, 0, " ")
-                    stdscr.clrtoeol()
-            # mostrar cursor en la posicion del prompt
-            stdscr.move(ih + 1, min(len(prompt) + pos, w - 2))
-            curses.curs_set(1)
-            return scroll_clamped
-
-        # ── Pantalla de bienvenida ──
-        add_out("")
-        for line in CHINCO_ART:
-            add_out(line, 1)
-        add_out("")
-        add_out(f"  {'═' * 50}", 5)
-        add_out("  Escribe comandos o preguntas:", 0)
-        for line in [
-            "    guia            Tutorial interactivo",
-            "    ayuda           Lista completa de comandos",
-            "    curso N         Plan de estudio",
-            "    abre [app]      Abrir aplicacion",
-            "    busca [tema]    Buscar en Wikipedia",
-            "    salir           Terminar sesion",
-        ]:
-            add_out(line, 3)
-        add_out("")
-        add_out("", 0)
-
-        while True:
-            h, w = stdscr.getmaxyx()
-            if h < 10 or w < 30:
-                stdscr.addstr(0, 0, "Terminal demasiado pequena (min 30x10)")
-                stdscr.refresh()
-                curses.napms(2000)
-                return
-
-            scroll = refresh_view()
-            stdscr.refresh()
-
-            key = stdscr.getch()
-
-            # ── Manejo de teclas ──
-            if key in (curses.KEY_ENTER, 10, 13):
-                # Enter → ejecutar comando
-                cmd = inp.strip()
-                inp = ""
-                pos = 0
-                hist_idx = -1
-                if cmd:
-                    hist.append(cmd)
-                    add_out(f"> {cmd}", 2)
-                    if cmd.lower() in ("salir", "exit", "quit"):
-                        break
-
-                    # Capturar output de handle_action
-                    old_out, old_err = sys.stdout, sys.stderr
-                    cap = io.StringIO()
-                    sys.stdout = cap
-                    sys.stderr = cap
-                    try:
-                        action, param = interpret(cmd)
-                        handle_action(action, param, cmd)
-                    except Exception:
-                        traceback.print_exc(file=cap)
-                    sys.stdout = old_out
-                    sys.stderr = old_err
-                    text = cap.getvalue()
-                    if text:
-                        add_out(re.sub(r"\033\[[0-9;]*m", "", text).rstrip())
-                    add_out("")
-
-            elif key == curses.KEY_BACKSPACE or key == 127:
-                if pos > 0:
-                    inp = inp[:pos-1] + inp[pos:]
-                    pos -= 1
-            elif key == curses.KEY_DC:  # Delete
-                if pos < len(inp):
-                    inp = inp[:pos] + inp[pos+1:]
-            elif key == curses.KEY_LEFT:
-                pos = max(0, pos - 1)
-            elif key == curses.KEY_RIGHT:
-                pos = min(len(inp), pos + 1)
-            elif key == curses.KEY_HOME:
-                pos = 0
-            elif key == curses.KEY_END:
-                pos = len(inp)
-            elif key == curses.KEY_UP:
-                if hist:
-                    if hist_idx == -1:
-                        hist_idx = len(hist) - 1
-                    else:
-                        hist_idx = max(0, hist_idx - 1)
-                    inp = hist[hist_idx]
-                    pos = len(inp)
-            elif key == curses.KEY_DOWN:
-                if hist_idx >= 0:
-                    hist_idx += 1
-                    if hist_idx >= len(hist):
-                        hist_idx = -1
-                        inp = ""
-                    else:
-                        inp = hist[hist_idx]
-                    pos = len(inp)
-            elif key == curses.KEY_PPAGE:  # Page Up
-                scroll = max(0, scroll - (h - 2))
-            elif key == curses.KEY_NPAGE:  # Page Down
-                scroll = min(len(buf), scroll + (h - 2))
-            elif key == curses.KEY_RESIZE:
-                pass  # ponytail: proximo ciclo recoge nuevo tamano via getmaxyx()
-            elif key == curses.KEY_F1:
-                _show_chinco_info(add_out)
-            elif key == 9:  # Tab/Ctrl+I — info si prompt vacio, completar si no
-                # ponytail: first-match completion, no cycle/fuzzy
-                conocidos = ["curso ", "iniciar ea", "guia", "ayuda", "progreso",
-                             "abre ", "busca ", "salir"]
-                if inp:
-                    matches = [c for c in conocidos if c.startswith(inp)]
-                    if matches:
-                        inp = matches[0]
-                        pos = len(inp)
-                else:
-                    _show_chinco_info(add_out)
-            elif key in (3, 4):  # Ctrl+C, Ctrl+D
-                break
-            elif key == ord("?") and not inp:
-                _show_chinco_info(add_out)
-            elif 32 <= key <= 126:
-                inp = inp[:pos] + chr(key) + inp[pos:]
-                pos += 1
-
-    curses.wrapper(_run)
-
-
 def main():
-    # `yap` sin argumentos → TUI curses (Chinco)
+    # ── Modo interactivo REPL (yap sin argumentos) ──
     if len(sys.argv) == 1:
-        if sys.stdout.isatty() and sys.stdin.isatty():
+        # readline: historial con flechas ↑↓
+        try:
+            import readline
+            histfile = os.path.expanduser("~/.config/yap/history.txt")
             try:
-                tui_run()
-                return  # curses TUI salio limpiamente
-            except Exception:
-                pass  # fallback si curses falla
+                readline.read_history_file(histfile)
+            except (FileNotFoundError, OSError):
+                pass
+            readline.set_history_length(200)
+            atexit.register(lambda: readline.write_history_file(histfile))
+        except ImportError:
+            pass  # windows — sin historial persistente, funciona igual
+
         sys.stdout.write(render_art(CHINCO_ART, C['CYAN']) + "\n")
-        sys.stdout.write(display_menu("Comandos disponibles", [
-            "Preguntar al AI (escribe tu consulta)",
+        sys.stdout.write(f"  {C['GRAY']}{'─' * 50}{C['RESET']}\n")
+        sys.stdout.write(display_menu("Comandos", [
+            "Cualquier consulta directa al AI",
             "Abre [app] — abrir aplicacion permitida",
             "Busca [tema] — buscar en Wikipedia",
             "Tutor PSeInt — preguntas de programacion",
-            "Quiero aprender PSeInt — tutorial interactivo",
-            "Curso: 'curso FPY1101' — acceder al plan de estudio",
-            "Ayuda — mostrar esta lista",
+            "Curso FPY1101 — plan de estudio",
+            "Ayuda — lista de comandos",
             "Salir — Ctrl+C o 'salir'",
         ]))
         print()
@@ -1036,14 +817,15 @@ def main():
             try:
                 user_input = input(f"{C['GREEN']}Chinco{C['RESET']} > ").strip()
             except (EOFError, KeyboardInterrupt):
-                print()
+                print(f"\n{C['YELLOW']}Chao{C['RESET']}")
                 sys.exit(0)
             if not user_input:
                 continue
             action, param = interpret(user_input)
             handle_action(action, param, user_input)
+            print()  # blank line between turns
 
-    # `yap <comando>` → keyword router + LLM classifier
+    # ── Modo comando directo (yap <comando>) ──
     else:
         user_input = " ".join(sys.argv[1:])
         action, param = interpret(user_input)
