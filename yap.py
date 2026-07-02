@@ -740,6 +740,31 @@ def classify_intent(user_input):
     return "query", user_input.strip()
 
 def interpret(user_input):
+    """Keyword router before LLM classifier for known commands."""
+    stripped = user_input.strip().lower()
+
+    # Exact/prefix keyword routing (bypasses LLM for speed & reliability)
+    if stripped in ("guia", "guia rapida", "tutorial", "como usar"):
+        return "guia", "guia"
+    if stripped in ("progreso", "avance", "mi progreso", "mi avance", "avance curso"):
+        return "progreso", "progreso"
+    if stripped in ("ayuda", "help", "--help", "-h", "comandos", "ayuda yap"):
+        return "help", "ayuda"
+    if stripped in ("salir", "exit", "quit", "q"):
+        sys.exit(0)
+
+    # curso FPY1101 → ("curso", "FPY1101")
+    # iniciar EA1   → ("curso", "FPY1101:EA1")  — needs context, hands to LLM
+    if stripped.startswith("curso "):
+        param = user_input[6:].strip().upper()
+        if param:
+            return "curso", param
+
+    if stripped.startswith("iniciar "):
+        param = user_input[8:].strip().upper()
+        if param and param.startswith("EA"):
+            return "curso", f"FPY1101:{param}"  # ponytail: assumes active course
+
     return classify_intent(user_input)
 
 
