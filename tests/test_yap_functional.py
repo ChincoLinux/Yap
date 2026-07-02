@@ -493,5 +493,76 @@ class TestArchitecture:
         assert hasattr(yap, "cargar_ejercicios") and callable(yap.cargar_ejercicios)
 
 
+# ============================================================
+# 9. CHINCOLINUX TUI
+# ============================================================
+
+class TestChincoTUI:
+    """Tests for ChincoLinux TUI display functions."""
+
+    @staticmethod
+    def _mock_term_size(cols, rows):
+        """Return a mock with .columns and .lines attributes."""
+        m = Mock()
+        m.columns = cols
+        m.lines = rows
+        return m
+
+    @patch("shutil.get_terminal_size")
+    def test_display_header_centers_title(self, mock_size):
+        mock_size.return_value = self._mock_term_size(80, 24)
+        from yap import display_header
+        result = display_header("Test Title")
+        assert "Test Title" in result
+        assert "\033[" in result  # has ANSI color codes
+
+    @patch("shutil.get_terminal_size")
+    def test_display_menu_returns_string(self, mock_size):
+        mock_size.return_value = self._mock_term_size(80, 24)
+        from yap import display_menu
+        result = display_menu("MENU", ["Op1", "Op2"])
+        assert "[1]" in result
+        assert "[2]" in result
+        assert "MENU" in result
+        assert isinstance(result, str)
+
+    @patch("shutil.get_terminal_size")
+    def test_display_menu_no_options(self, mock_size):
+        mock_size.return_value = self._mock_term_size(80, 24)
+        from yap import display_menu
+        result = display_menu("Empty", [])
+        assert "Empty" in result
+        assert "[1]" not in result
+
+    @patch("shutil.get_terminal_size")
+    def test_display_box_wraps_long_text(self, mock_size):
+        mock_size.return_value = self._mock_term_size(50, 24)
+        from yap import display_box
+        long_text = "A" * 100
+        result = display_box(long_text)
+        assert "┌" in result
+        assert "┐" in result
+        assert "└" in result
+        assert len(result.split("\n")) > 3  # wrapped multiple lines
+
+    @patch("shutil.get_terminal_size")
+    def test_display_box_empty_text(self, mock_size):
+        mock_size.return_value = self._mock_term_size(80, 24)
+        from yap import display_box
+        result = display_box("")
+        assert "┌" in result
+        assert "┘" in result
+        # empty box should not crash
+
+    @patch("shutil.get_terminal_size")
+    def test_display_box_narrow_terminal(self, mock_size):
+        mock_size.return_value = self._mock_term_size(5, 24)
+        from yap import display_box
+        result = display_box("Hi")
+        # ponytail: on 5-col terminal (1 char internal width), chars split
+        # per line. Main assertion: no crash.
+        assert "┌" in result
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

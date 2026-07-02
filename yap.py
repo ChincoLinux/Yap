@@ -5,6 +5,7 @@ import subprocess
 import sys
 import os
 import shutil
+import textwrap
 import urllib.request
 import urllib.parse
 import re
@@ -15,6 +16,47 @@ WHITELIST_WEB = f"{CONFIG_DIR}/whitelist/web.conf"
 PSEINT_DIR = f"{CONFIG_DIR}/pseint"
 PSEINT_EXERCISES = f"{PSEINT_DIR}/ejercicios.conf"
 PSEINT_GUIA_PDF = f"{PSEINT_DIR}/guia_ejercicios.pdf"
+
+# ── ChincoLinux TUI ──────────────────────────────────────────
+# ponytail: ANSI escape codes, no Rich/Textual dependency
+C = {
+    "RESET": "\033[0m",
+    "BOLD": "\033[1m",
+    "GREEN": "\033[92m",
+    "CYAN": "\033[96m",
+    "YELLOW": "\033[93m",
+    "RED": "\033[91m",
+    "BLUE": "\033[94m",
+    "GRAY": "\033[90m",
+}
+
+def display_header(title):
+    """Return a colored header string with the given title."""
+    w = shutil.get_terminal_size().columns
+    line = f"{C['CYAN']}{'═' * w}{C['RESET']}"
+    padded = f"  {C['BOLD']}{C['GREEN']}{title}{C['RESET']}  "
+    return f"\n{line}\n{padded}\n{line}\n"
+
+def display_menu(title, options):
+    """Return a numbered menu string. Returns string, does not print."""
+    lines = [f"\n{C['BOLD']}{C['YELLOW']}  {title}{C['RESET']}"]
+    lines.append(f"  {C['GRAY']}{'─' * 50}{C['RESET']}")
+    for i, opt in enumerate(options, 1):
+        lines.append(f"  {C['GREEN']}[{i}]{C['RESET']} {opt}")
+    return "\n".join(lines) + "\n"
+
+def display_box(text, color="CYAN"):
+    """Return text wrapped in a colored box. Returns string."""
+    w = max(3, min(shutil.get_terminal_size().columns - 2, 78))  # ponytail: min 3 avoids textwrap crash on narrow/non-TTY
+    c = C.get(color.upper(), C["CYAN"])
+    lines = []
+    lines.append(f"{c}┌{'─' * w}┐{C['RESET']}")
+    for para in text.split("\n"):
+        for wrapped in textwrap.wrap(para, width=w - 2) or [""]:
+            lines.append(f"{c}│{C['RESET']} {wrapped:<{w - 2}} {c}│{C['RESET']}")
+    lines.append(f"{c}└{'─' * w}┘{C['RESET']}")
+    return "\n".join(lines)
+
 MODEL_PATH = "/opt/yap/models/Llama-3.2-1B-Instruct-Q4_K_M.gguf"
 MAX_CTX = 2048
 MAX_HISTORY = 6
@@ -432,12 +474,20 @@ def main():
         action, param = interpret(user_input)
         handle_action(action, param, user_input)
     else:
-        print("Yap — Asistente educativo para ChincoLinux")
-        print("Escribe 'ayuda' para ver opciones, o haz tu pregunta.")
+        sys.stdout.write(display_header("Yap — ChincoLinux"))
+        sys.stdout.write(display_menu("Comandos disponibles", [
+            "Preguntar al AI (escribe tu consulta)",
+            "Abre [app] — abrir aplicacion permitida",
+            "Busca [tema] — buscar en Wikipedia",
+            "Tutor PSeInt — preguntas de programacion",
+            "Quiero aprender PSeInt — tutorial interactivo",
+            "Ayuda — mostrar esta lista",
+            "Salir — Ctrl+C o 'salir'",
+        ]))
         print()
         while True:
             try:
-                user_input = input("Yap > ").strip()
+                user_input = input(f"{C['GREEN']}Chinco{C['RESET']} > ").strip()
             except (EOFError, KeyboardInterrupt):
                 print()
                 sys.exit(0)
