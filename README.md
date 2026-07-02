@@ -294,6 +294,8 @@ Re-ejecutar `setup.sh` despues de cambiar de rama es **seguro**: detecta lo que 
 
 ---
 
+Para una referencia rapida de todos los comandos, ejemplos y solucion de problemas, ver [USAGE.md](USAGE.md).
+
 ## 8. Uso
 
 ### 8.1 Modo interactivo
@@ -504,7 +506,7 @@ git checkout lowmem
 
 ## 11. Licencia
 
-Este proyecto se distribuye bajo **licencia MIT**. El modelo **Llama 3.2** esta sujeto a los terminos de la **Licencia Llama 3.2 de Meta**.
+Este proyecto se distribuye bajo **licencia MIT** (ver [LICENSE](LICENSE)). El modelo **Llama 3.2** esta sujeto a los terminos de la **Licencia Llama 3.2 de Meta**.
 
 ---
 
