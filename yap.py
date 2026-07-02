@@ -24,12 +24,12 @@ CURSOS_DIR = f"{CONFIG_DIR}/cursos"
 # ponytail: ANSI escape codes, no Rich/Textual dependency
 
 CHINCO_ART = [
-    "  ██████╗ ██╗  ██╗ ██╗ ██╗   ██╗ ██████╗ ██████╗ ",
-    "  ██╔════╝ ██║  ██║ ██║ ██║   ██║ ██╔════╝ ██╔══██╗",
-    "  ██║      ███████║ ██║ ██║   ██║ ██║      ██████╔╝",
-    "  ██║      ██╔══██║ ██║ ██║   ██║ ██║      ██╔══██╗",
-    "  ╚██████╗ ██║  ██║ ██║ ╚██████╔╝ ╚██████╗ ██║  ██║",
-    "   ╚═════╝ ╚═╝  ╚═╝ ╚═╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═╝",
+    "  ██████╗██╗  ██╗██╗███╗   ██╗ ██████╗██████╗ ",
+    " ██╔════╝██║  ██║██║████╗  ██║██╔════╝██╔══██╗",
+    " ██║     ███████║██║██╔██╗ ██║██║     ██║  ██║",
+    " ██║     ██╔══██║██║██║╚██╗██║██║     ██║  ██║",
+    " ╚██████╗██║  ██║██║██║ ╚████║╚██████╗╚██████╔╝",
+    "  ╚═════╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═════╝ ",
 ]
 
 def render_art(art_lines, color=""):
@@ -890,9 +890,25 @@ def tui_run():
             add_out(line, 1)
         add_out("")
         add_out(f"  {'═' * 50}", 5)
-        add_out("  Escribe comandos o preguntas. Prueba:", 0)
-        add_out("    guia   — tutorial interactivo     curso N — plan de estudio", 0)
-        add_out("    ayuda  — lista de comandos        salir   — terminar sesion", 0)
+        add_out("  Escribe comandos o preguntas:", 0)
+        for line in [
+            "    guia            Tutorial interactivo",
+            "    ayuda           Lista completa de comandos",
+            "    curso N         Plan de estudio",
+            "    abre [app]      Abrir aplicacion",
+            "    busca [tema]    Buscar en Wikipedia",
+            "    salir           Terminar sesion",
+        ]:
+            add_out(line, 3)
+        add_out("")
+        add_out(f"  {'─' * 50}", 5)
+        add_out("  Atajos de teclado:", 0)
+        for line in [
+            "    Tab/Ctrl+I  Ayuda / autocompletar    ↑ ↓      Historial",
+            "    F1 / ?      Ayuda rapida             ReP/AvP  Scroll",
+            "    Ctrl+C/D    Salir                    Inicio/Fin Cursor",
+        ]:
+            add_out(line, 0)
         add_out("", 0)
 
         while True:
