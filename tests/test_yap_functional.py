@@ -645,5 +645,103 @@ class TestCourseSystem:
         assert cursos[0][0] == "BUENO"
 
 
+# ============================================================
+# 11. PROGRESO DEL ESTUDIANTE
+# ============================================================
+
+class TestProgreso:
+    """Tests for progress save/load."""
+
+    def setup_method(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.patcher = patch("yap.PROGRESS_FILE", os.path.join(self.tmpdir, "progress.json"))
+        self.patcher.start()
+
+    def teardown_method(self):
+        self.patcher.stop()
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_cargar_progreso_sin_archivo(self):
+        result = yap.cargar_progreso()
+        assert result == {"cursos": {}}
+
+    def test_guardar_y_cargar_progreso(self):
+        data = {"cursos": {"FPY1101": {"EA1": {"completada": True}}}}
+        yap.guardar_progreso(data)
+        loaded = yap.cargar_progreso()
+        assert loaded["cursos"]["FPY1101"]["EA1"]["completada"] is True
+
+    def test_guardar_progreso_atomico(self):
+        data = {"cursos": {}}
+        yap.guardar_progreso(data)
+        tmp_path = os.path.join(self.tmpdir, "progress.json.tmp")
+        assert not os.path.exists(tmp_path)
+        assert os.path.exists(os.path.join(self.tmpdir, "progress.json"))
+
+
+# ============================================================
+# 12. COMANDOS DE CURSO
+# ============================================================
+
+class TestCursoCommand:
+    """Tests for cmd_curso and iniciar_ea."""
+
+    VALID_COURSE = {
+        "codigo": "TEST101",
+        "nombre": "Curso de Prueba",
+        "horas": 50, "semanas": 10,
+        "ambiente": "Lab",
+        "herramientas": ["Python"],
+        "ras": [{"id": "RA1", "descripcion": "Test RA", "indicadores": ["IL1.1"]}],
+        "eas": [{"id": "EA1", "nombre": "Test EA", "descripcion": "Desc EA",
+                 "horas": 20, "ponderacion": 100,
+                 "actividades": [{"orden": 1, "nombre": "Act1", "descripcion": "Hacer algo"}],
+                 "evaluaciones": []}],
+        "evaluaciones": [],
+    }
+
+    def setup_method(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.cpat = patch("yap.CURSOS_DIR", self.tmpdir)
+        self.ppat = patch("yap.PROGRESS_FILE", os.path.join(self.tmpdir, "progress.json"))
+        self.cpat.start()
+        self.ppat.start()
+        path = os.path.join(self.tmpdir, "TEST101.json")
+        with open(path, "w") as f:
+            json.dump(self.VALID_COURSE, f)
+
+    def teardown_method(self):
+        self.cpat.stop()
+        self.ppat.stop()
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    @patch("shutil.get_terminal_size", return_value=Mock(columns=80, lines=24))
+    def test_cmd_curso_muestra_informacion(self, mock_size):
+        result = yap.cmd_curso("TEST101")
+        assert "TEST101" in result
+        assert "Curso de Prueba" in result
+        assert "RA1" in result
+        assert "EA1" in result
+
+    @patch("shutil.get_terminal_size", return_value=Mock(columns=80, lines=24))
+    def test_cmd_curso_inexistente(self, mock_size):
+        result = yap.cmd_curso("NOEXISTE")
+        assert "ERROR" in result
+
+    @patch("shutil.get_terminal_size", return_value=Mock(columns=80, lines=24))
+    def test_iniciar_ea_muestra_actividades(self, mock_size):
+        result = yap.iniciar_ea("TEST101", "EA1")
+        assert "EA1" in result
+        assert "Act1" in result
+        assert "Test EA" in result
+
+    @patch("shutil.get_terminal_size", return_value=Mock(columns=80, lines=24))
+    def test_iniciar_ea_inexistente(self, mock_size):
+        result = yap.iniciar_ea("TEST101", "EA99")
+        assert "ERROR" in result
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

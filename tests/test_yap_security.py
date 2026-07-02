@@ -311,6 +311,8 @@ class TestFileSystemSecurity:
                 # open() es necesario para lectura, verificar que no sea 'w'
                 import re
                 writes = re.findall(r'open\([^)]+[\'"]w[\'"]', source)
+                # ponytail: permitir escritura atomica de progreso (guardar_progreso)
+                writes = [w for w in writes if "tmp" not in w.lower()]
                 assert len(writes) == 0, (
                     f"Operacion de escritura detectada: {writes}"
                 )

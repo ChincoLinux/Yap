@@ -174,6 +174,96 @@ def listar_cursos():
     return cursos
 
 
+# ── Progreso del estudiante ─────────────────────────────────
+PROGRESS_FILE = os.path.expanduser("~/.config/yap/progress.json")
+
+def cargar_progreso():
+    """Load student progress. Returns default empty dict if no file."""
+    path = PROGRESS_FILE
+    if not os.path.exists(path):
+        return {"cursos": {}}
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {"cursos": {}}
+
+def guardar_progreso(progress):
+    """Save student progress atomically to avoid corruption."""
+    path = PROGRESS_FILE
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(progress, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)  # atomic on Linux
+
+
+# ── Comandos de curso ───────────────────────────────────────
+
+def cmd_curso(codigo):
+    """Enter a course: show overview with RAs and EAs."""
+    try:
+        curso = cargar_curso(codigo)
+    except FileNotFoundError as e:
+        return f"[ERROR] {e}"
+    except (ValueError, json.JSONDecodeError) as e:
+        return f"[ERROR] Curso corrupto: {e}"
+
+    lines = [display_header(f"{curso['codigo']} — {curso['nombre']}")]
+    lines.append(f"  Horas: {curso['horas']} | Semanas: {curso['semanas']}")
+    lines.append(f"  Ambiente: {curso.get('ambiente', 'N/A')}")
+    lines.append(f"  Herramientas: {', '.join(curso.get('herramientas', []))}")
+    lines.append("")
+    lines.append(display_menu("Resultados de Aprendizaje", [
+        f"{ra['id']}: {ra['descripcion'][:70]}..." for ra in curso.get("ras", [])
+    ]))
+    lines.append(display_menu("Experiencias de Aprendizaje", [
+        f"{ea['id']}: {ea['nombre']} ({ea['horas']}h, {ea.get('ponderacion', '?')}%)"
+        for ea in curso.get("eas", [])
+    ]))
+    lines.append(f"\n  {C['GRAY']}iniciar EA1 | iniciar EA2 | iniciar EA3 | salir{C['RESET']}")
+    return "\n".join(lines)
+
+
+def iniciar_ea(curso_codigo, ea_id):
+    """Data-driven guided session for a learning experience."""
+    try:
+        curso = cargar_curso(curso_codigo)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as e:
+        return f"[ERROR] {e}"
+
+    ea = None
+    for e in curso.get("eas", []):
+        if e["id"].lower() == ea_id.lower():
+            ea = e
+            break
+    if not ea:
+        return f"[ERROR] Experiencia '{ea_id}' no encontrada en {curso_codigo}"
+
+    # Load progress
+    progress = cargar_progreso()
+    curso_prog = progress.setdefault("cursos", {}).setdefault(curso_codigo, {})
+    ea_prog = curso_prog.setdefault(ea_id, {"completada": False, "actividad_actual": 0})
+
+    lines = [display_header(f"{ea['id']}: {ea['nombre']}")]
+    lines.append(f"  {ea['descripcion']}")
+    lines.append(f"  Herramientas: {', '.join(ea.get('herramientas', []))}")
+    lines.append(f"  Actividades: {len(ea['actividades'])} | Horas: {ea['horas']}")
+    lines.append("")
+
+    for act in ea["actividades"]:
+        done = act["orden"] <= ea_prog.get("actividad_actual", 0)
+        status = f"{C['GREEN']}✓{C['RESET']}" if done else f"{C['GRAY']}·{C['RESET']}"
+        lines.append(f"  {status} {act['orden']}. {act['nombre']}")
+        lines.append(f"     {act['descripcion']}")
+
+    lines.append("")
+    if ea_prog["completada"]:
+        lines.append(f"  {C['GREEN']}✓ Experiencia completada{C['RESET']}")
+    else:
+        lines.append(f"  {C['YELLOW']}Escribe 'empezar' para iniciar la guia paso a paso{C['RESET']}")
+    return "\n".join(lines)
+
 
 def notify(title, msg, urgency="normal"):
     try:
@@ -474,7 +564,8 @@ def classify_intent(user_input):
         "ACCION: open_app (abrir app), search (buscar en Wikipedia),\n"
         "webfetch (obtener URL), pseint (tutor PSeInt/programacion),\n"
         "introduccion_pseint (tutorial interactivo con ejercicios),\n"
-        "help (mostrar ayuda/opciones), query (preguntar al AI).\n"
+        "curso (ver o iniciar curso), help (mostrar ayuda/opciones),\n"
+        "query (preguntar al AI).\n"
         "Ejemplo: 'abre firefox' -> open_app|firefox\n"
         "Ejemplo: 'busca quien es vegetta777 en wikipedia' -> search|vegetta777\n"
         "Ejemplo: 'busca linus torvalds' -> search|linus torvalds\n"
@@ -486,6 +577,9 @@ def classify_intent(user_input):
         "Ejemplo: 'ayuda' -> help|ayuda\n"
         "Ejemplo: 'como usar yap' -> help|como usar yap\n"
         "Ejemplo: 'que es debian?' -> query|que es debian?\n"
+        "Ejemplo: 'curso fpy1101' -> curso|FPY1101\n"
+        "Ejemplo: 'iniciar ea1' -> curso|FPY1101:EA1\n"
+        "Ejemplo: 'ver mi curso' -> curso|FPY1101\n"
         f"{EOT}"
         f"{HEADER}user{FOOTER}\n\n{user_input}{EOT}"
         f"{HEADER}assistant{FOOTER}\n\n"
@@ -512,7 +606,7 @@ def classify_intent(user_input):
             action, param = out.split("|", 1)
             action = action.strip().lower()
             param = param.strip()
-            if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "help", "query"):
+            if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "curso", "help", "query"):
                 return action, param
     except subprocess.TimeoutExpired:
         pass
@@ -608,6 +702,14 @@ def handle_action(action, param, original_input):
 
     elif action == "introduccion_pseint":
         cmd_intro_pseint()
+
+    elif action == "curso":
+        parts = [p.strip() for p in param.split(":", 1)]
+        codigo = parts[0].upper()
+        if len(parts) > 1 and parts[1].lower().startswith("ea"):
+            print(iniciar_ea(codigo, parts[1]))
+        else:
+            print(cmd_curso(codigo))
 
     elif action == "help":
         print("\nYap — Comandos disponibles:")
