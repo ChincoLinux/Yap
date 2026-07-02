@@ -845,13 +845,12 @@ def tui_run():
 
         def refresh_view():
             h, w = stdscr.getmaxyx()
-            ih = h - 3  # input area height = 3 (separator + prompt + input)
+            ih = h - 2  # output height: 2 lines for separator + prompt
 
             # ── Separador ──
             stdscr.move(ih, 0)
             stdscr.clrtoeol()
-            for x in range(w):
-                stdscr.addch(ih, x, curses.ACS_HLINE, curses.color_pair(5))
+            stdscr.hline(ih, 0, curses.ACS_HLINE, w, curses.color_pair(5))
 
             # ── Input line ──
             prompt = " Chinco > "
@@ -877,11 +876,14 @@ def tui_run():
                         if text.startswith("> "):
                             style |= curses.A_BOLD
                         stdscr.addstr(y, 0, text, style)
+                        stdscr.clrtoeol()
                     else:
                         # ANSI ya fue limpiado en add_out
                         stdscr.addstr(y, 0, text[:w])
+                        stdscr.clrtoeol()
                 else:
                     stdscr.addstr(y, 0, " ")
+                    stdscr.clrtoeol()
             return scroll_clamped
 
         # ── Pantalla de bienvenida ──
