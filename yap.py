@@ -22,6 +22,21 @@ CURSOS_DIR = f"{CONFIG_DIR}/cursos"
 
 # ── ChincoLinux TUI ──────────────────────────────────────────
 # ponytail: ANSI escape codes, no Rich/Textual dependency
+
+CHINCO_ART = [
+    "  ██████╗ ██╗  ██╗ ██╗ ██╗   ██╗ ██████╗ ██████╗ ",
+    "  ██╔════╝ ██║  ██║ ██║ ██║   ██║ ██╔════╝ ██╔══██╗",
+    "  ██║      ███████║ ██║ ██║   ██║ ██║      ██████╔╝",
+    "  ██║      ██╔══██║ ██║ ██║   ██║ ██║      ██╔══██╗",
+    "  ╚██████╗ ██║  ██║ ██║ ╚██████╔╝ ╚██████╗ ██║  ██║",
+    "   ╚═════╝ ╚═╝  ╚═╝ ╚═╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═╝",
+]
+
+def render_art(art_lines, color=""):
+    """Join art lines with optional ANSI color wrapping."""
+    s = "\n".join(art_lines)
+    return f"{color}{s}{C['RESET']}" if color else s
+
 C = {
     "RESET": "\033[0m",
     "BOLD": "\033[1m",
@@ -362,7 +377,7 @@ def cmd_guia():
          "  salir / Ctrl+C — terminar"),
     ]
 
-    lines = [display_header("Guia Rapida — Yap ChincoLinux")]
+    lines = [display_header("Guia Rapida")]
     for i, (titulo, contenido) in enumerate(pasos, 1):
         lines.append(display_box(f"PASO {i}: {titulo}\n\n{contenido}", color="CYAN"))
         lines.append(f"\n  {C['GRAY']}[Enter = siguiente] [salir]{C['RESET']}\n")
@@ -798,11 +813,13 @@ def tui_run():
 
         def _show_chinco_info(add_out):
             add_out("")
-            header = re.sub(r"\033\[[0-9;]*m", "", display_header("ChincoLinux — Ayuda rapida"))
-            add_out(header, 4)
+            for line in CHINCO_ART:
+                add_out(line, 4)
             add_out("")
+            add_out(f"  {'═' * 50}", 5)
+            add_out("  Comandos disponibles:", 0)
             for line in [
-                "  guia            Tutorial interactivo de Yap",
+                "  guia            Tutorial interactivo",
                 "  curso N         Plan de estudio (ej: curso FPY1101)",
                 "  ayuda           Lista completa de comandos",
                 "  abre [app]      Abrir aplicacion permitida",
@@ -813,7 +830,7 @@ def tui_run():
             ]:
                 add_out(line, 3)
             add_out("")
-            add_out("  ─────────────────────────────", 5)
+            add_out(f"  {'─' * 50}", 5)
             add_out("  Atajos de teclado:", 0)
             for line in [
                 "  Tab/Ctrl+I  Esta ayuda (prompt vacio) / autocompletar",
@@ -869,13 +886,13 @@ def tui_run():
 
         # ── Pantalla de bienvenida ──
         add_out("")
-        add_out(re.sub(r"\033\[[0-9;]*m", "", display_header("Chinco — Terminal de Yap")), 1)
+        for line in CHINCO_ART:
+            add_out(line, 1)
         add_out("")
+        add_out(f"  {'═' * 50}", 5)
         add_out("  Escribe comandos o preguntas. Prueba:", 0)
-        add_out("    guia        — tutorial interactivo", 0)
-        add_out("    curso FPY1101 — plan de estudio", 0)
-        add_out("    ayuda       — lista de comandos", 0)
-        add_out("    salir       — terminar sesion", 0)
+        add_out("    guia   — tutorial interactivo     curso N — plan de estudio", 0)
+        add_out("    ayuda  — lista de comandos        salir   — terminar sesion", 0)
         add_out("", 0)
 
         while True:
@@ -992,13 +1009,14 @@ def main():
                 return  # curses TUI salio limpiamente
             except Exception:
                 pass  # fallback si curses falla
-        sys.stdout.write(display_header("Yap — ChincoLinux"))
+        sys.stdout.write(render_art(CHINCO_ART, C['CYAN']) + "\n")
         sys.stdout.write(display_menu("Comandos disponibles", [
             "Preguntar al AI (escribe tu consulta)",
             "Abre [app] — abrir aplicacion permitida",
             "Busca [tema] — buscar en Wikipedia",
             "Tutor PSeInt — preguntas de programacion",
             "Quiero aprender PSeInt — tutorial interactivo",
+            "Curso: 'curso FPY1101' — acceder al plan de estudio",
             "Ayuda — mostrar esta lista",
             "Salir — Ctrl+C o 'salir'",
         ]))
@@ -1093,7 +1111,7 @@ def handle_action(action, param, original_input):
         print(cmd_mostrar_progreso())
 
     elif action == "help":
-        print("\nYap — Comandos disponibles:")
+        print()
         print("  Preguntar:     Cualquier pregunta directa al AI")
         print("  Abrir app:     'Abre [aplicacion]' (Firefox, Terminal, etc.)")
         print("  Wikipedia:     'Busca [tema]' (resumen desde Wikipedia)")
