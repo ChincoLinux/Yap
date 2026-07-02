@@ -298,11 +298,21 @@ Para una referencia rapida de todos los comandos, ejemplos y solucion de problem
 
 ## 8. Uso
 
-### 8.1 Modo interactivo
+### 8.1 Modo interactivo (TUI)
 
 ```bash
 yap
-Yap > Abre LibreOffice
+```
+
+Abre el agente **opencode** con el perfil Yap: interfaz TUI completa con entrada en la parte inferior,
+resaltado de sintaxis, historial de conversacion y soporte para comandos directos.
+
+Si opencode no esta instalado, cae en el REPL clasico de texto.
+
+```text
+Chinco > Abre LibreOffice
+Chinco > busca variable en programacion
+Chinco > salir
 ```
 
 ### 8.2 Modo comando directo

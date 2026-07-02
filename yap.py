@@ -768,12 +768,199 @@ def interpret(user_input):
     return classify_intent(user_input)
 
 
+def tui_run():
+    """TUI curses: split-view, Chinco prompt, historial, scroll."""
+    import curses
+    import curses.textpad
+    import io
+    import traceback
+
+    def _run(stdscr):
+        curses.use_default_colors()
+        curses.curs_set(1)
+        # colores: 1=cyan, 2=green, 3=yellow, 4=red, 5=gray
+        curses.init_pair(1, curses.COLOR_CYAN, -1)
+        curses.init_pair(2, curses.COLOR_GREEN, -1)
+        curses.init_pair(3, curses.COLOR_YELLOW, -1)
+        curses.init_pair(4, curses.COLOR_RED, -1)
+        curses.init_pair(5, curses.COLOR_BLACK, -1)
+
+        buf = []       # lineas de output
+        scroll = 0
+        inp = ""
+        pos = 0        # cursor dentro de inp
+        hist = []      # historial de comandos
+        hist_idx = -1
+
+        def add_out(text, color=0):
+            for line in text.rstrip("\n").split("\n"):
+                buf.append((line, color))
+
+        def refresh_view():
+            h, w = stdscr.getmaxyx()
+            ih = h - 3  # input area height = 3 (separator + prompt + input)
+
+            # ── Separador ──
+            stdscr.move(ih, 0)
+            stdscr.clrtoeol()
+            for x in range(w):
+                stdscr.addch(ih, x, curses.ACS_HLINE, curses.color_pair(5))
+
+            # ── Input line ──
+            prompt = " Chinco > "
+            stdscr.attrset(curses.color_pair(2))
+            stdscr.addstr(ih + 1, 0, prompt)
+            stdscr.attrset(0)
+            max_inp = w - len(prompt) - 2
+            # truncar si es necesario para que quepa
+            visible = inp if len(inp) <= max_inp else inp[-(max_inp):]
+            stdscr.addstr(ih + 1, len(prompt), visible + " ")
+            stdscr.move(ih + 1, min(len(prompt) + pos, w - 2))
+
+            # ── Output area ──
+            max_scroll = max(0, len(buf) - ih)
+            scroll_clamped = min(scroll, max_scroll)
+            for y in range(ih):
+                idx = scroll_clamped + y
+                if idx < len(buf):
+                    text, color = buf[idx]
+                    text = text[:w]
+                    if color:
+                        style = curses.color_pair(color)
+                        if text.startswith("> "):
+                            style |= curses.A_BOLD
+                        stdscr.addstr(y, 0, text, style)
+                    else:
+                        # detect ANSI codes and strip
+                        clean = text
+                        if "\033[" in clean:
+                            import re as _re
+                            clean = _re.sub(r"\033\[[0-9;]*m", "", clean)
+                        stdscr.addstr(y, 0, clean[:w])
+                else:
+                    stdscr.addstr(y, 0, " ")
+            return scroll_clamped
+
+        # ── Pantalla de bienvenida ──
+        add_out("")
+        add_out(display_header("Chinco — Terminal de Yap"), 1)
+        add_out("")
+        add_out("  Escribe comandos o preguntas. Prueba:", 0)
+        add_out("    guia        — tutorial interactivo", 0)
+        add_out("    curso FPY1101 — plan de estudio", 0)
+        add_out("    ayuda       — lista de comandos", 0)
+        add_out("    salir       — terminar sesion", 0)
+        add_out("", 0)
+
+        while True:
+            h, w = stdscr.getmaxyx()
+            if h < 10 or w < 30:
+                stdscr.addstr(0, 0, "Terminal demasiado pequena (min 30x10)")
+                stdscr.refresh()
+                curses.napms(2000)
+                return
+
+            scroll = refresh_view()
+            stdscr.refresh()
+
+            key = stdscr.getch()
+
+            # ── Manejo de teclas ──
+            if key in (curses.KEY_ENTER, 10, 13):
+                # Enter → ejecutar comando
+                cmd = inp.strip()
+                inp = ""
+                pos = 0
+                hist_idx = -1
+                if cmd:
+                    hist.append(cmd)
+                    add_out(f"> {cmd}", 2)
+                    if cmd.lower() in ("salir", "exit", "quit"):
+                        break
+
+                    # Capturar output de handle_action
+                    old_out, old_err = sys.stdout, sys.stderr
+                    cap = io.StringIO()
+                    sys.stdout = cap
+                    try:
+                        action, param = interpret(cmd)
+                        handle_action(action, param, cmd)
+                    except Exception:
+                        traceback.print_exc(file=sys.stderr)
+                    sys.stdout = old_out
+                    sys.stderr = old_err
+                    text = cap.getvalue()
+                    if text:
+                        add_out(text.rstrip())
+                    add_out("")
+
+            elif key == curses.KEY_BACKSPACE or key == 127:
+                if pos > 0:
+                    inp = inp[:pos-1] + inp[pos:]
+                    pos -= 1
+            elif key == curses.KEY_DC:  # Delete
+                if pos < len(inp):
+                    inp = inp[:pos] + inp[pos+1:]
+            elif key == curses.KEY_LEFT:
+                pos = max(0, pos - 1)
+            elif key == curses.KEY_RIGHT:
+                pos = min(len(inp), pos + 1)
+            elif key == curses.KEY_HOME:
+                pos = 0
+            elif key == curses.KEY_END:
+                pos = len(inp)
+            elif key == curses.KEY_UP:
+                if hist:
+                    if hist_idx == -1:
+                        hist_idx = len(hist) - 1
+                    else:
+                        hist_idx = max(0, hist_idx - 1)
+                    inp = hist[hist_idx]
+                    pos = len(inp)
+            elif key == curses.KEY_DOWN:
+                if hist_idx >= 0:
+                    hist_idx += 1
+                    if hist_idx >= len(hist):
+                        hist_idx = -1
+                        inp = ""
+                    else:
+                        inp = hist[hist_idx]
+                    pos = len(inp)
+            elif key == curses.KEY_PPAGE:  # Page Up
+                scroll = max(0, scroll - (h - 3))
+            elif key == curses.KEY_NPAGE:  # Page Down
+                scroll = min(len(buf), scroll + (h - 3))
+            elif key == curses.KEY_RESIZE:
+                pass  # redibuja en el ciclo
+            elif key == 9:  # Tab — completar comandos conocidos
+                conocidos = ["curso ", "iniciar ea", "guia", "ayuda", "progreso",
+                             "abre ", "busca ", "salir"]
+                if inp:
+                    matches = [c for c in conocidos if c.startswith(inp)]
+                    if matches:
+                        inp = matches[0]
+                        pos = len(inp)
+                else:
+                    inp = conocidos[0]
+                    pos = len(inp)
+            elif key in (3, 4):  # Ctrl+C, Ctrl+D
+                break
+            elif 32 <= key <= 126:
+                inp = inp[:pos] + chr(key) + inp[pos:]
+                pos += 1
+
+    curses.wrapper(_run)
+
+
 def main():
-    if len(sys.argv) > 1:
-        user_input = " ".join(sys.argv[1:])
-        action, param = interpret(user_input)
-        handle_action(action, param, user_input)
-    else:
+    # `yap` sin argumentos → TUI curses (Chinco)
+    if len(sys.argv) == 1:
+        if sys.stdout.isatty() and sys.stdin.isatty():
+            try:
+                tui_run()
+                return  # curses TUI salio limpiamente
+            except Exception:
+                pass  # fallback si curses falla
         sys.stdout.write(display_header("Yap — ChincoLinux"))
         sys.stdout.write(display_menu("Comandos disponibles", [
             "Preguntar al AI (escribe tu consulta)",
@@ -795,6 +982,12 @@ def main():
                 continue
             action, param = interpret(user_input)
             handle_action(action, param, user_input)
+
+    # `yap <comando>` → keyword router + LLM classifier
+    else:
+        user_input = " ".join(sys.argv[1:])
+        action, param = interpret(user_input)
+        handle_action(action, param, user_input)
 
 
 def handle_action(action, param, original_input):

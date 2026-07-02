@@ -15,7 +15,7 @@ Ver requisitos detallados en [README.md](README.md#61-requisitos-del-sistema).
 
 | Comando | Descripcion |
 |---------|-------------|
-| `yap` | Modo interactivo (REPL). Escribe preguntas o comandos. |
+| `yap` | Modo interactivo TUI (via opencode). Escribe preguntas o comandos. |
 | `yap guia` | Tutorial interactivo de 7 pasos. |
 | `yap ayuda` | Lista de comandos disponibles. |
 | `yap progreso` | Progreso de cursos. |
@@ -28,7 +28,9 @@ Ver requisitos detallados en [README.md](README.md#61-requisitos-del-sistema).
 
 ## Modo interactivo
 
-Ejecuta `yap` sin argumentos para entrar al REPL. Desde ahi puedes:
+Ejecuta `yap` sin argumentos para abrir el agente Yap en opencode (TUI interactiva con entrada inferior, resaltado de sintaxis e historial).
+
+Si opencode no esta instalado, cae en REPL clasico:
 
 ```
 Chinco > abre firefox         → Abre Firefox
