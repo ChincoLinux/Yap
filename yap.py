@@ -844,6 +844,7 @@ def tui_run():
             add_out("")
 
         def refresh_view():
+            curses.curs_set(0)  # ocultar cursor durante redibujo
             h, w = stdscr.getmaxyx()
             ih = h - 2  # output height: 2 lines for separator + prompt
 
@@ -858,10 +859,8 @@ def tui_run():
             stdscr.addstr(ih + 1, 0, prompt)
             stdscr.attrset(0)
             max_inp = w - len(prompt) - 2
-            # truncar si es necesario para que quepa
             visible = inp if len(inp) <= max_inp else inp[-(max_inp):]
             stdscr.addstr(ih + 1, len(prompt), visible + " ")
-            stdscr.move(ih + 1, min(len(prompt) + pos, w - 2))
 
             # ── Output area ──
             max_scroll = max(0, len(buf) - ih)
@@ -878,12 +877,14 @@ def tui_run():
                         stdscr.addstr(y, 0, text, style)
                         stdscr.clrtoeol()
                     else:
-                        # ANSI ya fue limpiado en add_out
                         stdscr.addstr(y, 0, text[:w])
                         stdscr.clrtoeol()
                 else:
                     stdscr.addstr(y, 0, " ")
                     stdscr.clrtoeol()
+            # mostrar cursor en la posicion del prompt
+            stdscr.move(ih + 1, min(len(prompt) + pos, w - 2))
+            curses.curs_set(1)
             return scroll_clamped
 
         # ── Pantalla de bienvenida ──
@@ -903,14 +904,6 @@ def tui_run():
         ]:
             add_out(line, 3)
         add_out("")
-        add_out(f"  {'─' * 50}", 5)
-        add_out("  Atajos de teclado:", 0)
-        for line in [
-            "    Tab/Ctrl+I  Ayuda / autocompletar    ↑ ↓      Historial",
-            "    F1 / ?      Ayuda rapida             ReP/AvP  Scroll",
-            "    Ctrl+C/D    Salir                    Inicio/Fin Cursor",
-        ]:
-            add_out(line, 0)
         add_out("", 0)
 
         while True:
@@ -989,9 +982,9 @@ def tui_run():
                         inp = hist[hist_idx]
                     pos = len(inp)
             elif key == curses.KEY_PPAGE:  # Page Up
-                scroll = max(0, scroll - (h - 3))
+                scroll = max(0, scroll - (h - 2))
             elif key == curses.KEY_NPAGE:  # Page Down
-                scroll = min(len(buf), scroll + (h - 3))
+                scroll = min(len(buf), scroll + (h - 2))
             elif key == curses.KEY_RESIZE:
                 pass  # ponytail: proximo ciclo recoge nuevo tamano via getmaxyx()
             elif key == curses.KEY_F1:
