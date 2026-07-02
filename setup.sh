@@ -222,6 +222,10 @@ sudo cp "$SCRIPT_DIR/whitelist/web.conf" "$WHITELIST_DIR/"
 sudo mkdir -p "$PSEINT_DIR"
 sudo cp "$SCRIPT_DIR/whitelist/pseint/ejercicios.conf" "$PSEINT_DIR/"
 sudo cp "$SCRIPT_DIR/whitelist/pseint/guia_ejercicios.pdf" "$PSEINT_DIR/"
+# ── Cursos ─────────────────────────────────────────────────
+sudo mkdir -p "$CONFIG_DIR/cursos"
+sudo cp "$SCRIPT_DIR/cursos/"*.json "$CONFIG_DIR/cursos/" 2>/dev/null || true
+echo "  OK: cursos instalados en $CONFIG_DIR/cursos/"
 sudo cp "$SCRIPT_DIR/yap.py" "$YAP_DIR/yap.py"
 sudo chmod +x "$YAP_DIR/yap.py"
 sudo ln -sf "$SCRIPT_DIR/yap.py" "$BIN_DIR/yap"

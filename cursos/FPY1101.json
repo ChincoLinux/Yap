@@ -1,0 +1,120 @@
+{
+  "codigo": "FPY1101",
+  "nombre": "Fundamentos de Programacion",
+  "creditos": 14,
+  "horas": 126,
+  "semanas": 18,
+  "descripcion": "La asignatura de Fundamentos de Programacion esta ubicada en el primer semestre de la linea formativa Desarrollo de Soluciones de Software. Proporciona los conocimientos y habilidades necesarios para desarrollar soluciones de software basicas, mediante el diseno y desarrollo de algoritmos, programas eficientes, y el uso adecuado de estructuras de datos y funciones.",
+  "ambiente": "TAITE 9 (Taller de Alto Computo)",
+  "herramientas": ["PSeInt", "FreeDFD", "Python 3", "Visual Studio Code", "GitHub"],
+  "ras": [
+    {
+      "id": "RA1",
+      "descripcion": "Construye algoritmos, utilizando estrategias de abstraccion por medio de pseudocodigos, para dar solucion a la problematica planteada en el contexto de negocio y considerando aspectos eticos en el algoritmo.",
+      "indicadores": [
+        {"id": "IL1.1", "descripcion": "Identifica las componentes de un algoritmo (variables, estructuras y expresiones), sus funciones basicas e interaccion hardware de sistemas para el funcionamiento del software."},
+        {"id": "IL1.2", "descripcion": "Identifica un algoritmo considerando las entradas, procesos y salidas para dar solucion a un problema planteado, considerando aspectos eticos en el algoritmo."},
+        {"id": "IL1.3", "descripcion": "Utiliza expresiones aritmeticas, variables de control, asignacion de resultados de expresiones relacionales y logicas para desarrollar un algoritmo y posterior pseudocodigo."},
+        {"id": "IL1.4", "descripcion": "Representa algoritmos a traves de diagramas de flujo y pseudocodigo, para obtener un resultado segun el requerimiento."}
+      ]
+    },
+    {
+      "id": "RA2",
+      "descripcion": "Desarrolla programas, utilizando un lenguaje de programacion, para dar solucion a la problematica planteada en el contexto del negocio.",
+      "indicadores": [
+        {"id": "IL2.1", "descripcion": "Utiliza variables para almacenar diversos tipos de datos, incluyendo Strings en el lenguaje seleccionado."},
+        {"id": "IL2.2", "descripcion": "Utiliza expresiones aritmeticas, relacionales, logicas y de manipulacion de Strings para resolver el o los problemas planteados."},
+        {"id": "IL2.3", "descripcion": "Programa estructuras de decision y validacion de acuerdo con las reglas de negocio planteadas."},
+        {"id": "IL2.4", "descripcion": "Programa estructuras de repeticion utilizando Strings de acuerdo con los requerimientos para dar solucion del caso planteado."},
+        {"id": "IL2.5", "descripcion": "Utiliza correctamente el manejo de excepciones cuando es necesario."}
+      ]
+    },
+    {
+      "id": "RA3",
+      "descripcion": "Construye estructuras de datos temporales, utilizando arreglos para almacenar datos, con el fin de darle persistencia a estos y trabajar con problemas que necesiten guardar informacion temporalmente.",
+      "indicadores": [
+        {"id": "IL3.1", "descripcion": "Identifica arreglos que permitan el almacenamiento de datos segun los requerimientos del problema planteado."},
+        {"id": "IL3.2", "descripcion": "Utiliza arreglos para la insercion, eliminacion, modificacion y busqueda de datos temporales para cumplir con los requerimientos del problema planteado."},
+        {"id": "IL3.3", "descripcion": "Identifica un sistema de control para administrar las versiones de codigo (GitHub) en el desarrollo de una aplicacion."}
+      ]
+    },
+    {
+      "id": "RA4",
+      "descripcion": "Modulariza programas, mediante funciones con y sin parametros, para simplificar y darle eficiencia a las soluciones construidas.",
+      "indicadores": [
+        {"id": "IL4.1", "descripcion": "Programa funciones que permitan la reutilizacion de codigo segun el problema planteado."},
+        {"id": "IL4.2", "descripcion": "Integra funciones invocadas desde el programa principal para dar solucion al problema planteado."}
+      ]
+    }
+  ],
+  "eas": [
+    {
+      "id": "EA1",
+      "nombre": "Fundamentos para la creacion de algoritmos",
+      "descripcion": "En esta experiencia revisaremos los conceptos fundamentales de los algoritmos: variables, estructuras, expresiones y su interaccion con el hardware. Exploraremos entradas, procesos y salidas, representandolos mediante diagramas de flujo y pseudocodigo usando PSeInt y FreeDFD. Consolidaremos conocimientos con ejercicios de estructuras de decision y desafios practicos.",
+      "horas": 35,
+      "ponderacion": 35,
+      "herramientas": ["PSeInt", "FreeDFD"],
+      "actividades": [
+        {"orden": 1, "nombre": "Algoritmos y su relacion con la vida diaria", "descripcion": "Que es un algoritmo, componentes, relacion con hardware. Actividad: receta para un robot. Reflexion sobre que es y para que sirve un algoritmo."},
+        {"orden": 2, "nombre": "Expresiones y estructuras de entrada y salida", "descripcion": "Entrada, proceso y salida. Diagramas de flujo con FreeDFD. Pseudocodigo con PSeInt. Variables, expresiones aritmeticas."},
+        {"orden": 3, "nombre": "Tomando decisiones", "descripcion": "Estructuras de decision en pseudocodigo (Si-Entonces-Sino). Operadores logicos y relacionales. Sentencias de repeticion (Mientras, Repetir, Para). Actividad: carrera de obstaculos."},
+        {"orden": 4, "nombre": "Consolidando aprendizajes", "descripcion": "Resumen integrador de la EA1. Ejercicios de todos los contenidos. Desafio final: resolver un problema completo con pseudocodigo."}
+      ],
+      "evaluaciones": [
+        {"nombre": "Eva For 1", "tipo": "formativa", "descripcion": "Input, output, variables y ciclos (2 ejercicios en PSeInt). Pregunta 1: entrada/salida, variables, operaciones matematicas, condicionales y ciclos basicos. Pregunta 2: condicionales complejas con AND/OR, ciclos avanzados.", "situacion": "Ejecucion practica"},
+        {"nombre": "Eva Parcial 1", "tipo": "parcial", "descripcion": "Comprendiendo los algoritmos y sus elementos. 40 preguntas de seleccion unica con distintos niveles de dificultad sobre toda la EA1.", "situacion": "Prueba de seleccion unica", "ponderacion": 20}
+      ]
+    },
+    {
+      "id": "EA2",
+      "nombre": "Programacion de Aplicaciones con Python",
+      "descripcion": "Los estudiantes comienzan a programar algoritmos usando Python y Visual Studio Code. Se transforman los algoritmos de EA1 a codigo Python. Se cubren variables, tipos de datos, expresiones, estructuras de decision, ciclos, strings y manejo de excepciones.",
+      "horas": 49,
+      "ponderacion": 60,
+      "herramientas": ["Python 3", "Visual Studio Code"],
+      "actividades": [
+        {"orden": 1, "nombre": "Hello World!", "descripcion": "Primer programa en Python. Conociendo el IDE Visual Studio Code. Estructuras base de Python: print(), comentarios, ejecucion."},
+        {"orden": 2, "nombre": "Estructuras de entrada y salida", "descripcion": "Variables y tipos de datos (int, float, str). input() y print(). Operaciones aritmeticas. Guia de ejercicios resueltos."},
+        {"orden": 3, "nombre": "Estructuras de decision en Python", "descripcion": "if, elif, else. Operadores logicos (and, or, not). Condicionales anidadas. Quiz formativo 1."},
+        {"orden": 4, "nombre": "Estructuras de repeticion en Python", "descripcion": "while, for. Strings como secuencias. Quiz formativo 2."},
+        {"orden": 5, "nombre": "Resolviendo problemas con Python", "descripcion": "Construccion de menus interactivos. Integracion de todos los conceptos: variables, condicionales, ciclos, strings. Ejercicios integradores. Quiz formativo 3."}
+      ],
+      "evaluaciones": [
+        {"nombre": "Eva For 2", "tipo": "formativa", "descripcion": "Entrada, salida, operaciones aritmeticas y condicionales. 2 ejercicios practicos en Python.", "situacion": "Ejecucion practica"},
+        {"nombre": "Eva Parcial 2", "tipo": "parcial", "descripcion": "Programacion usando entrada, salida, operaciones aritmeticas y condicionales. 2 ejercicios practicos en Python.", "situacion": "Ejecucion practica", "ponderacion": 25},
+        {"nombre": "Eva For 3", "tipo": "formativa", "descripcion": "Ciclos, strings y manejo de excepciones. 2 ejercicios practicos. Pregunta 1: entrada/salida, variables, operaciones matematicas, condicional simple, strings, ciclos. Pregunta 2: condicionales complejas, ciclos, strings.", "situacion": "Ejecucion practica"},
+        {"nombre": "Eva Parcial 3", "tipo": "parcial", "descripcion": "Programacion usando ciclos, strings y manejo de excepciones. 2 ejercicios practicos (mas dificiles que Eva For 3).", "situacion": "Ejecucion practica", "ponderacion": 30}
+      ]
+    },
+    {
+      "id": "EA3",
+      "nombre": "Colecciones y funciones en Python",
+      "descripcion": "Los estudiantes trabajan de forma avanzada con colecciones (listas, diccionarios), funciones con y sin parametros, y GitHub para desarrollo colaborativo. La experiencia cubre insercion, eliminacion, modificacion y busqueda de datos, asi como modularizacion del codigo.",
+      "horas": 35,
+      "ponderacion": 25,
+      "herramientas": ["Python 3", "Visual Studio Code", "GitHub"],
+      "actividades": [
+        {"orden": 1, "nombre": "Arreglos en Python", "descripcion": "Listas y diccionarios. Insercion, eliminacion, modificacion, ordenamiento y busqueda. Guia de ejercicios resueltos de listas y diccionarios."},
+        {"orden": 2, "nombre": "Desarrollo Colaborativo con GitHub", "descripcion": "Crear cuenta en GitHub. Crear repositorio. Comandos basicos: clone, add, commit, push, pull. Trabajo colaborativo con Python."},
+        {"orden": 3, "nombre": "Funciones", "descripcion": "Definir funciones con y sin parametros. Llamadas desde el programa principal. Retorno de valores. Reutilizacion de codigo."}
+      ],
+      "evaluaciones": [
+        {"nombre": "Eva For 4", "tipo": "formativa", "descripcion": "Listas, diccionarios y funciones. 1 ejercicio practico con estructuras condicionales, ciclos, manipulacion de listas/diccionarios y funciones.", "situacion": "Ejecucion practica"},
+        {"nombre": "Eva Parcial 4", "tipo": "parcial", "descripcion": "Programacion usando listas, diccionarios y funciones. 1 ejercicio practico midiendo estructuras de datos segun contexto.", "situacion": "Ejecucion practica", "ponderacion": 25}
+      ]
+    }
+  ],
+  "evaluaciones": [
+    {
+      "nombre": "Evaluacion Final Transversal",
+      "tipo": "transversal",
+      "descripcion": "Resolver una problematica del entorno en el ambito de la innovacion, de forma individual, sobre gestion de informacion a traves de estructuras de programacion, colecciones (Arreglos, Matrices) y modularizado en funciones independientes que en su llamada desde el programa principal den cobertura a los requerimientos. Desarrollo local sin acceso a internet.",
+      "situacion": "Ejecucion practica",
+      "horas": 7,
+      "ponderacion": 40,
+      "trabajo": "individual",
+      "lugar": "TAITE 9 (Taller de Alto Computo)"
+    }
+  ]
+}
