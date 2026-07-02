@@ -796,6 +796,36 @@ def tui_run():
             for line in text.rstrip("\n").split("\n"):
                 buf.append((line, color))
 
+        def _show_chinco_info(add_out):
+            add_out("")
+            header = re.sub(r"\033\[[0-9;]*m", "", display_header("ChincoLinux — Ayuda rapida"))
+            add_out(header, 4)
+            add_out("")
+            for line in [
+                "  guia            Tutorial interactivo de Yap",
+                "  curso N         Plan de estudio (ej: curso FPY1101)",
+                "  ayuda           Lista completa de comandos",
+                "  abre [app]      Abrir aplicacion permitida",
+                "  busca [tema]    Buscar en Wikipedia",
+                "  progreso        Ver progreso del curso activo",
+                "  iniciar EA[N]   Iniciar sesion de ejercicios",
+                "  salir           Terminar sesion",
+            ]:
+                add_out(line, 3)
+            add_out("")
+            add_out("  ─────────────────────────────", 5)
+            add_out("  Atajos de teclado:", 0)
+            for line in [
+                "  Tab/Ctrl+I  Esta ayuda (prompt vacio) / autocompletar",
+                "  F1          Esta ayuda",
+                "  ?           Esta ayuda (prompt vacio)",
+                "  ↑ ↓         Navegar historial de comandos",
+                "  RePág AvPág Desplazar salida",
+                "  Ctrl+C/D    Salir",
+            ]:
+                add_out(line, 0)
+            add_out("")
+
         def refresh_view():
             h, w = stdscr.getmaxyx()
             ih = h - 3  # input area height = 3 (separator + prompt + input)
@@ -831,19 +861,15 @@ def tui_run():
                             style |= curses.A_BOLD
                         stdscr.addstr(y, 0, text, style)
                     else:
-                        # detect ANSI codes and strip
-                        clean = text
-                        if "\033[" in clean:
-                            import re as _re
-                            clean = _re.sub(r"\033\[[0-9;]*m", "", clean)
-                        stdscr.addstr(y, 0, clean[:w])
+                        # ANSI ya fue limpiado en add_out
+                        stdscr.addstr(y, 0, text[:w])
                 else:
                     stdscr.addstr(y, 0, " ")
             return scroll_clamped
 
         # ── Pantalla de bienvenida ──
         add_out("")
-        add_out(display_header("Chinco — Terminal de Yap"), 1)
+        add_out(re.sub(r"\033\[[0-9;]*m", "", display_header("Chinco — Terminal de Yap")), 1)
         add_out("")
         add_out("  Escribe comandos o preguntas. Prueba:", 0)
         add_out("    guia        — tutorial interactivo", 0)
@@ -882,16 +908,17 @@ def tui_run():
                     old_out, old_err = sys.stdout, sys.stderr
                     cap = io.StringIO()
                     sys.stdout = cap
+                    sys.stderr = cap
                     try:
                         action, param = interpret(cmd)
                         handle_action(action, param, cmd)
                     except Exception:
-                        traceback.print_exc(file=sys.stderr)
+                        traceback.print_exc(file=cap)
                     sys.stdout = old_out
                     sys.stderr = old_err
                     text = cap.getvalue()
                     if text:
-                        add_out(text.rstrip())
+                        add_out(re.sub(r"\033\[[0-9;]*m", "", text).rstrip())
                     add_out("")
 
             elif key == curses.KEY_BACKSPACE or key == 127:
@@ -931,8 +958,11 @@ def tui_run():
             elif key == curses.KEY_NPAGE:  # Page Down
                 scroll = min(len(buf), scroll + (h - 3))
             elif key == curses.KEY_RESIZE:
-                pass  # redibuja en el ciclo
-            elif key == 9:  # Tab — completar comandos conocidos
+                pass  # ponytail: proximo ciclo recoge nuevo tamano via getmaxyx()
+            elif key == curses.KEY_F1:
+                _show_chinco_info(add_out)
+            elif key == 9:  # Tab/Ctrl+I — info si prompt vacio, completar si no
+                # ponytail: first-match completion, no cycle/fuzzy
                 conocidos = ["curso ", "iniciar ea", "guia", "ayuda", "progreso",
                              "abre ", "busca ", "salir"]
                 if inp:
@@ -941,10 +971,11 @@ def tui_run():
                         inp = matches[0]
                         pos = len(inp)
                 else:
-                    inp = conocidos[0]
-                    pos = len(inp)
+                    _show_chinco_info(add_out)
             elif key in (3, 4):  # Ctrl+C, Ctrl+D
                 break
+            elif key == ord("?") and not inp:
+                _show_chinco_info(add_out)
             elif 32 <= key <= 126:
                 inp = inp[:pos] + chr(key) + inp[pos:]
                 pos += 1
