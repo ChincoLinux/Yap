@@ -3,3 +3,8 @@
 __pycache__/
 *.pyc
 build/
+.adev/
+.slim/
+.opencode/
+ADEV.md
+yap-agent.md
