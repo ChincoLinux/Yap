@@ -1,6 +1,6 @@
 # Pull Request / Solicitación de cambios
 
-> Trabajamos bajo **trunk-based development** ([docs/TRUNK-BASED.md](docs/TRUNK-BASED.md)), con la doctrina organizacional **[A-Dev](https://github.com/ChincoLinux/.github/blob/main/ADEV.md)**: ramas cortas, integración frecuente a `main`, PRs atómicas, commits convencionales y evidencia obligatoria.
+> Trabajamos bajo **trunk-based development** ([docs/TRUNK-BASED.md](docs/TRUNK-BASED.md)), con la doctrina organizacional **[A-Dev](ADEV.md)**: ramas cortas, integración frecuente a `main`, PRs atómicas, commits convencionales y evidencia obligatoria.
 
 ## Checklist previo (obligatorio) / Prior checklist (required)
 

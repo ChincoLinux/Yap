@@ -19,7 +19,7 @@ Este repositorio trabaja bajo **trunk-based development**: ver **[docs/TRUNK-BAS
 - **Commits atómicos** con **Conventional Commits** (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `test:`, `ci:`).
 - **Push directo a `main`**: permitido para cambios pequeños y verificados (docs, fixes triviales, chores) con la validación más acotada ejecutada (`python3 -m pytest tests/`).
 - **PR con revisión**: obligatoria para cambios con impacto (funcionalidad, API, seguridad, infraestructura, plantillas/comunidad).
-- Doctrina general de la organización: **[A-Dev](https://github.com/ChincoLinux/.github/blob/main/ADEV.md)**.
+- Doctrina general de la organización: **[A-Dev](ADEV.md)**.
 
 ## Reglas de calidad / Quality rules
 

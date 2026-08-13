@@ -1,6 +1,6 @@
 # Governanza de la Organización / Organization Governance
 
-Este documento define el modelo de gobernanza de **ChincoLinux**. Toda la operatoria técnica sigue la doctrina **[A-Dev](https://github.com/ChincoLinux/.github/blob/main/ADEV.md)**.
+Este documento define el modelo de gobernanza de **ChincoLinux**. Toda la operatoria técnica sigue la doctrina **[A-Dev](ADEV.md)**.
 
 > **Overlay local de este repositorio**: Yap declara **trunk-based development** como flujo de trabajo (ver [docs/TRUNK-BASED.md](docs/TRUNK-BASED.md)). En la copia de la organización, `main` exige **cambios vía PR** (los admins pueden hacer bypass); en la copia personal `VECTORG99/Yap` el push directo de cambios pequeños y verificados está disponible.
 
