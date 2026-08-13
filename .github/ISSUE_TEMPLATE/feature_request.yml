@@ -1,0 +1,30 @@
+name: Feature request / Solicitud de función
+description: Propón una nueva función o mejora.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe el problema que resuelve, no solo la solución. Mantén la propuesta enfocada en un objetivo.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema / Problem
+      description: Qué necesidad o fricción existe hoy.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solución propuesta / Proposed solution
+      description: Cómo lo resolverías.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas / Alternatives considered
+  - type: input
+    id: scope
+    attributes:
+      label: Repositorio / Repository
+      description: En qué repo de ChincoLinux aplicaría.

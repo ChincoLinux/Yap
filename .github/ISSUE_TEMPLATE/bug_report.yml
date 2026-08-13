@@ -1,0 +1,42 @@
+name: Bug report / Reporte de error
+description: Reporta un comportamiento incorrecto o una falla.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por reportar. Rellena los campos con la mayor precisión posible.
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamiento esperado / Expected behavior
+      description: Qué debería ocurrir.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportamiento actual / Actual behavior
+      description: Qué ocurre en realidad.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Pasos para reproducir / Steps to reproduce
+      description: Comandos o secuencia exacta.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versión / Version
+      description: Rama o release afectado.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto adicional / Additional context
+      description: Logs, capturas, entorno.
