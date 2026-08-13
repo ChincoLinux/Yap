@@ -2,7 +2,7 @@
 
 Este documento define el modelo de gobernanza de **ChincoLinux**. Toda la operatoria técnica sigue la doctrina **[A-Dev](https://github.com/ChincoLinux/.github/blob/main/ADEV.md)**.
 
-> **Overlay local de este repositorio**: Yap declara **trunk-based development** como flujo de trabajo (ver [docs/TRUNK-BASED.md](docs/TRUNK-BASED.md)), que permite push directo a `main` para cambios pequeños y verificados.
+> **Overlay local de este repositorio**: Yap declara **trunk-based development** como flujo de trabajo (ver [docs/TRUNK-BASED.md](docs/TRUNK-BASED.md)). En la copia de la organización, `main` exige **cambios vía PR** (los admins pueden hacer bypass); en la copia personal `VECTORG99/Yap` el push directo de cambios pequeños y verificados está disponible.
 
 ## Roles
 
@@ -40,7 +40,7 @@ La nominación la hace un mantenedor existente y se aprueba por mayoría simple 
 - Permiso por defecto para miembros: **lectura**.
 - La creación de repositorios está restringida a admins.
 - Todo repositorio de la org adopta este modelaje de equipo, plantillas y flujo de PR.
-- En repositorios donde aplique, `main` puede protegerse por **ruleset** (cambios solo por PR con aprobación de `core-devs`). **Yap declara el overlay trunk-based** de [docs/TRUNK-BASED.md](docs/TRUNK-BASED.md): `main` sin ruleset y push directo permitido para cambios pequeños y verificados.
+- En la copia de la org, `main` está cubierto por una política que exige **cambios vía Pull Request** (los admins pueden hacer bypass). **Overlay trunk-based de Yap** ([docs/TRUNK-BASED.md](docs/TRUNK-BASED.md)): ramas cortas e integración frecuente; en la copia personal (`VECTORG99/Yap`) el push directo de cambios pequeños y verificados está permitido; en la copia de la org (`ChincoLinux/Yap`) los cambios entran vía PR o bypass de admin.
 
 ## Seguridad de la cuenta / Account security
 

@@ -8,7 +8,7 @@ Este repositorio trabaja bajo **trunk-based development** como *local overlay* d
 2. **Ramas de corta vida** (típicamente <48 horas), una por objetivo, creadas desde `main` y ligadas a un issue (`Closes #N`).
 3. **Integración frecuente**: nunca mantengas ramas divergentes durante días; resuelve conflictos con **rebase** sobre `main`.
 4. **Commits atómicos** con **Conventional Commits**: `feat:` `fix:` `docs:` `refactor:` `chore:` `test:` `ci:`.
-5. **Push directo a `main`**: permitido para cambios **pequeños y verificados** (documentación, fixes triviales, chores, formateo). Condición: ejecuta la validación más acotada que pruebe el cambio antes de empujar (en Yap: `python3 -m pytest tests/`).
+5. **Push directo a `main`**: permitido —en la copia personal `VECTORG99/Yap`— para cambios **pequeños y verificados** (documentación, fixes triviales, chores, formateo). Condición: ejecuta la validación más acotada que pruebe el cambio antes de empujar (en Yap: `python3 -m pytest tests/`). En la copia de la organización (`ChincoLinux/Yap`) `main` exige cambios vía PR; el push directo queda limitado al bypass de admins.
 6. **PR con revisión obligatoria** para cambios con impacto: funcionalidad, API, seguridad, infraestructura, y cualquier cambio a plantillas o archivos de comunidad.
 7. **Nunca `force push`** a `main` ni a ramas compartidas.
 8. Tras el merge: **borra la rama** y verifica el estado de `main`.
