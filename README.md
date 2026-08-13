@@ -8,7 +8,7 @@
 
 ## Resumen
 
-**Yap** es un asistente de inteligencia artificial que opera integramente en local sobre CPU, sin dependencia de conexion a Internet para su funcionamiento base. Emplea el modelo **Llama 3.2 Instruct** (GGUF Q4_K_M) ejecutado mediante **llama.cpp** con enlace estatico, e implementa un sistema de seguridad basado en **listas blancas** (whitelist) de aplicaciones y dominios. El proyecto se distribuye en **tres ramas** (`master`, `lowmem`, `ultra-lowmem`) que escalan el consumo de RAM desde ~3.5 GB hasta ~1.8 GB, adaptandose a hardware educativo de distintas capacidades. La clasificacion de intenciones se realiza mediante el propio LLM, eliminando la necesidad de patrones rigidos y proporcionando tolerancia a errores ortograficos y variaciones sintacticas.
+**Yap** es un asistente de inteligencia artificial que opera integramente en local sobre CPU, sin dependencia de conexion a Internet para su funcionamiento base. Emplea el modelo **Llama 3.2 Instruct** (GGUF Q4_K_M) ejecutado mediante **llama.cpp** con enlace estatico, e implementa un sistema de seguridad basado en **listas blancas** (whitelist) de aplicaciones y dominios. El proyecto se distribuye en **tres ramas** (`main`, `lowmem`, `ultra-lowmem`) que escalan el consumo de RAM desde ~3.5 GB hasta ~1.8 GB, adaptandose a hardware educativo de distintas capacidades. La clasificacion de intenciones se realiza mediante el propio LLM, eliminando la necesidad de patrones rigidos y proporcionando tolerancia a errores ortograficos y variaciones sintacticas.
 
 ---
 
@@ -48,8 +48,8 @@ Construir un sistema Debian estable ultraligero con un agente IA local (**CPU-on
 |---|---|
 | **Modelo** | Llama 3.2 3B Instruct (GGUF Q4_K_M) / 1B Instruct |
 | **Runtime** | llama.cpp (CPU-only, enlace estatico) |
-| **RAM minima** | ~3.5 GB (master), ~3.1 GB (lowmem), ~1.8 GB (ultra-lowmem) |
-| **Contexto** | 4096 tokens (master) / 2048 tokens (lowmem, ultra-lowmem) |
+| **RAM minima** | ~3.5 GB (main), ~3.1 GB (lowmem), ~1.8 GB (ultra-lowmem) |
+| **Contexto** | 4096 tokens (main) / 2048 tokens (lowmem, ultra-lowmem) |
 | **Latencia estimada** | 5-10 s primeras tokens en CPU (2 nucleos), ~40 tok/s |
 | **Idioma** | Espanol |
 | **SO destino** | Debian 13 (64-bit) |
@@ -243,7 +243,7 @@ El proyecto mantiene **tres ramas** con distintos perfiles de consumo de RAM y c
 
 | Rama | Modelo | Contexto | KV Cache | RAM total | Ideal para |
 |---|---|---|---|---|---|
-| **master** | 3B Q4_K_M (2.0 GB) | 4096 | FP16 | ~3.5 GB | 8 GB+ RAM |
+| **main** | 3B Q4_K_M (2.0 GB) | 4096 | FP16 | ~3.5 GB | 8 GB+ RAM |
 | **lowmem** | 3B Q4_K_M (2.0 GB) | 2048 | Q8_0 | ~3.1 GB | 6 GB RAM |
 | **ultra-lowmem** | 1B Q4_K_M (0.81 GB) | 2048 | Q8_0 | ~1.8 GB | 3-4 GB RAM |
 
@@ -251,7 +251,7 @@ El proyecto mantiene **tres ramas** con distintos perfiles de consumo de RAM y c
 
 ```bash
 cd ~/Yap
-git checkout master        # maxima calidad
+git checkout main        # maxima calidad
 git checkout lowmem        # balanceado
 git checkout ultra-lowmem  # minima RAM
 ```
@@ -276,15 +276,15 @@ El hook se activa al instalar con `setup.sh` (configura `git config core.hooksPa
 
 | Cambio | Requiere re-ejecutar `setup.sh` | Accion |
 |---|---|---|
-| **master** ↔ **lowmem** | **No** | Solo `git checkout` (mismo modelo 3B) |
-| **ultra-lowmem** → **master/lowmem** | Solo para descargar modelo 3B | `git checkout` + `sudo wget <URL del 3B>` o re-ejecutar `setup.sh` |
-| **master/lowmem** → **ultra-lowmem** | Solo para descargar modelo 1B | `git checkout` + `sudo wget <URL del 1B>` o re-ejecutar `setup.sh` |
+| **main** ↔ **lowmem** | **No** | Solo `git checkout` (mismo modelo 3B) |
+| **ultra-lowmem** → **main/lowmem** | Solo para descargar modelo 3B | `git checkout` + `sudo wget <URL del 3B>` o re-ejecutar `setup.sh` |
+| **main/lowmem** → **ultra-lowmem** | Solo para descargar modelo 1B | `git checkout` + `sudo wget <URL del 1B>` o re-ejecutar `setup.sh` |
 
 Re-ejecutar `setup.sh` despues de cambiar de rama es **seguro**: detecta lo que ya existe y solo descarga lo faltante.
 
 ### 7.4 Optimizaciones aplicadas por rama
 
-| Optimizacion | master | lowmem | ultra-lowmem |
+| Optimizacion | main | lowmem | ultra-lowmem |
 |---|---|---|---|
 | Contexto (`--ctx-size`) | 4096 | 2048 | 2048 |
 | KV cache (`--cache-type-k/v`) | FP16 | Q8_0 | Q8_0 |
@@ -459,7 +459,7 @@ Chinco > guia
 
 | Rama | Contexto | KV Cache | Flash Attn | RAM total estimada |
 |---|---|---|---|---|
-| **master** (esta) | 4096 tokens | FP16 | No | ~3.5GB |
+| **main** (esta) | 4096 tokens | FP16 | No | ~3.5GB |
 | **lowmem** | 2048 tokens | Q8_0 | Si | ~3.1GB |
 
 ```bash
@@ -544,7 +544,7 @@ python3 tests/run_tests.py --report   # Reporte TXT con mapeo de requisitos
 
 ### 12.2 Integracion continua (GitHub Actions)
 
-Cada `push` y `pull request` a `master`, `lowmem` o `ultra-lowmem` ejecuta automaticamente:
+Cada `push` y `pull request` a `main`, `lowmem` o `ultra-lowmem` ejecuta automaticamente:
 
 | Job | Que hace |
 |---|---|
@@ -642,4 +642,4 @@ python3 tests/run_tests.py --vm --report
 
 ---
 
-> **Referencias**: [llama.cpp](https://github.com/ggerganov/llama.cpp) | [Llama 3.2](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-edge-mobile-devices/) | [GGUF format](https://github.com/ggerganov/ggml/blob/master/docs/gguf.md) | [Debian](https://www.debian.org/) | [VirtualBox](https://www.virtualbox.org/)
+> **Referencias**: [llama.cpp](https://github.com/ggerganov/llama.cpp) | [Llama 3.2](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-edge-mobile-devices/) | [GGUF format](https://github.com/ggerganov/ggml/blob/main/docs/gguf.md) | [Debian](https://www.debian.org/) | [VirtualBox](https://www.virtualbox.org/)

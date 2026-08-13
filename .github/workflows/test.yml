@@ -1,6 +1,6 @@
 # Yap — CI/CD Pipeline
 #
-# Se ejecuta en cada push y PR a las ramas: master, lowmem, ultra-lowmem
+# Se ejecuta en cada push y PR a las ramas: main, lowmem, ultra-lowmem
 # Etapas:
 #   1. test-unit: 49 pruebas unitarias (seguridad + funcional) con pytest
 #   2. test-report: Verificacion estatica del codigo fuente
@@ -10,9 +10,9 @@ name: Yap CI
 
 on:
   push:
-    branches: [master, lowmem, ultra-lowmem]
+    branches: [main, lowmem, ultra-lowmem]
   pull_request:
-    branches: [master, lowmem, ultra-lowmem]
+    branches: [main, lowmem, ultra-lowmem]
 
 jobs:
 
@@ -92,7 +92,7 @@ jobs:
           echo "═══════════════════════════════════════════════"
           echo "  VALIDACION DE MODELOS POR RAMA"
           echo "═══════════════════════════════════════════════"
-          for branch in master lowmem ultra-lowmem; do
+          for branch in main lowmem ultra-lowmem; do
             if git show-ref --verify refs/heads/$branch 2>/dev/null || \
                git show-ref --verify refs/remotes/origin/$branch 2>/dev/null; then
               model=$(git show $branch:yap.py 2>/dev/null | grep 'MODEL_PATH =' | sed "s|.*/||;s|\"||g")
