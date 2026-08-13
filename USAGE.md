@@ -156,7 +156,7 @@ El archivo de progreso esta en `~/.config/yap/progress.json`. Se guarda atomicam
 
 | Rama | RAM | Modelo | Uso |
 |------|-----|--------|-----|
-| `master` | ~3GB | 3B Q4_K_M | Escritorio moderno |
+| `main` | ~3GB | 3B Q4_K_M | Escritorio moderno |
 | `lowmem` | ~1.8GB | 3B Q4_K_M reducido | PCs antiguos |
 | `ultra-lowmem` | ~1.3GB | 1B Q4_K_M | Netbooks / Raspberry Pi |
 

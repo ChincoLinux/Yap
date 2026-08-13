@@ -5,7 +5,7 @@ set -euo pipefail
 # Yap — Instalación del Agente IA local para ChincoLinux
 # ============================================================
 # Este script se ejecuta UNA SOLA VEZ al instalar.
-# Al cambiar de rama (master ↔ lowmem ↔ ultra-lowmem),
+# Al cambiar de rama (main ↔ lowmem ↔ ultra-lowmem),
 # solo se necesita re-ejecutarlo para descargar el modelo
 # faltante. El resto de pasos detectan lo ya instalado.
 # ============================================================
@@ -25,7 +25,7 @@ LLAMACPP_BRANCH="b5097"
 MODELO_3B_BYTES="1.9 GB"
 MODELO_1B_BYTES="0.81 GB"
 
-RAMAS=(master lowmem ultra-lowmem)
+RAMAS=(main lowmem ultra-lowmem)
 RAMA_ACTUAL=$(git -C "$SCRIPT_DIR" branch --show-current 2>/dev/null || echo "desconocida")
 
 # Detectar si esto es una REINSTALACIÓN o primera instalación
@@ -253,7 +253,7 @@ echo "  • Al hacer 'git checkout <rama>' → el agente cambia de rama"
 echo "    al instante y se muestra: rama anterior → rama actual,"
 echo "    cambios de modelo, y el siguiente paso recomendado."
 echo "  • NO es necesario re-ejecutar setup.sh al cambiar entre"
-echo "    master y lowmem (mismo modelo 3B)"
+echo "    main y lowmem (mismo modelo 3B)"
 echo ""
 
 # --- 5. Instalar aplicaciones recomendadas ---
@@ -354,7 +354,7 @@ echo "    yap Busca qué es Linux              # Búsqueda Wikipedia"
 echo "    yap ¿Qué es Debian?                 # Consulta directa al LLM"
 echo ""
 echo "  Cambiar de rama:"
-echo "    git checkout master         # 3B, ctx 4096, FP16  → ~3.5 GB RAM"
+echo "    git checkout main         # 3B, ctx 4096, FP16  → ~3.5 GB RAM"
 echo "    git checkout lowmem         # 3B, ctx 2048, Q8_0 → ~3.1 GB RAM"
 echo "    git checkout ultra-lowmem   # 1B, ctx 2048, Q8_0 → ~1.8 GB RAM"
 echo ""
