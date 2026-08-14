@@ -209,13 +209,19 @@ El instalador automatiza la configuracion del entorno. Conceptos clave:
 ### 6.2 Procedimiento
 
 ```bash
-git clone https://github.com/VECTORG99/Yap.git
+git clone https://github.com/ChincoLinux/Yap.git
 cd Yap
 # Opcional: seleccionar rama antes de instalar
 # git checkout lowmem         # 6 GB RAM
 # git checkout ultra-lowmem   # 3-4 GB RAM
 bash setup.sh
 ```
+
+> **Nota sobre ramas:** Al clonar, git descarga todas las ramas remotas pero
+> solo hace checkout de `main`. Para cambiar a `lowmem` o `ultra-lowmem`,
+> simplemente `git checkout lowmem` — git creará la rama local automáticamente.
+> Si usaste `git clone --depth 1` (clon superficial), primero ejecuta
+> `git fetch --all` para descargar las demás ramas antes de hacer checkout.
 
 El instalador realiza automaticamente:
 

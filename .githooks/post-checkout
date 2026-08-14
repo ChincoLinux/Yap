@@ -4,11 +4,13 @@
 # Muestra la rama anterior, la nueva, el modelo que se usa y el siguiente paso
 #
 # Argumentos: $1 = SHA anterior, $2 = SHA nuevo, $3 = 1 si es checkout de rama
-
-set -euo pipefail
+#
+# IMPORTANTE: No usar set -e ni set -u ni pipefail aqui.
+# Un hook que falla puede abortar el checkout y hacer parecer que
+# no se puede cambiar de rama. Este hook es informativo, no bloqueante.
 
 # Solo mostrar en cambios de rama (no en checkout de archivos individuales)
-if [ "$3" != "1" ]; then
+if [ "${3:-}" != "1" ]; then
   exit 0
 fi
 
@@ -17,10 +19,10 @@ MODEL_DIR="/opt/yap/models"
 
 # Obtener nombres de ramas
 # Usar reflog para obtener la rama anterior exacta (mas preciso que name-rev)
-OLD_BRANCH=$(git reflog -1 --format='%gs' 2>/dev/null | sed -n 's/.*from \([^ ]*\) to.*/\1/p')
+OLD_BRANCH=$(git reflog -1 --format='%gs' 2>/dev/null | sed -n 's/.*from \([^ ]*\) to.*/\1/p' || echo "")
 # Si no se pudo obtener del reflog, usar name-rev como fallback
 if [ -z "$OLD_BRANCH" ]; then
-  OLD_BRANCH=$(git name-rev --name-only "$1" 2>/dev/null | sed 's/^remotes\/origin\///')
+  OLD_BRANCH=$(git name-rev --name-only "$1" 2>/dev/null | sed 's/^remotes\/origin\///' || echo "")
 fi
 NEW_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
 
@@ -35,13 +37,14 @@ if [ "$NEW_BRANCH" = "HEAD" ]; then
 fi
 
 # Obtener el modelo de la rama ANTERIOR (desde git)
+# Extraer solo el nombre del archivo .gguf, limpiando parentesis y comillas
 OLD_MODEL_FILE=""
 if git show "$1:yap.py" &>/dev/null; then
-  OLD_MODEL_FILE=$(git show "$1:yap.py" 2>/dev/null | grep 'MODEL_PATH =' | sed "s|.*/||;s|\"||g" || echo "")
+  OLD_MODEL_FILE=$(git show "$1:yap.py" 2>/dev/null | grep 'MODEL_PATH' | grep -oE '[A-Za-z0-9._-]+\.gguf' | head -1 || echo "")
 fi
 
 # Obtener el modelo de la rama NUEVA (archivo actual, HEAD ya apunta a nueva rama)
-NEW_MODEL_FILE=$(grep 'MODEL_PATH =' "$REPO_ROOT/yap.py" 2>/dev/null | sed "s|.*/||;s|\"||g" || echo "")
+NEW_MODEL_FILE=$(grep 'MODEL_PATH' "$REPO_ROOT/yap.py" 2>/dev/null | grep -oE '[A-Za-z0-9._-]+\.gguf' | head -1 || echo "")
 
 # Tamaños conocidos
 MODELO_3B_NAME="Llama-3.2-3B-Instruct-Q4_K_M.gguf"
