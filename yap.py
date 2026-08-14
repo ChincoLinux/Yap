@@ -76,9 +76,13 @@ def display_box(text, color="CYAN"):
     lines.append(f"{c}└{'─' * w}┘{C['RESET']}")
     return "\n".join(lines)
 
-MODEL_PATH = "/opt/yap/models/Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+MODEL_PATH = os.environ.get("YAP_MODEL_PATH", "/opt/yap/models/Llama-3.2-1B-Instruct-Q4_K_M.gguf")
 MAX_CTX = 2048
 MAX_HISTORY = 6
+LLAMA_THREADS = int(os.environ.get("YAP_LLAMA_THREADS", "2"))
+LLAMA_TEMP_QUERY = float(os.environ.get("YAP_LLAMA_TEMP_QUERY", "0.7"))
+LLAMA_TEMP_PSEINT = float(os.environ.get("YAP_LLAMA_TEMP_PSEINT", "0.5"))
+LLAMA_TEMP_CLASSIFY = float(os.environ.get("YAP_LLAMA_TEMP_CLASSIFY", "0.1"))
 
 BOS = "<|begin_of_text|>"
 HEADER = "<|start_header_id|>"
@@ -457,10 +461,15 @@ def cmd_webfetch(url, feed_to_llm=False):
     domains = load_domain_whitelist(WHITELIST_WEB)
     parsed = urllib.parse.urlparse(url)
     domain = parsed.netloc.lower()
+    if ":" in domain:
+        domain = domain.split(":")[0]
     if domain.startswith("www."):
         domain = domain[4:]
 
-    if not (domain in domains or any(domain == d or domain.endswith("." + d) for d in domains)):
+    def _domain_allowed(d, dom):
+        return d == dom or dom.endswith("." + d)
+
+    if not any(_domain_allowed(d, domain) for d in domains):
         allowed = ", ".join(domains)
         return f"[ERROR] Dominio '{domain}' bloqueado.\nDominios permitidos: {allowed}"
 
@@ -511,12 +520,12 @@ def cmd_query(prompt, context=None, store_history=True):
         "-m", MODEL_PATH,
         "-p", full_prompt,
         "-n", "384",
-        "--temp", "0.7",
+        "--temp", str(LLAMA_TEMP_QUERY),
         "--ctx-size", str(MAX_CTX),
         "--cache-type-k", "q8_0",
         "--cache-type-v", "q8_0",
         "--flash-attn",
-        "--threads", "2",
+        "--threads", str(LLAMA_THREADS),
         "-no-cnv",
         "--no-display-prompt",
     ]
@@ -557,12 +566,12 @@ def cmd_pseint(query):
         "llama-cli", "-m", MODEL_PATH,
         "-p", full_prompt,
         "-n", "512",
-        "--temp", "0.5",
+        "--temp", str(LLAMA_TEMP_PSEINT),
         "--ctx-size", "1024",
         "--cache-type-k", "q8_0",
         "--cache-type-v", "q8_0",
         "--flash-attn",
-        "--threads", "2",
+        "--threads", str(LLAMA_THREADS),
         "-no-cnv",
         "--no-display-prompt",
     ]
@@ -730,12 +739,12 @@ def classify_intent(user_input):
 
     cmd = [
         "llama-cli", "-m", MODEL_PATH,
-        "-p", prompt, "-n", "15", "--temp", "0.1",
+        "-p", prompt, "-n", "15", "--temp", str(LLAMA_TEMP_CLASSIFY),
         "--ctx-size", "512",
         "--cache-type-k", "q8_0",
         "--cache-type-v", "q8_0",
         "--flash-attn",
-        "--threads", "2",
+        "--threads", str(LLAMA_THREADS),
         "-no-cnv", "--no-display-prompt",
     ]
     try:
