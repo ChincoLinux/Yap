@@ -96,6 +96,96 @@ SYSTEM_PROMPT = (
 
 HISTORY = []
 
+# ── Confirmación humana para acciones sensibles (#12) ────────
+# Acciones sensibles requieren confirmación del usuario antes de ejecutarse.
+# Niveles: "always" (siempre preguntar), "new" (solo la primera vez), "trusted" (confiar tras N confirmaciones)
+
+SENSITIVE_ACTIONS = {
+    "open_app": "always",       # Abrir aplicaciones puede lanzar procesos con acceso a red
+    "webfetch": "always",       # Fetch a URLs expone datos al exterior
+}
+
+CONFIRMATION_FILE = os.path.expanduser("~/.config/yap/confirmations.json")
+CONFIRMATION_TRUST_THRESHOLD = 3  # Tras N confirmaciones, confiar en la acción
+
+
+def _load_confirmations():
+    """Load confirmation history for trusted actions."""
+    if not os.path.exists(CONFIRMATION_FILE):
+        return {}
+    try:
+        with open(CONFIRMATION_FILE) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_confirmations(data):
+    """Save confirmation history atomically."""
+    os.makedirs(os.path.dirname(CONFIRMATION_FILE), exist_ok=True)
+    tmp = CONFIRMATION_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, CONFIRMATION_FILE)
+
+
+def _action_key(action, param):
+    """Build a unique key for an action+param pair."""
+    return f"{action}:{param.lower().strip()}"
+
+
+def _is_trusted(action, param):
+    """Check if an action is already trusted (confirmed N+ times)."""
+    confirmations = _load_confirmations()
+    key = _action_key(action, param)
+    return confirmations.get(key, 0) >= CONFIRMATION_TRUST_THRESHOLD
+
+
+def _record_confirmation(action, param):
+    """Record that the user confirmed an action."""
+    confirmations = _load_confirmations()
+    key = _action_key(action, param)
+    confirmations[key] = confirmations.get(key, 0) + 1
+    _save_confirmations(confirmations)
+
+
+def confirm_action(action, param, description=""):
+    """Ask the user to confirm a sensitive action.
+
+    Returns True if the user confirms, False otherwise.
+    In non-interactive mode (no TTY), defaults to False for safety.
+    """
+    level = SENSITIVE_ACTIONS.get(action)
+    if level is None:
+        return True  # Not a sensitive action
+
+    if level == "trusted" and _is_trusted(action, param):
+        return True  # Already trusted after N confirmations
+
+    if level == "new" and _is_trusted(action, param):
+        return True  # Already confirmed once
+
+    # Non-interactive mode: deny by default for safety
+    if not sys.stdin.isatty():
+        return False
+
+    desc = description or f"{action}: {param}"
+    try:
+        sys.stdout.write(
+            f"\n  {C['YELLOW']}⚠ Acción sensible:{C['RESET']} {desc}\n"
+            f"  {C['YELLOW']}¿Permitir? (s/N):{C['RESET']} "
+        )
+        sys.stdout.flush()
+        resp = input().strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        sys.stdout.write("\n")
+        return False
+
+    if resp in ("s", "si", "y", "yes"):
+        _record_confirmation(action, param)
+        return True
+    return False
+
 
 def load_whitelist(path):
     apps = {}
@@ -843,7 +933,10 @@ def main():
 
 def handle_action(action, param, original_input):
     if action == "open_app":
-        print(cmd_open_app(param))
+        if confirm_action("open_app", param, f"Abrir aplicación '{param}'"):
+            print(cmd_open_app(param))
+        else:
+            print(f"{C['YELLOW']}Acción cancelada.{C['RESET']}")
 
     elif action == "search":
         query = param
@@ -873,8 +966,12 @@ def handle_action(action, param, original_input):
             print(content)
 
     elif action == "webfetch":
-        print("Obteniendo contenido web...")
-        content = cmd_webfetch(param, feed_to_llm=True)
+        if confirm_action("webfetch", param, f"Obtener contenido de '{param}'"):
+            print("Obteniendo contenido web...")
+            content = cmd_webfetch(param, feed_to_llm=True)
+        else:
+            print(f"{C['YELLOW']}Acción cancelada.{C['RESET']}")
+            return
         if isinstance(content, tuple):
             text, _ = content
             print(f"Contenido obtenido ({len(text)} chars). Resumiendo con LLM...")
