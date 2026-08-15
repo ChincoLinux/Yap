@@ -22,7 +22,7 @@ jobs:
           script: |
             const ORG = 'ChincoLinux';
             const REPOS = ['Yap', 'ChincoLinux', '.github'];
-            const TEAM = ['VECTORG99', '4mnesia', 'D4n1sb4ld'];
+            const TEAM = ['VECTORG99', '4mnesia', 'D4n1sb4ld', 'martinkuruzg-hue'];
 
             let assigned = 0;
             let assigneeIndex = 0;
