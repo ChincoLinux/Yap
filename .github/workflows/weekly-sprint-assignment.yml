@@ -1,0 +1,238 @@
+name: Weekly Sprint Assignment
+
+"on":
+  schedule:
+    # Every Monday at 09:00 UTC (06:00 CLT)
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      sprint:
+        description: 'Sprint number to assign (defaults to current sprint)'
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  projects: write
+
+jobs:
+  assign-sprint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign issues to sprint and team
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_PAT }}
+          script: |
+            const PROJECT_ID = 'PVT_kwDOEuDobM4BgZiD';
+            const ORG = 'ChincoLinux';
+
+            // Field IDs
+            const STATUS_FIELD = 'PVTSSF_lADOEuDobM4BgZiDzharYh4';
+            const SPRINT_FIELD = 'PVTF_lADOEuDobM4BgZiDzharfRw';
+            const ETAPA_FIELD = 'PVTSSF_lADOEuDobM4BgZiDzharegU';
+            const FECHA_INICIO_FIELD = 'PVTF_lADOEuDobM4BgZiDzharfX8';
+            const FECHA_FIN_FIELD = 'PVTF_lADOEuDobM4BgZiDzharfe8';
+            const COMPLEJIDAD_FIELD = 'PVTSSF_lADOEuDobM4BgZiDzhargOk';
+            const ESFUERZO_FIELD = 'PVTF_lADOEuDobM4BgZiDzhargVM';
+            const MES_FIELD = 'PVTSSF_lADOEuDobM4BgZiDzhareZk';
+
+            // Status option IDs
+            const STATUS_TODO = 'f75ad846';
+            const STATUS_IN_PROGRESS = '47fc9ee4';
+            const STATUS_DONE = '98236657';
+
+            // Sprint definitions (from ROADMAP)
+            const SPRINTS = {
+              1:  { start: '2026-08-18', end: '2026-08-31', mes: 'Mes 1', etapa: 'Fase 1 — Fundaciones' },
+              2:  { start: '2026-09-01', end: '2026-09-14', mes: 'Mes 1', etapa: 'Fase 1 — Fundaciones' },
+              3:  { start: '2026-09-15', end: '2026-09-28', mes: 'Mes 1', etapa: 'Fase 1 — Fundaciones' },
+              4:  { start: '2026-09-29', end: '2026-10-12', mes: 'Mes 2', etapa: 'Fase 2 — Profesor' },
+              5:  { start: '2026-10-13', end: '2026-10-26', mes: 'Mes 2', etapa: 'Fase 2 — Profesor' },
+              6:  { start: '2026-10-27', end: '2026-11-09', mes: 'Mes 2', etapa: 'Fase 2 — Profesor' },
+              7:  { start: '2026-11-10', end: '2026-11-23', mes: 'Mes 3', etapa: 'Fase 3 — Empaquetado' },
+              8:  { start: '2026-11-24', end: '2026-12-07', mes: 'Mes 3', etapa: 'Fase 3 — Empaquetado' },
+              9:  { start: '2026-12-08', end: '2026-12-21', mes: 'Mes 3', etapa: 'Fase 3 — Empaquetado' },
+              10: { start: '2026-12-22', end: '2027-01-04', mes: 'Mes 3', etapa: 'Fase 3 — Empaquetado' },
+              11: { start: '2027-01-05', end: '2027-01-18', mes: 'Mes 3', etapa: 'Fase 3 — Empaquetado' },
+              12: { start: '2027-01-19', end: '2027-02-01', mes: 'Mes 4', etapa: 'Fase 4 — Pulido' },
+              13: { start: '2027-02-02', end: '2027-02-15', mes: 'Mes 4', etapa: 'Fase 4 — Pulido' },
+              14: { start: '2027-02-16', end: '2027-03-01', mes: 'Mes 4', etapa: 'Fase 4 — Pulido' },
+            };
+
+            // Determine current sprint
+            const now = new Date();
+            let currentSprint = null;
+            for (const [num, data] of Object.entries(SPRINTS)) {
+              const start = new Date(data.start);
+              const end = new Date(data.end);
+              if (now >= start && now <= end) {
+                currentSprint = parseInt(num);
+                break;
+              }
+            }
+
+            // Allow manual override
+            const manualSprint = context.payload.inputs?.sprint;
+            if (manualSprint) {
+              currentSprint = parseInt(manualSprint);
+            }
+
+            if (!currentSprint) {
+              console.log('No active sprint found for current date. Use workflow_dispatch with sprint input.');
+              return;
+            }
+
+            const sprintData = SPRINTS[currentSprint];
+            console.log(`Current sprint: ${currentSprint} (${sprintData.start} to ${sprintData.end})`);
+
+            // Get all project items
+            const query = `
+              query($projectId: ID!, $cursor: String) {
+                node(id: $projectId) {
+                  ... on ProjectV2 {
+                    items(first: 100, after: $cursor) {
+                      pageInfo { hasNextPage endCursor }
+                      nodes {
+                        id
+                        content {
+                          ... on Issue { number title state repository { name } }
+                          ... on PullRequest { number title state }
+                        }
+                        fieldValues(first: 20) {
+                          nodes {
+                            ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2SingleSelectField { name } } }
+                            ... on ProjectV2ItemFieldNumberValue { number field { ... on ProjectV2FieldCommon { name } } }
+                            ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { name } } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            let allItems = [];
+            let cursor = null;
+            let hasNext = true;
+
+            while (hasNext) {
+              const result = await github.graphql(query, { projectId: PROJECT_ID, cursor });
+              const items = result.node.items;
+              allItems.push(...items.nodes);
+              hasNext = items.pageInfo.hasNextPage;
+              cursor = items.pageInfo.endCursor;
+            }
+
+            console.log(`Total project items: ${allItems.length}`);
+
+            // Filter issues in "Todo" status that belong to current sprint
+            const sprintIssues = allItems.filter(item => {
+              const content = item.content;
+              if (!content || content.state !== 'OPEN') return false;
+              if (content.__typename !== 'Issue') return false;
+
+              let status = null;
+              let sprint = null;
+              for (const fv of item.fieldValues.nodes) {
+                if (fv.field?.name === 'Status') status = fv.name;
+                if (fv.field?.name === 'Sprint') sprint = fv.number;
+              }
+              return status === 'Todo' && sprint === currentSprint;
+            });
+
+            console.log(`Issues in sprint ${currentSprint} with status Todo: ${sprintIssues.length}`);
+
+            // Get team members for assignment rotation
+            const teamMembers = ['VECTORG99', '4mnesia', 'D4n1sb4ld'];
+            let assigneeIndex = 0;
+
+            // Assign each issue to a team member (round-robin)
+            for (const item of sprintIssues) {
+              const issue = item.content;
+              const repo = issue.repository?.name || 'Yap';
+              const assignee = teamMembers[assigneeIndex % teamMembers.length];
+              assigneeIndex++;
+
+              try {
+                // Assign the issue
+                await github.rest.issues.addAssignees({
+                  owner: ORG,
+                  repo: repo,
+                  issue_number: issue.number,
+                  assignees: [assignee]
+                });
+                console.log(`  Assigned #${issue.number} (${repo}) to @${assignee}`);
+
+                // Set status to "In Progress"
+                await github.graphql(`
+                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                    updateProjectV2ItemFieldValue(input: {
+                      projectId: $projectId
+                      itemId: $itemId
+                      fieldId: $fieldId
+                      value: { singleSelectOptionId: $optionId }
+                    }) {
+                      projectV2Item { id }
+                    }
+                  }
+                `, {
+                  projectId: PROJECT_ID,
+                  itemId: item.id,
+                  fieldId: STATUS_FIELD,
+                  optionId: STATUS_IN_PROGRESS
+                });
+                console.log(`  Status → In Progress for #${issue.number}`);
+              } catch (e) {
+                console.log(`  Error assigning #${issue.number}: ${e.message}`);
+              }
+            }
+
+            // Generate sprint report
+            console.log('\n═══════════════════════════════════════════════');
+            console.log(`  SPRINT ${currentSprint} ASSIGNMENT REPORT`);
+            console.log(`  ${sprintData.start} → ${sprintData.end}`);
+            console.log(`  Etapa: ${sprintData.etapa}`);
+            console.log('═══════════════════════════════════════════════');
+            console.log(`  Issues assigned: ${sprintIssues.length}`);
+            console.log(`  Team members: ${teamMembers.join(', ')}`);
+            console.log('═══════════════════════════════════════════════');
+
+            // Create a summary issue in .github repo
+            const reportBody = [
+              `## Sprint ${currentSprint} — Auto-asignación semanal`,
+              ``,
+              `**Período:** ${sprintData.start} → ${sprintData.end}`,
+              `**Etapa:** ${sprintData.etapa}`,
+              `**Fecha de asignación:** ${now.toISOString()}`,
+              ``,
+              `### Issues asignados (${sprintIssues.length})`,
+              ``,
+              ...sprintIssues.map((item, i) => {
+                const issue = item.content;
+                const repo = issue.repository?.name || 'Yap';
+                const assignee = teamMembers[i % teamMembers.length];
+                return `- [ ] ${ORG}/${repo}#${issue.number} — ${issue.title} → @${assignee}`;
+              }),
+              ``,
+              `### Team rotation`,
+              ``,
+              ...teamMembers.map(m => `- @${m}: ${sprintIssues.filter((_, i) => teamMembers[i % teamMembers.length] === m).length} issues`),
+              ``,
+              `_Auto-generado por el workflow weekly-sprint-assignment_`,
+            ].join('\n');
+
+            try {
+              await github.rest.issues.create({
+                owner: ORG,
+                repo: '.github',
+                title: `sprint: Sprint ${currentSprint} assignment report — ${sprintData.start}`,
+                body: reportBody,
+                labels: ['sprint-report']
+              });
+              console.log('Sprint report issue created in .github repo');
+            } catch (e) {
+              console.log(`Could not create report issue: ${e.message}`);
+            }
