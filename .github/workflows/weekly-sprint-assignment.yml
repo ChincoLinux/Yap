@@ -1,14 +1,10 @@
-name: Weekly Sprint Assignment
+name: Weekly Issue Assignment
 
 "on":
   schedule:
     # Every Monday at 09:00 UTC (06:00 CLT)
     - cron: '0 9 * * 1'
   workflow_dispatch:
-    inputs:
-      sprint:
-        description: 'Sprint number to assign (defaults to current sprint)'
-        required: false
 
 permissions:
   contents: read
@@ -16,225 +12,129 @@ permissions:
   pull-requests: write
 
 jobs:
-  assign-sprint:
+  assign-issues:
     runs-on: ubuntu-latest
     steps:
-      - name: Assign issues to sprint and team
+      - name: Assign unassigned issues to team members
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.PROJECT_PAT }}
           script: |
-            const PROJECT_ID = 'PVT_kwDOEuDobM4BgZiD';
             const ORG = 'ChincoLinux';
+            const REPOS = ['Yap', 'ChincoLinux', '.github'];
+            const TEAM = ['VECTORG99', '4mnesia', 'D4n1sb4ld'];
 
-            // Field IDs
-            const STATUS_FIELD = 'PVTSSF_lADOEuDobM4BgZiDzharYh4';
-            const SPRINT_FIELD = 'PVTF_lADOEuDobM4BgZiDzharfRw';
-            const ETAPA_FIELD = 'PVTSSF_lADOEuDobM4BgZiDzharegU';
-            const FECHA_INICIO_FIELD = 'PVTF_lADOEuDobM4BgZiDzharfX8';
-            const FECHA_FIN_FIELD = 'PVTF_lADOEuDobM4BgZiDzharfe8';
-            const COMPLEJIDAD_FIELD = 'PVTSSF_lADOEuDobM4BgZiDzhargOk';
-            const ESFUERZO_FIELD = 'PVTF_lADOEuDobM4BgZiDzhargVM';
-            const MES_FIELD = 'PVTSSF_lADOEuDobM4BgZiDzhareZk';
+            let assigned = 0;
+            let assigneeIndex = 0;
+            const report = [];
 
-            // Status option IDs
-            const STATUS_TODO = 'f75ad846';
-            const STATUS_IN_PROGRESS = '47fc9ee4';
-            const STATUS_DONE = '98236657';
+            for (const repo of REPOS) {
+              console.log(`\n=== ${ORG}/${repo} ===`);
 
-            // Sprint definitions (from ROADMAP)
-            const SPRINTS = {
-              1:  { start: '2026-08-18', end: '2026-08-31', mes: 'Mes 1', etapa: 'Fase 1 — Fundaciones' },
-              2:  { start: '2026-09-01', end: '2026-09-14', mes: 'Mes 1', etapa: 'Fase 1 — Fundaciones' },
-              3:  { start: '2026-09-15', end: '2026-09-28', mes: 'Mes 1', etapa: 'Fase 1 — Fundaciones' },
-              4:  { start: '2026-09-29', end: '2026-10-12', mes: 'Mes 2', etapa: 'Fase 2 — Profesor' },
-              5:  { start: '2026-10-13', end: '2026-10-26', mes: 'Mes 2', etapa: 'Fase 2 — Profesor' },
-              6:  { start: '2026-10-27', end: '2026-11-09', mes: 'Mes 2', etapa: 'Fase 2 — Profesor' },
-              7:  { start: '2026-11-10', end: '2026-11-23', mes: 'Mes 3', etapa: 'Fase 3 — Empaquetado' },
-              8:  { start: '2026-11-24', end: '2026-12-07', mes: 'Mes 3', etapa: 'Fase 3 — Empaquetado' },
-              9:  { start: '2026-12-08', end: '2026-12-21', mes: 'Mes 3', etapa: 'Fase 3 — Empaquetado' },
-              10: { start: '2026-12-22', end: '2027-01-04', mes: 'Mes 3', etapa: 'Fase 3 — Empaquetado' },
-              11: { start: '2027-01-05', end: '2027-01-18', mes: 'Mes 3', etapa: 'Fase 3 — Empaquetado' },
-              12: { start: '2027-01-19', end: '2027-02-01', mes: 'Mes 4', etapa: 'Fase 4 — Pulido' },
-              13: { start: '2027-02-02', end: '2027-02-15', mes: 'Mes 4', etapa: 'Fase 4 — Pulido' },
-              14: { start: '2027-02-16', end: '2027-03-01', mes: 'Mes 4', etapa: 'Fase 4 — Pulido' },
-            };
+              // Get all open issues, paginated
+              let page = 1;
+              let hasMore = true;
 
-            // Determine current sprint
-            const now = new Date();
-            let currentSprint = null;
-            for (const [num, data] of Object.entries(SPRINTS)) {
-              const start = new Date(data.start);
-              const end = new Date(data.end);
-              if (now >= start && now <= end) {
-                currentSprint = parseInt(num);
-                break;
-              }
-            }
+              while (hasMore) {
+                let issues;
+                try {
+                  const res = await github.rest.issues.listForRepo({
+                    owner: ORG,
+                    repo: repo,
+                    state: 'open',
+                    per_page: 100,
+                    page: page,
+                  });
+                  issues = res.data;
+                  hasMore = issues.length === 100;
+                  page++;
+                } catch (e) {
+                  console.log(`  Error fetching issues from ${repo}: ${e.message}`);
+                  break;
+                }
 
-            // Allow manual override
-            const manualSprint = context.payload.inputs?.sprint;
-            if (manualSprint) {
-              currentSprint = parseInt(manualSprint);
-            }
+                for (const issue of issues) {
+                  // Skip PRs (they show up in issues API)
+                  if (issue.pull_request) continue;
 
-            if (!currentSprint) {
-              console.log('No active sprint found for current date. Use workflow_dispatch with sprint input.');
-              return;
-            }
+                  // Skip if already has assignees
+                  if (issue.assignees && issue.assignees.length > 0) {
+                    console.log(`  #${issue.number} already assigned to ${issue.assignees.map(a => '@' + a.login).join(', ')} — skip`);
+                    continue;
+                  }
 
-            const sprintData = SPRINTS[currentSprint];
-            console.log(`Current sprint: ${currentSprint} (${sprintData.start} to ${sprintData.end})`);
+                  // Skip sprint report issues and test issues
+                  if (issue.title.startsWith('sprint:') || issue.title.startsWith('test:')) continue;
 
-            // Get all project items
-            const query = `
-              query($projectId: ID!, $cursor: String) {
-                node(id: $projectId) {
-                  ... on ProjectV2 {
-                    items(first: 100, after: $cursor) {
-                      pageInfo { hasNextPage endCursor }
-                      nodes {
-                        id
-                        content {
-                          ... on Issue { number title state repository { name } }
-                          ... on PullRequest { number title state }
-                        }
-                        fieldValues(first: 20) {
-                          nodes {
-                            ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2SingleSelectField { name } } }
-                            ... on ProjectV2ItemFieldNumberValue { number field { ... on ProjectV2FieldCommon { name } } }
-                            ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { name } } }
-                          }
-                        }
-                      }
-                    }
+                  // Assign round-robin
+                  const assignee = TEAM[assigneeIndex % TEAM.length];
+                  assigneeIndex++;
+
+                  try {
+                    await github.rest.issues.addAssignees({
+                      owner: ORG,
+                      repo: repo,
+                      issue_number: issue.number,
+                      assignees: [assignee]
+                    });
+                    console.log(`  #${issue.number} "${issue.title.slice(0, 50)}" → @${assignee}`);
+                    report.push({ repo, number: issue.number, title: issue.title, assignee });
+                    assigned++;
+                  } catch (e) {
+                    console.log(`  Error assigning #${issue.number}: ${e.message}`);
                   }
                 }
               }
-            `;
-
-            let allItems = [];
-            let cursor = null;
-            let hasNext = true;
-
-            while (hasNext) {
-              const result = await github.graphql(query, { projectId: PROJECT_ID, cursor });
-              const items = result.node.items;
-              allItems.push(...items.nodes);
-              hasNext = items.pageInfo.hasNextPage;
-              cursor = items.pageInfo.endCursor;
             }
 
-            console.log(`Total project items: ${allItems.length}`);
+            // Summary
+            console.log('\n═══════════════════════════════════════════════');
+            console.log('  WEEKLY ASSIGNMENT REPORT');
+            console.log(`  ${new Date().toISOString()}`);
+            console.log('═══════════════════════════════════════════════');
+            console.log(`  Total assigned: ${assigned}`);
+            console.log(`  Team: ${TEAM.join(', ')}`);
+            console.log('═══════════════════════════════════════════════');
 
-            // Filter issues in "Todo" status that belong to current sprint
-            const sprintIssues = allItems.filter(item => {
-              const content = item.content;
-              if (!content || !content.number) return false;
-              // Only issues (PRs have state MERGED/CLOSED, issues have OPEN/CLOSED)
-              if (content.state !== 'OPEN') return false;
-              // Skip if it's a PR (PRs have merged_at or draft fields)
-              if (content.draft !== undefined) return false;
+            // Per-member summary
+            for (const member of TEAM) {
+              const count = report.filter(r => r.assignee === member).length;
+              console.log(`  @${member}: ${count} issues`);
+            }
 
-              let status = null;
-              let sprint = null;
-              for (const fv of item.fieldValues.nodes) {
-                if (fv.field?.name === 'Status') status = fv.name;
-                if (fv.field?.name === 'Sprint') sprint = fv.number;
-              }
-              return status === 'Todo' && parseInt(sprint) === currentSprint;
-            });
-
-            console.log(`Issues in sprint ${currentSprint} with status Todo: ${sprintIssues.length}`);
-
-            // Get team members for assignment rotation
-            const teamMembers = ['VECTORG99', '4mnesia', 'D4n1sb4ld'];
-            let assigneeIndex = 0;
-
-            // Assign each issue to a team member (round-robin)
-            for (const item of sprintIssues) {
-              const issue = item.content;
-              const repo = issue.repository?.name || 'Yap';
-              const assignee = teamMembers[assigneeIndex % teamMembers.length];
-              assigneeIndex++;
+            // Create report issue in .github
+            if (assigned > 0) {
+              const reportBody = [
+                `## Weekly Assignment Report — ${new Date().toISOString().split('T')[0]}`,
+                ``,
+                `**Issues assigned:** ${assigned}`,
+                `**Team:** ${TEAM.map(t => '@' + t).join(', ')}`,
+                ``,
+                `### Assignments`,
+                ``,
+                `| Repo | Issue | Asignado a |`,
+                `|------|-------|------------|`,
+                ...report.map(r => `| ${r.repo} | #${r.number} ${r.title.slice(0, 40)} | @${r.assignee} |`),
+                ``,
+                `### Per member`,
+                ``,
+                ...TEAM.map(m => `- @${m}: ${report.filter(r => r.assignee === m).length} issues`),
+                ``,
+                `_Auto-generado por weekly-issue-assignment_`,
+              ].join('\n');
 
               try {
-                // Assign the issue
-                await github.rest.issues.addAssignees({
+                await github.rest.issues.create({
                   owner: ORG,
-                  repo: repo,
-                  issue_number: issue.number,
-                  assignees: [assignee]
+                  repo: '.github',
+                  title: `sprint: Weekly assignment report — ${new Date().toISOString().split('T')[0]}`,
+                  body: reportBody,
+                  labels: ['sprint-report']
                 });
-                console.log(`  Assigned #${issue.number} (${repo}) to @${assignee}`);
-
-                // Set status to "In Progress"
-                await github.graphql(`
-                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-                    updateProjectV2ItemFieldValue(input: {
-                      projectId: $projectId
-                      itemId: $itemId
-                      fieldId: $fieldId
-                      value: { singleSelectOptionId: $optionId }
-                    }) {
-                      projectV2Item { id }
-                    }
-                  }
-                `, {
-                  projectId: PROJECT_ID,
-                  itemId: item.id,
-                  fieldId: STATUS_FIELD,
-                  optionId: STATUS_IN_PROGRESS
-                });
-                console.log(`  Status → In Progress for #${issue.number}`);
+                console.log('\nReport issue created in .github');
               } catch (e) {
-                console.log(`  Error assigning #${issue.number}: ${e.message}`);
+                console.log(`\nCould not create report: ${e.message}`);
               }
-            }
-
-            // Generate sprint report
-            console.log('\n═══════════════════════════════════════════════');
-            console.log(`  SPRINT ${currentSprint} ASSIGNMENT REPORT`);
-            console.log(`  ${sprintData.start} → ${sprintData.end}`);
-            console.log(`  Etapa: ${sprintData.etapa}`);
-            console.log('═══════════════════════════════════════════════');
-            console.log(`  Issues assigned: ${sprintIssues.length}`);
-            console.log(`  Team members: ${teamMembers.join(', ')}`);
-            console.log('═══════════════════════════════════════════════');
-
-            // Create a summary issue in .github repo
-            const reportBody = [
-              `## Sprint ${currentSprint} — Auto-asignación semanal`,
-              ``,
-              `**Período:** ${sprintData.start} → ${sprintData.end}`,
-              `**Etapa:** ${sprintData.etapa}`,
-              `**Fecha de asignación:** ${now.toISOString()}`,
-              ``,
-              `### Issues asignados (${sprintIssues.length})`,
-              ``,
-              ...sprintIssues.map((item, i) => {
-                const issue = item.content;
-                const repo = issue.repository?.name || 'Yap';
-                const assignee = teamMembers[i % teamMembers.length];
-                return `- [ ] ${ORG}/${repo}#${issue.number} — ${issue.title} → @${assignee}`;
-              }),
-              ``,
-              `### Team rotation`,
-              ``,
-              ...teamMembers.map(m => `- @${m}: ${sprintIssues.filter((_, i) => teamMembers[i % teamMembers.length] === m).length} issues`),
-              ``,
-              `_Auto-generado por el workflow weekly-sprint-assignment_`,
-            ].join('\n');
-
-            try {
-              await github.rest.issues.create({
-                owner: ORG,
-                repo: '.github',
-                title: `sprint: Sprint ${currentSprint} assignment report — ${sprintData.start}`,
-                body: reportBody,
-                labels: ['sprint-report']
-              });
-              console.log('Sprint report issue created in .github repo');
-            } catch (e) {
-              console.log(`Could not create report issue: ${e.message}`);
+            } else {
+              console.log('\nNo issues to assign — skipping report');
             }
