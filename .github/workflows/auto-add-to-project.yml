@@ -1,15 +1,10 @@
-name: Auto-add issues and PRs to Roadmap project
+name: Auto-add to Roadmap Project
 
-on:
+"on":
   issues:
     types: [opened, reopened]
   pull_request:
     types: [opened, reopened]
-  workflow_dispatch:
-    inputs:
-      issue-url:
-        description: 'Issue or PR URL to add to project'
-        required: false
 
 permissions:
   contents: read
