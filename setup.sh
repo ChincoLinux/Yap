@@ -228,8 +228,12 @@ sudo cp "$SCRIPT_DIR/cursos/"*.json "$CONFIG_DIR/cursos/" 2>/dev/null || true
 echo "  OK: cursos instalados en $CONFIG_DIR/cursos/"
 # ── Agente opencode ──────────────────────────────────────────
 sudo mkdir -p "$CONFIG_DIR/agent"
-sudo cp "$SCRIPT_DIR/yap-agent.md" "$CONFIG_DIR/agent/yap.md"
-echo "  OK: agente Yap instalado en $CONFIG_DIR/agent/"
+if [ -f "$SCRIPT_DIR/yap-agent.md" ]; then
+  sudo cp "$SCRIPT_DIR/yap-agent.md" "$CONFIG_DIR/agent/yap.md"
+  echo "  OK: agente Yap instalado en $CONFIG_DIR/agent/"
+else
+  echo "  • yap-agent.md no existe en el repo — saltando copia (no es error)"
+fi
 sudo cp "$SCRIPT_DIR/yap.py" "$YAP_DIR/yap.py"
 sudo chmod +x "$YAP_DIR/yap.py"
 sudo ln -sf "$SCRIPT_DIR/yap.py" "$BIN_DIR/yap"
