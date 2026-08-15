@@ -1,0 +1,101 @@
+name: Fallback auto-merge
+
+"on":
+  check_run:
+    types: [completed]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+jobs:
+  fallback-merge:
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'pull_request_review' && github.event.review.state == 'approved') ||
+      (github.event_name == 'check_run' && github.event.check_run.conclusion == 'success')
+    steps:
+      - name: Check and merge eligible PRs
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_PAT }}
+          script: |
+            // Get all open PRs targeting main
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              base: 'main'
+            });
+
+            for (const pr of prs) {
+              console.log(`\nChecking PR #${pr.number}: ${pr.title}`);
+
+              // Skip draft PRs
+              if (pr.draft) {
+                console.log(`  Draft — skip`);
+                continue;
+              }
+
+              // Check if already has auto-merge enabled
+              if (pr.auto_merge) {
+                console.log(`  Auto-merge already enabled (native) — skip`);
+                continue;
+              }
+
+              // Get review status
+              const { data: reviews } = await github.rest.pulls.listReviews({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number
+              });
+
+              const approvals = reviews.filter(r => r.state === 'APPROVED');
+              const hasApproval = approvals.length > 0;
+              console.log(`  Approvals: ${approvals.length}`);
+
+              if (!hasApproval) {
+                console.log(`  No approvals — skip`);
+                continue;
+              }
+
+              // Check CI status
+              const { data: checkRuns } = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: pr.head.sha
+              });
+
+              const checks = checkRuns.filter(c => c.name !== 'Fallback auto-merge');
+              const allPassed = checks.length > 0 && checks.every(c => c.conclusion === 'success');
+              const pending = checks.some(c => c.conclusion === null || c.status !== 'completed');
+
+              console.log(`  Checks: ${checks.length} total, allPassed=${allPassed}, pending=${pending}`);
+
+              if (pending) {
+                console.log(`  Checks still running — skip`);
+                continue;
+              }
+
+              if (!allPassed) {
+                console.log(`  Checks failed — skip`);
+                continue;
+              }
+
+              // All conditions met — merge
+              console.log(`  All checks passed + approved — merging!`);
+              try {
+                await github.rest.pulls.merge({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  merge_method: 'squash'
+                });
+                console.log(`  ✓ PR #${pr.number} merged (squash)`);
+              } catch (e) {
+                console.log(`  Merge failed: ${e.message}`);
+              }
+            }

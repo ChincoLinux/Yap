@@ -1,0 +1,52 @@
+name: Auto-merge on approval
+
+"on":
+  pull_request:
+    types: [review_requested, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.base.ref == 'main'
+    steps:
+      - name: Enable auto-merge (squash) on PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_PAT }}
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) return;
+
+            console.log(`PR #${pr.number}: ${pr.title}`);
+            console.log(`  Base: ${pr.base.ref}`);
+            console.log(`  Mergeable state: ${pr.mergeable_state}`);
+
+            // Enable auto-merge with squash
+            try {
+              await github.graphql(`
+                mutation($pullRequestId: ID!) {
+                  enablePullRequestAutoMerge(input: {
+                    pullRequestId: $pullRequestId
+                    mergeMethod: SQUASH
+                  }) {
+                    pullRequest {
+                      number
+                      autoMergeRequest { enabledAt mergeMethod }
+                    }
+                  }
+                }
+              `, { pullRequestId: pr.node_id });
+              console.log(`  Auto-merge enabled (squash) on PR #${pr.number}`);
+            } catch (e) {
+              if (e.message.includes('ALREADY_ENABLED')) {
+                console.log(`  Auto-merge already enabled on PR #${pr.number}`);
+              } else {
+                console.log(`  Could not enable auto-merge: ${e.message}`);
+              }
+            }
