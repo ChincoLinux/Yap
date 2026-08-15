@@ -7,48 +7,139 @@ name: Auto-release on merge to main
 
 permissions:
   contents: write
-  pull-requests: read
+  pull-requests: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Only run when PR is merged (not just closed)
     if: github.event.pull_request.merged == true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.PROJECT_PAT }}
 
-      - name: Read version
-        id: version
+      - name: Read current version
+        id: current
         run: |
           VERSION=$(cat VERSION 2>/dev/null | tr -d '[:space:]')
           if [ -z "$VERSION" ]; then
-            VERSION="1.0.0"
+            VERSION="0.1.0"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
+          echo "Current version: $VERSION"
 
-      - name: Check if tag exists
+      - name: Check if tag exists for current version
         id: check_tag
         run: |
-          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+          if git rev-parse "v${{ steps.current.outputs.version }}" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Tag v${{ steps.version.outputs.version }} already exists"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Tag v${{ steps.version.outputs.version }} does not exist — will create"
           fi
 
-      - name: Create release
-        if: steps.check_tag.outputs.exists == 'false'
+      - name: Determine release version
+        id: release
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          TAG_EXISTS="${{ steps.check_tag.outputs.exists }}"
+
+          if [ "$TAG_EXISTS" = "true" ]; then
+            MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+            MINOR=$(echo "$CURRENT" | cut -d. -f2)
+            PATCH=$(echo "$CURRENT" | cut -d. -f3 | cut -d- -f1)
+            NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+            echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "Bumped: $CURRENT → $NEW_VERSION (tag existed)"
+          else
+            echo "version=$CURRENT" >> $GITHUB_OUTPUT
+            echo "Releasing: $CURRENT"
+          fi
+
+      - name: Update CHANGELOG
+        run: |
+          RELEASE_VERSION="${{ steps.release.outputs.version }}"
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          DATE=$(date +%Y-%m-%d)
+
+          TYPE=$(echo "$PR_TITLE" | grep -oP '^[a-z]+' | head -1 || echo "chore")
+          case "$TYPE" in
+            feat) SECTION="Added" ;;
+            fix) SECTION="Fixed" ;;
+            *) SECTION="Changed" ;;
+          esac
+
+          export RELEASE_VERSION PR_TITLE PR_NUMBER SECTION DATE
+
+          python3 << 'PYEOF'
+          import re
+
+          release_version = os.environ.get('RELEASE_VERSION', '0.0.0')
+          pr_title = os.environ.get('PR_TITLE', 'unknown')
+          pr_number = os.environ.get('PR_NUMBER', '0')
+          section = os.environ.get('SECTION', 'Changed')
+          date_str = os.environ.get('DATE', '2026-01-01')
+          entry = f"- {pr_title} (#{pr_number})"
+
+          try:
+              with open('CHANGELOG.md', 'r') as f:
+                  content = f.read()
+          except FileNotFoundError:
+              content = f"""# Changelog
+
+          All notable changes are documented in this file.
+          Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+          Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+
+          ## [Unreleased]
+
+          ### Added
+
+          ### Changed
+
+          ### Fixed
+
+          """
+
+          # Add entry to Unreleased section
+          unreleased_match = re.search(r'## \[Unreleased\]\n(.*?)(?=## \[)', content, re.DOTALL)
+          if unreleased_match:
+              unreleased_body = unreleased_match.group(1)
+              section_pattern = rf'(### {section}\n)((?:- .+\n)*)'
+              section_match = re.search(section_pattern, unreleased_body)
+              if section_match:
+                  new_section = section_match.group(1) + section_match.group(2) + entry + "\n"
+                  unreleased_body = unreleased_body.replace(section_match.group(0), new_section)
+              else:
+                  unreleased_body = unreleased_body + f"\n### {section}\n{entry}\n"
+
+              entries = unreleased_body.strip()
+              if entries:
+                  new_version_block = f"## [{release_version}] - {date_str}\n{entries}\n\n"
+                  empty_unreleased = "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Fixed\n\n"
+                  content = content.replace(unreleased_match.group(0), empty_unreleased)
+                  content = re.sub(
+                      r'(## \[Unreleased\].*?)(## \[)',
+                      r'\1' + new_version_block + r'\2',
+                      content,
+                      flags=re.DOTALL
+                  )
+
+          with open('CHANGELOG.md', 'w') as f:
+              f.write(content)
+
+          print(f"CHANGELOG updated with v{release_version}")
+          PYEOF
+
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: v${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.release.outputs.version }}
+          name: v${{ steps.release.outputs.version }}
           body: |
-            ## Release v${{ steps.version.outputs.version }}
+            ## Release v${{ steps.release.outputs.version }}
 
             ### PR merged
             ${{ github.event.pull_request.title }} (#${{ github.event.pull_request.number }})
@@ -56,32 +147,29 @@ jobs:
             ### Changes
             ${{ github.event.pull_request.body }}
 
+            ### Changelog
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for full details.
+
             ---
             _Auto-generated by auto-release workflow_
           draft: false
-          prerelease: ${{ contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'rc') }}
+          prerelease: ${{ contains(steps.release.outputs.version, 'beta') || contains(steps.release.outputs.version, 'rc') || contains(steps.release.outputs.version, 'alpha') }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PROJECT_PAT }}
 
-      - name: Bump patch version
-        if: steps.check_tag.outputs.exists == 'false'
+      - name: Bump version for next release
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          # Parse semver: MAJOR.MINOR.PATCH
-          MAJOR=$(echo "$VERSION" | cut -d. -f1)
-          MINOR=$(echo "$VERSION" | cut -d. -f2)
-          PATCH=$(echo "$VERSION" | cut -d. -f3 | cut -d- -f1)
-          # Bump patch
-          NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-          echo "$NEW_VERSION" > VERSION
-          echo "Bumped version: $VERSION → $NEW_VERSION"
+          RELEASE_VERSION="${{ steps.release.outputs.version }}"
+          MAJOR=$(echo "$RELEASE_VERSION" | cut -d. -f1)
+          MINOR=$(echo "$RELEASE_VERSION" | cut -d. -f2)
+          PATCH=$(echo "$RELEASE_VERSION" | cut -d. -f3 | cut -d- -f1)
+          NEXT_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+          echo "$NEXT_VERSION" > VERSION
+          echo "Next version: $NEXT_VERSION"
 
-      - name: Commit version bump
-        if: steps.check_tag.outputs.exists == 'false'
-        run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add VERSION
-          git commit -m "chore: bump version to $(cat VERSION) [skip ci]"
-          git push
+          git add VERSION CHANGELOG.md
+          git commit -m "chore: release v${RELEASE_VERSION} + bump to v${NEXT_VERSION}"
+          git push origin main
+          echo "Pushed: v${RELEASE_VERSION} released, VERSION bumped to ${NEXT_VERSION}"
