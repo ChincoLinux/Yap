@@ -287,6 +287,105 @@ def listar_cursos():
 # ── Progreso del estudiante ─────────────────────────────────
 PROGRESS_FILE = os.path.expanduser("~/.config/yap/progress.json")
 
+# ── Historial persistente entre sesiones (#13) ──────────────
+HISTORY_FILE = os.path.expanduser("~/.config/yap/history.json")
+MAX_HISTORY_SESSIONS = 20  # Retener las últimas N sesiones
+
+
+def _save_history_session():
+    """Save the current session's conversation history atomically."""
+    if not HISTORY:
+        return
+    sessions = _load_history_sessions()
+    session = {
+        "timestamp": _now_iso(),
+        "turns": [{"user": u, "assistant": a} for u, a in HISTORY],
+    }
+    sessions.append(session)
+    # Trim to last N sessions
+    if len(sessions) > MAX_HISTORY_SESSIONS:
+        sessions = sessions[-MAX_HISTORY_SESSIONS:]
+    _write_history_file(sessions)
+
+
+def _load_history_sessions():
+    """Load all saved history sessions. Returns list of session dicts."""
+    if not os.path.exists(HISTORY_FILE):
+        return []
+    try:
+        with open(HISTORY_FILE) as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+        return []
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def _write_history_file(sessions):
+    """Write history sessions atomically."""
+    os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
+    tmp = HISTORY_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(sessions, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, HISTORY_FILE)
+
+
+def _now_iso():
+    """Return current timestamp in ISO 8601 format."""
+    from datetime import datetime
+    return datetime.now().isoformat()
+
+
+def cmd_historial(resume_last=False):
+    """Show conversation history from previous sessions.
+
+    If resume_last=True, loads the last session's context into HISTORY
+    so the user can continue the conversation.
+    """
+    sessions = _load_history_sessions()
+    if not sessions:
+        return display_box(
+            "No hay historial de sesiones anteriores.\n"
+            "Las conversaciones se guardan automáticamente al cerrar Yap.",
+            color="YELLOW"
+        )
+
+    if resume_last:
+        last = sessions[-1]
+        turns = last.get("turns", [])
+        if not turns:
+            return display_box("La última sesión no tiene conversación.", color="YELLOW")
+
+        # Load last session's context into HISTORY
+        HISTORY.clear()
+        for turn in turns[-MAX_HISTORY:]:
+            HISTORY.append((turn.get("user", ""), turn.get("assistant", "")))
+
+        ts = last.get("timestamp", "?")
+        return display_box(
+            f"Contexto restaurado desde sesión del {ts}.\n"
+            f"Se cargaron {len(HISTORY)} turnos de conversación.\n"
+            f"Ahora puedes continuar la conversación con ese contexto.",
+            color="GREEN"
+        )
+
+    # Show summary of all sessions
+    lines = [display_header("Historial de Sesiones")]
+    for i, session in enumerate(sessions, 1):
+        ts = session.get("timestamp", "?")
+        turns = session.get("turns", [])
+        if turns:
+            first_q = turns[0].get("user", "")[:50]
+            lines.append(f"\n  {C['BOLD']}{C['CYAN']}Sesión {i}{C['RESET']} — {ts}")
+            lines.append(f"    {C['GRAY']}Turnos: {len(turns)} | Primera: \"{first_q}...\"{C['RESET']}")
+        else:
+            lines.append(f"\n  {C['GRAY']}Sesión {i} — {ts} (vacía){C['RESET']}")
+
+    lines.append(f"\n  {C['GRAY']}Para retomar la última sesión: yap historial --ultimo{C['RESET']}")
+    lines.append(f"  {C['GRAY']}Historial guardado en: {HISTORY_FILE}{C['RESET']}")
+    return "\n".join(lines)
+
 def cargar_progreso():
     """Load student progress. Returns default empty dict if no file."""
     path = PROGRESS_FILE
@@ -864,6 +963,10 @@ def interpret(user_input):
         return "guia", "guia"
     if stripped in ("progreso", "avance", "mi progreso", "mi avance", "avance curso"):
         return "progreso", "progreso"
+    if stripped == "historial" or stripped == "historial --ultimo":
+        if "--ultimo" in stripped:
+            return "historial", "--ultimo"
+        return "historial", "historial"
     if stripped in ("ayuda", "help", "--help", "-h", "comandos", "ayuda yap"):
         return "help", "ayuda"
     if stripped in ("salir", "exit", "quit", "q"):
@@ -900,6 +1003,9 @@ def main():
         except ImportError:
             pass  # windows — sin historial persistente, funciona igual
 
+        # Guardar historial de conversación al cerrar (#13)
+        atexit.register(_save_history_session)
+
         sys.stdout.write(render_art(CHINCO_ART, C['CYAN']) + "\n")
         sys.stdout.write(f"  {C['GRAY']}{'─' * 50}{C['RESET']}\n")
         sys.stdout.write(display_menu("Comandos", [
@@ -908,6 +1014,8 @@ def main():
             "Busca [tema] — buscar en Wikipedia",
             "Tutor PSeInt — preguntas de programacion",
             "Curso FPY1101 — plan de estudio",
+            "Historial — ver sesiones anteriores",
+            "Historial --ultimo — retomar ultima sesion",
             "Ayuda — lista de comandos",
             "Salir — Ctrl+C o 'salir'",
         ]))
@@ -1009,6 +1117,10 @@ def handle_action(action, param, original_input):
     elif action == "progreso":
         print(cmd_mostrar_progreso())
 
+    elif action == "historial":
+        resume = param == "--ultimo"
+        print(cmd_historial(resume_last=resume))
+
     elif action == "help":
         print()
         print("  Preguntar:     Cualquier pregunta directa al AI")
@@ -1018,6 +1130,8 @@ def handle_action(action, param, original_input):
         print("  Introduccion:  'Quiero aprender PSeInt' — tutorial interactivo")
         print("  Curso:         'curso FPY1101' — acceder al plan de estudio")
         print("  Iniciar EA:    'iniciar EA1' — comenzar experiencia de aprendizaje")
+        print("  Historial:     'historial' — ver sesiones anteriores")
+        print("  Retomar:       'historial --ultimo' — continuar última sesión")
         print()
 
     else:
