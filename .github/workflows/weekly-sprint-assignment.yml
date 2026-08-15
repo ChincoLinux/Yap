@@ -55,7 +55,7 @@ jobs:
                 for (const issue of issues) {
                   if (issue.pull_request) continue;
                   if (issue.assignees && issue.assignees.length > 0) continue;
-                  if (issue.title.startsWith('sprint:') || issue.title.startsWith('test:')) continue;
+                  if (issue.title.startsWith('sprint:')) continue;
 
                   const assignee = TEAM[assigneeIndex % TEAM.length];
                   assigneeIndex++;
