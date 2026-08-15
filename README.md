@@ -649,3 +649,4 @@ python3 tests/run_tests.py --vm --report
 ---
 
 > **Referencias**: [llama.cpp](https://github.com/ggerganov/llama.cpp) | [Llama 3.2](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-edge-mobile-devices/) | [GGUF format](https://github.com/ggerganov/ggml/blob/main/docs/gguf.md) | [Debian](https://www.debian.org/) | [VirtualBox](https://www.virtualbox.org/)
+<!-- test -->
