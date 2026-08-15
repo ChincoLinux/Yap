@@ -235,12 +235,20 @@ def cargar_ejercicios():
 
 def cargar_curso(codigo):
     """Load a course by code from CURSOS_DIR. Validates required keys."""
-    path = os.path.join(CURSOS_DIR, f"{codigo}.json")
+    # Security: sanitize codigo to prevent path traversal (../, .., etc.)
+    safe_codigo = os.path.basename(codigo)
+    if safe_codigo != codigo:
+        raise ValueError(f"Curso '{codigo}' contiene caracteres no permitidos")
+    path = os.path.join(CURSOS_DIR, f"{safe_codigo}.json")
+    # Security: verify the resolved path is within CURSOS_DIR
+    real_path = os.path.realpath(path)
+    if not real_path.startswith(os.path.realpath(CURSOS_DIR)):
+        raise ValueError(f"Curso '{codigo}' ruta fuera del directorio permitido")
     if not os.path.exists(path):
         raise FileNotFoundError(f"Curso '{codigo}' no encontrado en {CURSOS_DIR}")
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    _validar_curso(codigo, data)
+    _validar_curso(safe_codigo, data)
     return data
 
 
@@ -649,6 +657,9 @@ def cmd_open_app(app_name):
 def cmd_webfetch(url, feed_to_llm=False):
     domains = load_domain_whitelist(WHITELIST_WEB)
     parsed = urllib.parse.urlparse(url)
+    # Security: only allow http/https schemes (blocks file://, javascript:, etc.)
+    if parsed.scheme not in ("http", "https"):
+        return f"[ERROR] Scheme '{parsed.scheme}' no permitido. Solo http/https."
     domain = parsed.netloc.lower()
     if ":" in domain:
         domain = domain.split(":")[0]
