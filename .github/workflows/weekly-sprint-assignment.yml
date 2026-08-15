@@ -130,8 +130,11 @@ jobs:
             // Filter issues in "Todo" status that belong to current sprint
             const sprintIssues = allItems.filter(item => {
               const content = item.content;
-              if (!content || content.state !== 'OPEN') return false;
-              if (content.__typename !== 'Issue') return false;
+              if (!content || !content.number) return false;
+              // Only issues (PRs have state MERGED/CLOSED, issues have OPEN/CLOSED)
+              if (content.state !== 'OPEN') return false;
+              // Skip if it's a PR (PRs have merged_at or draft fields)
+              if (content.draft !== undefined) return false;
 
               let status = null;
               let sprint = null;
@@ -139,6 +142,7 @@ jobs:
                 if (fv.field?.name === 'Status') status = fv.name;
                 if (fv.field?.name === 'Sprint') sprint = fv.number;
               }
+              console.log(`  Checking #${content.number}: status=${status}, sprint=${sprint}, need=${currentSprint}`);
               return status === 'Todo' && parseInt(sprint) === currentSprint;
             });
 
