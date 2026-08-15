@@ -139,7 +139,7 @@ jobs:
                 if (fv.field?.name === 'Status') status = fv.name;
                 if (fv.field?.name === 'Sprint') sprint = fv.number;
               }
-              return status === 'Todo' && sprint === currentSprint;
+              return status === 'Todo' && parseInt(sprint) === currentSprint;
             });
 
             console.log(`Issues in sprint ${currentSprint} with status Todo: ${sprintIssues.length}`);
