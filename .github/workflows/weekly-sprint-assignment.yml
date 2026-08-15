@@ -142,7 +142,6 @@ jobs:
                 if (fv.field?.name === 'Status') status = fv.name;
                 if (fv.field?.name === 'Sprint') sprint = fv.number;
               }
-              console.log(`  Checking #${content.number}: status=${status}, sprint=${sprint}, need=${currentSprint}`);
               return status === 'Todo' && parseInt(sprint) === currentSprint;
             });
 
