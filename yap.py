@@ -1391,8 +1391,7 @@ def classify_intent(user_input):
         "webfetch (obtener URL), pseint (tutor PSeInt/programacion),\n"
         "introduccion_pseint (tutorial interactivo con ejercicios),\n"
         "curso (ver o iniciar curso), guia (tutorial interactivo),\n"
-        "progreso (ver avance), sesion (control de sesiones),\n"
-        "help (mostrar ayuda/opciones),\n"
+        "progreso (ver avance), help (mostrar ayuda/opciones),\n"
         "query (preguntar al AI).\n"
         "Ejemplo: 'abre firefox' -> open_app|firefox\n"
         "Ejemplo: 'busca quien es vegetta777 en wikipedia' -> search|vegetta777\n"
@@ -1411,9 +1410,6 @@ def classify_intent(user_input):
         "Ejemplo: 'guia' -> guia|guia\n"
         "Ejemplo: 'como usar yap' -> guia|guia\n"
         "Ejemplo: 'mi progreso' -> progreso|progreso\n"
-        "Ejemplo: 'nueva sesion' -> sesion|nueva\n"
-        "Ejemplo: 'pausar sesion' -> sesion|pausar\n"
-        "Ejemplo: 'que sesiones tengo' -> sesion|listar\n"
         "Ejemplo: 'avance' -> progreso|progreso\n"
         f"{EOT}"
         f"{HEADER}user{FOOTER}\n\n{user_input}{EOT}"
@@ -1441,6 +1437,9 @@ def classify_intent(user_input):
             action, param = out.split("|", 1)
             action = action.strip().lower()
             param = param.strip()
+            # ponytail: 'sesion' se acepta como accion valida, pero no se
+            # documenta en el prompt: interpret() la enruta por palabra clave
+            # antes del LLM, y alargar este prompt degrada al modelo 1B.
             if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "curso", "guia", "progreso", "sesion", "help", "query"):
                 return action, param
     except subprocess.TimeoutExpired:
