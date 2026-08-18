@@ -1,6 +1,6 @@
 # Yap — Roadmap
 
-**Última actualización:** 2026-08-14
+**Última actualización:** 2026-08-17
 
 ## Visión
 
@@ -16,7 +16,7 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 
 | # | Issue | Prioridad | Estado |
 |---|-------|-----------|--------|
-| 21 | Control de sesiones dentro del agente | P0 | Planeado |
+| 21 | Control de sesiones dentro del agente | P0 | Completado |
 | 22 | Explicación automática al abrir Yap (onboarding interactivo) | P0 | Planeado |
 | 23 | Sistema de evaluación automática con feedback del LLM | P1 | Planeado |
 | 24 | Perfil de estudiante (nombre, nivel, cursos activos, preferencias) | P1 | Planeado |
@@ -54,6 +54,17 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 | 38 | Telemetría local anónima — métricas de uso para mejorar el agente | P3 | Planeado |
 | 39 | Modo offline total — sin dependencia de red en ningún flujo | P1 | Planeado |
 | 40 | Benchmarks de rendimiento en hardware educativo real | P1 | Planeado |
+
+## Bugs detectados pendientes de revisión
+
+Hallazgos surgidos durante la validación de #21 en Debian 13 Trixie. Ninguno
+pertenece al alcance de ese issue y todos requieren un issue propio.
+
+| # | Descripción | Ubicación | Prioridad | Estado |
+|---|-------------|-----------|-----------|--------|
+| B1 | El `sed` que extrae el nombre del modelo desde `yap.py` no elimina el paréntesis de cierre de `os.environ.get(...)`. El nombre resultante queda como `Llama-3.2-1B-Instruct-Q4_K_M.gguf)` y la URL de descarga se construye inválida, por lo que la instalación aborta al descargar el modelo. | `setup.sh:142` | P0 | Por revisar |
+| B2 | `cmd_curso()` captura `FileNotFoundError`, `ValueError` y `JSONDecodeError`, pero no `PermissionError`. Un fichero de curso sin permisos de lectura produce una traza completa en pantalla en lugar de un mensaje de error controlado. | `yap.py:804` | P2 | Por revisar |
+| B3 | El menú del modo interactivo numera las entradas como `[1] [2] [3]`, lo que sugiere que son opciones seleccionables. Al escribir un número, el texto se envía al LLM como consulta en lugar de ejecutar la acción correspondiente. | `yap.py` — `display_menu()` | P2 | Por revisar |
 
 ## Prioridades globales
 
