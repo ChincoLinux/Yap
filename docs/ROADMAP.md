@@ -1,6 +1,6 @@
 # Yap — Roadmap
 
-**Última actualización:** 2026-08-14
+**Última actualización:** 2026-08-19
 
 ## Visión
 
@@ -51,9 +51,21 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 |---|-------|-----------|--------|
 | 36 | i18n — soporte multi-idioma (español, inglés, mapudungun) | P2 | Planeado |
 | 37 | Accesibilidad — lector de pantalla, alto contraste, fuentes grandes | P2 | Planeado |
-| 38 | Telemetría local anónima — métricas de uso para mejorar el agente | P3 | Planeado |
+| 38 | Telemetría local anónima — métricas de uso para mejorar el agente | P3 | Parcial (1) |
 | 39 | Modo offline total — sin dependencia de red en ningún flujo | P1 | Planeado |
 | 40 | Benchmarks de rendimiento en hardware educativo real | P1 | Planeado |
+
+### Notas
+
+**(1) #38 — entrega parcial.** Los criterios de aceptación del issue están
+cubiertos: `telemetry.json`, comando `telemetria`, exportación anónima opt-in,
+garantía de no transmisión y pruebas. Quedan pendientes dos de las métricas
+descritas en la propuesta, por depender de trabajo que aún no está en `main`:
+
+| Métrica pendiente | Depende de |
+|---|---|
+| Tiempo promedio por sesión | #21 — control de sesiones |
+| Actividades con más reprobaciones | #23 — evaluación automática |
 
 ## Prioridades globales
 
