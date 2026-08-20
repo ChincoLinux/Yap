@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Evaluación automática de actividades de EA con feedback del LLM (#23)
+- Tipos `respuesta_libre`, `codigo_pseint`, `opcion_multiple` y `completar` en el JSON del curso
+- `progress.json` guarda puntaje, intentos y fecha de aprobación; máximo 3 intentos por actividad
+- `yap progreso` muestra % completado, promedio, reprobadas y nota chilena (1.0-7.0)
 - Auto-asignación semanal de issues al equipo
 - Workflow de auto-merge cuando PR es aprobada y CI pasa
 - Protección de rama main (sin push directo, requiere approval)

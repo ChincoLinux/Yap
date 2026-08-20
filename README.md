@@ -402,19 +402,24 @@ Cada EA muestra:
 #### 8.6.3 Flujo de una sesion EA
 
 1. Inicias con `yap iniciar EA1`
-2. El sistema muestra la actividad actual con instrucciones detalladas
-3. **Enter** → avanzar a la siguiente actividad (guarda progreso automaticamente)
-4. **Cualquier texto** → preguntar al tutor IA (recibe contexto completo del curso)
+2. El sistema muestra la actividad actual con consignas, criterios y (si aplica) opciones
+3. Si la actividad tiene `tipo` de evaluacion, escribes tu respuesta. Yap la evalua:
+   - `respuesta_libre` / `completar` / `codigo_pseint` → el LLM local devuelve JSON con puntaje y feedback
+   - `opcion_multiple` → comparacion exacta, sin LLM
+4. Hasta **3 intentos** por actividad. Si repruebas puedes `saltar`. `pregunta ...` consulta al tutor sin gastar intento
 5. **abrir [app]** → lanzar herramienta (PSeInt, VS Code, Terminal, Navegador)
 6. **salir** → guardar progreso y salir
-7. Al completar todas las actividades, la EA se marca como ✓ completada
+7. Al completar la EA se calcula promedio 0-100 y **nota final 1.0-7.0** (escala chilena, 60% = 4.0)
+8. Actividades sin `tipo` conservan el flujo anterior: **Enter** marca como hecha
+
+La evaluacion ocurre dentro de la sesion activa: el contexto del curso, la EA y la conversacion reciente se envian al LLM para un feedback mas contextual.
 
 #### 8.6.4 Progreso y persistencia
 
-El progreso se guarda automaticamente en `~/.config/yap/progress.json`. Cada vez que completas una actividad, se escribe atomicamente al disco. Si el sistema se apaga, al volver retomas donde quedaste.
+El progreso se guarda automaticamente en `~/.config/yap/progress.json`. Cada intento guarda `puntaje`, `intentos` y `fecha_aprobacion`. Si el sistema se apaga, al volver retomas donde quedaste.
 
 ```bash
-yap mi progreso           # Ver estado de todos los cursos
+yap mi progreso           # % completado, promedio, reprobadas y nota
 ```
 
 #### 8.6.5 Agregar mas cursos
@@ -434,7 +439,8 @@ Estructura minima del JSON:
   "semanas": 18,
   "ras": [{"id": "RA1", "descripcion": "...", "indicadores": ["IL1.1"]}],
   "eas": [{"id": "EA1", "nombre": "...", "descripcion": "...", "horas": 30,
-           "actividades": [{"orden": 1, "nombre": "Act1", "descripcion": "..."}],
+           "actividades": [{"orden": 1, "nombre": "Act1", "descripcion": "...",
+             "tipo": "respuesta_libre", "criterios_evaluacion": ["..."]}],
            "evaluaciones": []}],
   "evaluaciones": []
 }
@@ -544,7 +550,7 @@ Las pruebas usan **`pytest`** con mocking de `subprocess`, `urllib` y `shutil` p
 
 ```bash
 pip install pytest             # Solo requiere pytest
-python3 -m pytest tests/ -v    # 81 pruebas
+python3 -m pytest tests/ -v    # 218 pruebas
 python3 tests/run_tests.py --report   # Reporte TXT con mapeo de requisitos
 ```
 
@@ -554,7 +560,7 @@ Cada `push` y `pull request` a `main`, `lowmem` o `ultra-lowmem` ejecuta automat
 
 | Job | Que hace |
 |---|---|
-| **unit-tests** | 81 pruebas en Python 3.12 + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
+| **unit-tests** | 218 pruebas en Python 3.12 + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
 | **branch-check** | Verifica que `MODEL_PATH` en cada rama apunte al modelo correcto |
 | **results** | Resumen del pipeline |
 
