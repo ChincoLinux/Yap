@@ -1,0 +1,50 @@
+{
+  "id": "HD-YAP-BRANCH-001",
+  "statement": "Cada cambio debe desarrollarse en rama fresca desde main/lowmem/ultra-lowmem, con commits Conventional Commits, y un PR atómico por cambio lógico.",
+  "level": "SHOULD",
+  "scope": {
+    "repositories": ["ChincoLinux/Yap"],
+    "tasks": ["feature", "fix", "refactor", "docs", "chore"],
+    "roles": ["contributor", "reviewer"],
+    "files": ["*"],
+    "tools": ["git", "github"],
+    "environments": ["development", "ci"]
+  },
+  "authority": {
+    "source": "repository",
+    "level": "repository"
+  },
+  "precedence": {
+    "authorityRank": 3,
+    "priority": 50,
+    "tieBreaker": "narrower-scope"
+  },
+  "rationale": "Historial limpio permite bisect, rollback y auditoría. Tres ramas de configuración (master/lowmem/ultra-lowmem) requieren claridad sobre qué rama afecta cada cambio.",
+  "exceptions": [
+    {
+      "condition": "hotfix crítico en producción",
+      "disposition": "requires-approval"
+    }
+  ],
+  "evidence": {
+    "requirements": [
+      "branch name matches ^(feat|fix|refactor|docs|chore)/.*",
+      "commit messages match Conventional Commits",
+      "single PR per logical change",
+      "no direct pushes to main/lowmem/ultra-lowmem"
+    ],
+    "retention": "repository-record"
+  },
+  "owner": {
+    "role": "maintainer",
+    "reviewer": "release-manager"
+  },
+  "review": {
+    "trigger": "cualquier PR abierto",
+    "dueOn": "2026-12-31"
+  },
+  "expiry": {
+    "expiresOn": "2027-06-30",
+    "action": "review"
+  }
+}
