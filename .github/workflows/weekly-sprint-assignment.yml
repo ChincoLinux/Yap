@@ -1,0 +1,122 @@
+name: Weekly Issue Assignment
+
+"on":
+  schedule:
+    # Every Monday at 09:00 UTC (06:00 CLT)
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  assign-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign unassigned issues to team members
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_PAT }}
+          script: |
+            const ORG = 'ChincoLinux';
+            const REPOS = ['Yap', 'ChincoLinux', '.github'];
+            const TEAM = ['VECTORG99', '4mnesia', 'D4n1sb4ld', 'martinkuruzg-hue'];
+
+            let assigned = 0;
+            let assigneeIndex = 0;
+            const report = [];
+
+            for (const repo of REPOS) {
+              console.log(`\n=== ${ORG}/${repo} ===`);
+
+              let page = 1;
+              let hasMore = true;
+
+              while (hasMore) {
+                let issues;
+                try {
+                  const res = await github.rest.issues.listForRepo({
+                    owner: ORG,
+                    repo: repo,
+                    state: 'open',
+                    per_page: 100,
+                    page: page,
+                  });
+                  issues = res.data;
+                  hasMore = issues.length === 100;
+                  page++;
+                } catch (e) {
+                  console.log(`  Error fetching issues from ${repo}: ${e.message}`);
+                  break;
+                }
+
+                for (const issue of issues) {
+                  if (issue.pull_request) continue;
+                  if (issue.assignees && issue.assignees.length > 0) continue;
+                  if (issue.title.startsWith('sprint:')) continue;
+
+                  const assignee = TEAM[assigneeIndex % TEAM.length];
+                  assigneeIndex++;
+
+                  try {
+                    await github.rest.issues.addAssignees({
+                      owner: ORG,
+                      repo: repo,
+                      issue_number: issue.number,
+                      assignees: [assignee]
+                    });
+                    console.log(`  #${issue.number} "${issue.title.slice(0, 50)}" → @${assignee}`);
+                    report.push({ repo, number: issue.number, title: issue.title, assignee });
+                    assigned++;
+                  } catch (e) {
+                    console.log(`  Error assigning #${issue.number}: ${e.message}`);
+                  }
+                }
+              }
+            }
+
+            console.log('\n═══════════════════════════════════════════════');
+            console.log('  WEEKLY ASSIGNMENT REPORT');
+            console.log(`  ${new Date().toISOString()}`);
+            console.log('═══════════════════════════════════════════════');
+            console.log(`  Total assigned: ${assigned}`);
+            console.log(`  Team: ${TEAM.join(', ')}`);
+            for (const member of TEAM) {
+              const count = report.filter(r => r.assignee === member).length;
+              console.log(`  @${member}: ${count} issues`);
+            }
+            console.log('═══════════════════════════════════════════════');
+
+            if (assigned > 0) {
+              const reportBody = [
+                `## Weekly Assignment Report — ${new Date().toISOString().split('T')[0]}`,
+                ``,
+                `**Issues assigned:** ${assigned}`,
+                `**Team:** ${TEAM.map(t => '@' + t).join(', ')}`,
+                ``,
+                `| Repo | Issue | Asignado a |`,
+                `|------|-------|------------|`,
+                ...report.map(r => `| ${r.repo} | #${r.number} ${r.title.slice(0, 40)} | @${r.assignee} |`),
+                ``,
+                ...TEAM.map(m => `- @${m}: ${report.filter(r => r.assignee === m).length} issues`),
+                ``,
+                `_Auto-generado por weekly-issue-assignment_`,
+              ].join('\n');
+
+              try {
+                await github.rest.issues.create({
+                  owner: ORG,
+                  repo: '.github',
+                  title: `sprint: Weekly assignment report — ${new Date().toISOString().split('T')[0]}`,
+                  body: reportBody,
+                  labels: ['sprint-report']
+                });
+                console.log('\nReport issue created in .github');
+              } catch (e) {
+                console.log(`\nCould not create report: ${e.message}`);
+              }
+            } else {
+              console.log('\nNo issues to assign — skipping report');
+            }
