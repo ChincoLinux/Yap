@@ -15,9 +15,15 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main, lowmem, ultra-lowmem]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review (optional, uses current PR if not specified)'
+        required: false
+        type: string
 
 concurrency:
-  group: pr-review-${{ github.event.pull_request.number }}
+  group: pr-review-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.run_id }}
   cancel-in-progress: false
 
 permissions:
@@ -29,7 +35,7 @@ jobs:
   review:
     name: "A-Dev Hardness Review"
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+    if: github.event.pull_request.draft == false || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout repositorio
@@ -47,7 +53,19 @@ jobs:
 
             // ─── Helpers ──────────────────────────────────────────
             const policyDir = '.github/adev/policies/';
-            const prNumber = context.payload.pull_request.number;
+
+            // Get PR number from either PR event or workflow_dispatch input
+            let prNumber;
+            if (github.event_name === 'workflow_dispatch') {
+              prNumber = parseInt(github.event.inputs.pr_number) || context.payload.pull_request?.number;
+            } else {
+              prNumber = context.payload.pull_request.number;
+            }
+
+            if (!prNumber) {
+              core.setFailed('No PR number available');
+              return;
+            }
 
             function readPolicies() {
               const policies = {};
@@ -87,10 +105,18 @@ jobs:
             }
 
             async function getCheckRuns() {
+              // Get the PR to find the head SHA
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+              const headSha = pr.head.sha;
+
               const { data } = await github.rest.checks.listForRef({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                ref: context.payload.pull_request.head.sha
+                ref: headSha
               });
               return data.check_runs;
             }
@@ -149,7 +175,13 @@ jobs:
 
             // ─── HD-YAP-BRANCH-001 (SHOULD) ────────────────────
             console.log('\n🌿 Evaluando HD-YAP-BRANCH-001 (SHOULD)...');
-            const branch = context.payload.pull_request.head.ref;
+            // Get PR to access branch info
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            const branch = pr.head.ref;
             const branchFail = !/^(feat|fix|refactor|docs|chore|test|ci)\//.test(branch);
             if (branchFail) {
               console.log(`⚠ Rama no sigue Conventional Commits: ${branch}`);
@@ -241,8 +273,28 @@ ${branchFail ? `⚠️ **HD-YAP-BRANCH-001 (SHOULD)** advisory: rama no sigue Co
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const prNumber = context.payload.pull_request.number;
+            // Get PR number from either PR event or workflow_dispatch input
+            let prNumber;
+            if (github.event_name === 'workflow_dispatch') {
+              prNumber = parseInt(github.event.inputs.pr_number) || context.payload.pull_request?.number;
+            } else {
+              prNumber = context.payload.pull_request.number;
+            }
+
+            if (!prNumber) {
+              console.log('No PR number available for auto-merge');
+              return;
+            }
+
             console.log(`PR #${prNumber} aprobado — habilitando auto-merge (squash)`);
+
+            // Get PR details to find node_id
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+
             try {
               await github.graphql(`
                 mutation($pullRequestId: ID!) {
@@ -256,7 +308,7 @@ ${branchFail ? `⚠️ **HD-YAP-BRANCH-001 (SHOULD)** advisory: rama no sigue Co
                     }
                   }
                 }
-              `, { pullRequestId: context.payload.pull_request.node_id });
+              `, { pullRequestId: pr.node_id });
               console.log(`  Auto-merge enabled on PR #${prNumber}`);
             } catch (e) {
               if (e.message.includes('ALREADY_ENABLED')) {
