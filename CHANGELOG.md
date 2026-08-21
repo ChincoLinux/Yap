@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Sistema de ejercicios interactivos con validación automática (#27): formato v2 de `ejercicios.conf`, 4 tipos, pistas de 3 niveles, `yap ejercicios`, progreso en `progress.json` e integración con EAs vía `ejercicio_id`
 - Auto-asignación semanal de issues al equipo
 - Workflow de auto-merge cuando PR es aprobada y CI pasa
 - Protección de rama main (sin push directo, requiere approval)
