@@ -1,13 +1,13 @@
 # Yap — Automated PR Review (A-Dev Hardness)
 #
-# Workflow que ejecuta el agente yap-reviewer para evaluar PRs contra
-# políticas Hardness locales (.github/adev/policies/*.json)
+# Workflow que evalúa PRs contra políticas Hardness locales
+# (.github/adev/policies/*.json) usando github-script.
 #
 # Decisiones:
 #   - Si todas las políticas MUST pasan → APPROVE
 #   - Si alguna política MUST falla → REQUEST_CHANGES
 #   - Si solo SHOULD falla → APPROVE + warning
-#   - Si PR modifica .github/adev/ → requires human review (no auto-decidir)
+#   - Si PR modifica .github/adev/ → requires human review
 
 name: PR Review (A-Dev)
 
@@ -15,8 +15,6 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main, lowmem, ultra-lowmem]
-  pull_request_review:
-    types: [submitted]
 
 concurrency:
   group: pr-review-${{ github.event.pull_request.number }}
@@ -28,9 +26,6 @@ permissions:
   checks: read
 
 jobs:
-  # ──────────────────────────────────────────────────────────────
-  # JOB 1: Cargar políticas y evaluar PR
-  # ──────────────────────────────────────────────────────────────
   review:
     name: "A-Dev Hardness Review"
     runs-on: ubuntu-latest
@@ -42,191 +37,231 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Configurar Python
-        uses: actions/setup-python@v5
+      - name: Cargar y evaluar políticas
+        uses: actions/github-script@v7
         with:
-          python-version: "3.12"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
 
-      - name: Instalar dependencias
-        run: pip install PyYAML
+            // ─── Helpers ──────────────────────────────────────────
+            const policyDir = '.github/adev/policies/';
+            const prNumber = context.payload.pull_request.number;
 
-      - name: Cargar políticas Hardness
-        id: policies
-        run: |
-          echo "═══════════════════════════════════════════════"
-          echo "  CARGANDO POLÍTICAS HARDNESS"
-          echo "═══════════════════════════════════════════════"
-          ls -la .github/adev/policies/ 2>/dev/null || {
-            echo "✗ No se encontraron políticas en .github/adev/policies/"
-            exit 1
-          }
-          echo "✓ Políticas cargadas:"
-          for f in .github/adev/policies/*.json; do
-            echo "  • $(basename $f)"
-          done
+            function readPolicies() {
+              const policies = {};
+              if (!fs.existsSync(policyDir)) {
+                core.setFailed(`No se encontró directorio de políticas: ${policyDir}`);
+                return policies;
+              }
+              const files = fs.readdirSync(policyDir).filter(f => f.endsWith('.json'));
+              for (const f of files) {
+                const content = fs.readFileSync(path.join(policyDir, f), 'utf8');
+                try {
+                  policies[f.replace('.json', '')] = JSON.parse(content);
+                } catch (e) {
+                  core.warning(`Error parsing ${f}: ${e.message}`);
+                }
+              }
+              return policies;
+            }
 
-      - name: Obtener diff del PR
-        id: diff
-        run: |
-          echo "═══════════════════════════════════════════════"
-          echo "  ANÁLISIS DE DIFF"
-          echo "═══════════════════════════════════════════════"
-          gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr_diff.txt
-          echo "Líneas en diff: $(wc -l < /tmp/pr_diff.txt)"
-          echo "Archivos modificados:"
-          gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' | tee /tmp/pr_files.txt
+            async function getDiff() {
+              const { data } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                mediaType: { format: 'diff' }
+              });
+              return data;
+            }
 
-          # Marcar si PR toca configuración meta (requiere revisión humana)
-          if grep -E '^\.github/adev/' /tmp/pr_files.txt; then
-            echo "META_CONFIG_TOUCHED=true" >> $GITHUB_ENV
-            echo "⚠ PR modifica .github/adev/ — requiere revisión humana"
-          else
-            echo "META_CONFIG_TOUCHED=false" >> $GITHUB_ENV
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            async function getFiles() {
+              const { data } = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+              return data.map(f => f.filename);
+            }
 
-      - name: Evaluar seguridad (HD-YAP-SEC-001)
-        id: security
-        run: |
-          echo "═══════════════════════════════════════════════"
-          echo "  EVALUACIÓN HD-YAP-SEC-001 (MUST)"
-          echo "═══════════════════════════════════════════════"
-          SEC_FAIL=0
+            async function getCheckRuns() {
+              const { data } = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: context.payload.pull_request.head.sha
+              });
+              return data.check_runs;
+            }
 
-          # Verificar patrones prohibidos en diff
-          for pattern in "shell=True" "eval(" "os.system("; do
-            if grep -n "$pattern" /tmp/pr_diff.txt; then
-              echo "✗ Encontrado '$pattern' en diff"
-              SEC_FAIL=1
-            else
-              echo "✓ Sin '$pattern'"
-            fi
-          done
+            // ─── Main ─────────────────────────────────────────────
+            console.log('═══════════════════════════════════════════════');
+            console.log('  YAP-REVIEWER: A-Dev Hardness Review');
+            console.log('═══════════════════════════════════════════════');
 
-          # Verificar imports peligrosos
-          for mod in "import socket" "import ctypes" "import pickle" "import base64"; do
-            if grep -n "$mod" /tmp/pr_diff.txt; then
-              echo "✗ Import peligroso '$mod' en diff"
-              SEC_FAIL=1
-            else
-              echo "✓ Sin '$mod'"
-            fi
-          done
+            const policies = readPolicies();
+            console.log(`Políticas cargadas: ${Object.keys(policies).join(', ')}`);
 
-          echo "SEC_RESULT=$SEC_FAIL" >> $GITHUB_ENV
+            const diff = await getDiff();
+            const files = await getFiles();
+            const checkRuns = await getCheckRuns();
 
-      - name: Evaluar tests CI (HD-YAP-TEST-001)
-        id: tests
-        run: |
-          echo "═══════════════════════════════════════════════"
-          echo "  EVALUACIÓN HD-YAP-TEST-001 (MUST)"
-          echo "═══════════════════════════════════════════════"
-          # Este job depende del job unit-tests del workflow test.yml
-          # Verificamos que CI está en curso / pasó
-          echo "Esperando resultado de CI (unit-tests)..."
-          # Nota: la decisión final se toma en el job 'decision' tras CI
+            console.log(`\nArchivos modificados (${files.length}):`);
+            files.forEach(f => console.log(`  • ${f}`));
 
-      - name: Evaluar disciplina de ramas (HD-YAP-BRANCH-001)
-        id: branch
-        run: |
-          echo "═══════════════════════════════════════════════"
-          echo "  EVALUACIÓN HD-YAP-BRANCH-001 (SHOULD)"
-          echo "═══════════════════════════════════════════════"
-          BRANCH="${{ github.event.pull_request.head.ref }}"
-          BRANCH_FAIL=0
-          if echo "$BRANCH" | grep -qE '^(feat|fix|refactor|docs|chore|test|ci)/'; then
-            echo "✓ Rama sigue convención: $BRANCH"
-          else
-            echo "⚠ Rama no sigue Conventional Commits: $BRANCH"
-            BRANCH_FAIL=1
-          fi
-          echo "BRANCH_RESULT=$BRANCH_FAIL" >> $GITHUB_ENV
+            // ─── Check: Meta config touched ──────────────────────
+            const metaConfigTouched = files.some(f => f.startsWith('.github/adev/'));
+            if (metaConfigTouched) {
+              console.log('\n⚠ PR modifica .github/adev/ — requiere revisión humana');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `🤖 **yap-reviewer**: Este PR modifica configuración A-Dev (${files.filter(f => f.startsWith('.github/adev/')).join(', ')}). Requiere revisión humana antes de merge. Políticas HD-YAP-* no auto-evaluadas.`
+              });
+              core.setOutput('decision', 'HUMAN_REVIEW');
+              return;
+            }
 
-  # ──────────────────────────────────────────────────────────────
-  # JOB 2: Decisión final (tras CI)
-  # ──────────────────────────────────────────────────────────────
-  decision:
-    name: "Decisión de revisión"
-    runs-on: ubuntu-latest
-    needs: [review]
-    if: always() && github.event.pull_request.draft == false
+            // ─── HD-YAP-SEC-001 (MUST) ─────────────────────────
+            console.log('\n🔒 Evaluando HD-YAP-SEC-001 (MUST)...');
+            const forbiddenPatterns = ['shell=True', 'eval(', 'os.system('];
+            const forbiddenImports = ['import socket', 'import ctypes', 'import pickle', 'import base64'];
+            let secFail = false;
 
-    steps:
-      - name: Esperar CI
-        uses: actions/checkout@v4
+            for (const pattern of forbiddenPatterns) {
+              if (diff.includes(pattern)) {
+                console.log(`✗ Encontrado '${pattern}' en diff`);
+                secFail = true;
+              } else {
+                console.log(`✓ Sin '${pattern}'`);
+              }
+            }
+            for (const mod of forbiddenImports) {
+              if (diff.includes(mod)) {
+                console.log(`✗ Import peligroso '${mod}' en diff`);
+                secFail = true;
+              } else {
+                console.log(`✓ Sin '${mod}'`);
+              }
+            }
 
-      - name: Verificar estado de CI
-        id: ci
-        run: |
-          echo "Verificando checks de CI..."
-          # El job 'review' ya evaluó security y branch.
-          # Aquí verificamos que unit-tests pasó.
-          # Si CI rojo → REQUEST_CHANGES independientemente de lo demás.
+            // ─── HD-YAP-BRANCH-001 (SHOULD) ────────────────────
+            console.log('\n🌿 Evaluando HD-YAP-BRANCH-001 (SHOULD)...');
+            const branch = context.payload.pull_request.head.ref;
+            const branchFail = !/^(feat|fix|refactor|docs|chore|test|ci)\//.test(branch);
+            if (branchFail) {
+              console.log(`⚠ Rama no sigue Conventional Commits: ${branch}`);
+            } else {
+              console.log(`✓ Rama sigue convención: ${branch}`);
+            }
 
-          # Placeholder: en implementación real, gh pr checks retorna estado
-          echo "CI_CHECK_PENDING=true" >> $GITHUB_ENV
+            // ─── HD-YAP-TEST-001 (MUST) ────────────────────────
+            console.log('\n🧪 Evaluando HD-YAP-TEST-001 (MUST)...');
+            const unitTests = checkRuns.find(c => c.name === 'Unit tests (49) - Python 3.12 (3.12)');
+            const branchCheck = checkRuns.find(c => c.name === 'Validacion de ramas');
+            const ciPassed = unitTests?.conclusion === 'success' && branchCheck?.conclusion === 'success';
+            const ciPending = !unitTests || !branchCheck || unitTests.status !== 'completed' || branchCheck.status !== 'completed';
 
-      - name: Publicar revisión
-        run: |
-          echo "═══════════════════════════════════════════════"
-          echo "  DECISIÓN YAP-REVIEWER"
-          echo "═══════════════════════════════════════════════"
+            if (ciPending) {
+              console.log('⏳ CI pendiente (unit-tests / branch-check)');
+            } else if (ciPassed) {
+              console.log('✓ CI verde (unit-tests + branch-check)');
+            } else {
+              console.log('✗ CI rojo');
+            }
 
-          if [ "$META_CONFIG_TOUCHED" = "true" ]; then
-            echo "→ REQUIRES HUMAN REVIEW (.github/adev/ modificado)"
-            gh pr comment ${{ github.event.pull_request.number }} --body "🤖 **yap-reviewer**: Este PR modifica configuración A-Dev ($(grep -E '^\.github/adev/' /tmp/pr_files.txt | tr '\n' ', ')). Requiere revisión humana antes de merge. Políticas HD-YAP-* no auto-evaluadas."
-          elif [ "$SEC_RESULT" = "1" ]; then
-            echo "→ REQUEST_CHANGES (seguridad)"
-            gh pr review ${{ github.event.pull_request.number }} --request-changes --body "🤖 **yap-reviewer** — REQUEST_CHANGES
+            // ─── Decisión ───────────────────────────────────────
+            let decision, body;
+
+            if (secFail) {
+              decision = 'REQUEST_CHANGES';
+              body = `🤖 **yap-reviewer** — REQUEST_CHANGES
 
 ❌ **HD-YAP-SEC-001 (MUST)** violada:
 - Patrón prohibido detectado en diff (shell=True / eval() / os.system() / import peligroso)
 - Ref: .github/adev/policies/HD-YAP-SEC-001.json
 
-**Fix requerido:** Eliminar patrones prohibidos. Usar subprocess.Popen([lista]) sin shell=True, shutil.which() para validación de binarios."
-          elif [ "$BRANCH_RESULT" = "1" ]; then
-            echo "→ APPROVE + WARNING (solo SHOULD)"
-            gh pr review ${{ github.event.pull_request.number }} --approve --body "🤖 **yap-reviewer** — APPROVE ⚠️
+**Fix requerido:** Eliminar patrones prohibidos. Usar \`subprocess.Popen([lista])\` sin \`shell=True\`, \`shutil.which()\` para validación de binarios.`;
+            } else if (ciPending) {
+              decision = 'APPROVE';
+              body = `🤖 **yap-reviewer** — APPROVE ✅
 
 ✅ **HD-YAP-SEC-001 (MUST)** pasa
-✅ **HD-YAP-TEST-001 (MUST)** pendiente de CI
+${branchFail ? `⚠️ **HD-YAP-BRANCH-001 (SHOULD)** advisory: rama no sigue Conventional Commits` : `✅ **HD-YAP-BRANCH-001 (SHOULD)** pasa`}
+
+⏳ **HD-YAP-TEST-001 (MUST)**: esperando CI (unit-tests). Si CI verde → auto-merge.`;
+            } else if (!ciPassed) {
+              decision = 'REQUEST_CHANGES';
+              body = `🤖 **yap-reviewer** — REQUEST_CHANGES
+
+❌ **HD-YAP-TEST-001 (MUST)** falló:
+- CI no pasó (unit-tests: ${unitTests?.conclusion || 'pending'}, branch-check: ${branchCheck?.conclusion || 'pending'})
+- Ref: .github/adev/policies/HD-YAP-TEST-001.json
+
+**Fix requerido:** Corregir tests fallidos y volver a ejecutar CI.`;
+            } else if (branchFail) {
+              decision = 'APPROVE';
+              body = `🤖 **yap-reviewer** — APPROVE ⚠️
+
+✅ **HD-YAP-SEC-001 (MUST)** pasa
+✅ **HD-YAP-TEST-001 (MUST)** pasa
 
 ⚠️ **HD-YAP-BRANCH-001 (SHOULD)** advisory:
 - Rama no sigue Conventional Commits (feat/fix/refactor/docs/chore/)
-- Considera renombrar para historial limpio."
-          else
-            echo "→ APPROVE (pendiente CI)"
-            gh pr review ${{ github.event.pull_request.number }} --approve --body "🤖 **yap-reviewer** — APPROVE ✅
+- Considera renombrar para historial limpio.`;
+            } else {
+              decision = 'APPROVE';
+              body = `🤖 **yap-reviewer** — APPROVE ✅
 
 ✅ **HD-YAP-SEC-001 (MUST)** pasa
+✅ **HD-YAP-TEST-001 (MUST)** pasa
 ✅ **HD-YAP-BRANCH-001 (SHOULD)** pasa
 
-⏳ **HD-YAP-TEST-001 (MUST)**: esperando CI (unit-tests). Si CI verde → auto-merge."
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SEC_RESULT: ${{ env.SEC_RESULT }}
-          BRANCH_RESULT: ${{ env.BRANCH_RESULT }}
-          META_CONFIG_TOUCHED: ${{ env.META_CONFIG_TOUCHED }}
+🎉 Todas las políticas A-Dev Hardness validadas. Auto-merge habilitado si branch protection lo permite.`;
+            }
 
-  # ──────────────────────────────────────────────────────────────
-  # JOB 3: Auto-merge si todo pasa
-  # ──────────────────────────────────────────────────────────────
-  auto-merge:
-    name: "Auto-merge (si aprobado + CI verde)"
-    runs-on: ubuntu-latest
-    needs: [decision]
-    if: always() && github.event.pull_request.draft == false
+            console.log(`\n📋 Decisión: ${decision}`);
 
-    steps:
-      - name: Auto-merge
-        run: |
-          echo "Verificando condiciones para auto-merge..."
-          # Solo si review aprobó y CI verde
-          # Implementación: gh pr merge --auto requiere branch protection
-          gh pr merge ${{ github.event.pull_request.number }} --auto --squash --delete-branch 2>&1 || {
-            echo "Auto-merge no disponible (branch protection o conflicto). Merge manual requerido."
-          }
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            // Submit review
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              event: decision === 'REQUEST_CHANGES' ? 'REQUEST_CHANGES' : 'APPROVE',
+              body
+            });
+
+            core.setOutput('decision', decision);
+
+      - name: Habilitar auto-merge si aprobado
+        if: steps.review.outputs.decision == 'APPROVE'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            console.log(`PR #${prNumber} aprobado — habilitando auto-merge (squash)`);
+            try {
+              await github.graphql(`
+                mutation($pullRequestId: ID!) {
+                  enablePullRequestAutoMerge(input: {
+                    pullRequestId: $pullRequestId
+                    mergeMethod: SQUASH
+                  }) {
+                    pullRequest {
+                      number
+                      autoMergeRequest { enabledAt mergeMethod }
+                    }
+                  }
+                }
+              `, { pullRequestId: context.payload.pull_request.node_id });
+              console.log(`  Auto-merge enabled on PR #${prNumber}`);
+            } catch (e) {
+              if (e.message.includes('ALREADY_ENABLED')) {
+                console.log(`  Auto-merge already enabled`);
+              } else {
+                console.log(`  Could not enable auto-merge: ${e.message}`);
+              }
+            }
