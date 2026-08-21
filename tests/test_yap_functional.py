@@ -306,8 +306,13 @@ class TestPSeIntConfig:
         with patch.object(yap, "PSEINT_EXERCISES", self.exercises_path):
             ej = yap.cargar_ejercicios()
         assert len(ej) == 2
-        assert ej[0] == ("Hola Mundo", "Escribe un programa", "")
-        assert ej[1] == ("Suma", "Suma dos numeros", "Paso 1; Paso 2")
+        assert ej[0]["titulo"] == "Hola Mundo"
+        assert ej[0]["enunciado"] == "Escribe un programa"
+        assert ej[0]["solucion"] == ""
+        assert ej[0]["formato"] == "v1"
+        assert ej[1]["titulo"] == "Suma"
+        assert ej[1]["enunciado"] == "Suma dos numeros"
+        assert ej[1]["solucion"] == "Paso 1; Paso 2"
 
     def test_cargar_ignora_comentarios(self):
         with open(self.exercises_path, "w") as f:

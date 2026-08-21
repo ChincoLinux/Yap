@@ -105,6 +105,10 @@
             "Menciona salida (o output)"
           ]
         }
+        {"orden": 1, "nombre": "Algoritmos y su relacion con la vida diaria", "descripcion": "Que es un algoritmo, componentes, relacion con hardware. Actividad: receta para un robot. Reflexion sobre que es y para que sirve un algoritmo.", "ejercicio_id": "que_es_algoritmo"},
+        {"orden": 2, "nombre": "Expresiones y estructuras de entrada y salida", "descripcion": "Entrada, proceso y salida. Diagramas de flujo con FreeDFD. Pseudocodigo con PSeInt. Variables, expresiones aritmeticas.", "ejercicio_id": "suma_dos_numeros"},
+        {"orden": 3, "nombre": "Tomando decisiones", "descripcion": "Estructuras de decision en pseudocodigo (Si-Entonces-Sino). Operadores logicos y relacionales. Sentencias de repeticion (Mientras, Repetir, Para). Actividad: carrera de obstaculos.", "ejercicio_id": "par_o_impar"},
+        {"orden": 4, "nombre": "Consolidando aprendizajes", "descripcion": "Resumen integrador de la EA1. Ejercicios de todos los contenidos. Desafio final: resolver un problema completo con pseudocodigo.", "ejercicio_id": "partes_algoritmo"}
       ],
       "evaluaciones": [
         {"nombre": "Eva For 1", "tipo": "formativa", "descripcion": "Input, output, variables y ciclos (2 ejercicios en PSeInt). Pregunta 1: entrada/salida, variables, operaciones matematicas, condicionales y ciclos basicos. Pregunta 2: condicionales complejas con AND/OR, ciclos avanzados.", "situacion": "Ejecucion practica"},
@@ -177,6 +181,11 @@
             "Incluye una opcion para salir"
           ]
         }
+        {"orden": 1, "nombre": "Hello World!", "descripcion": "Primer programa en Python. Conociendo el IDE Visual Studio Code. Estructuras base de Python: print(), comentarios, ejecucion."},
+        {"orden": 2, "nombre": "Estructuras de entrada y salida", "descripcion": "Variables y tipos de datos (int, float, str). input() y print(). Operaciones aritmeticas. Guia de ejercicios resueltos."},
+        {"orden": 3, "nombre": "Estructuras de decision en Python", "descripcion": "if, elif, else. Operadores logicos (and, or, not). Condicionales anidadas. Quiz formativo 1.", "ejercicio_id": "if_python"},
+        {"orden": 4, "nombre": "Estructuras de repeticion en Python", "descripcion": "while, for. Strings como secuencias. Quiz formativo 2."},
+        {"orden": 5, "nombre": "Resolviendo problemas con Python", "descripcion": "Construccion de menus interactivos. Integracion de todos los conceptos: variables, condicionales, ciclos, strings. Ejercicios integradores. Quiz formativo 3."}
       ],
       "evaluaciones": [
         {"nombre": "Eva For 2", "tipo": "formativa", "descripcion": "Entrada, salida, operaciones aritmeticas y condicionales. 2 ejercicios practicos en Python.", "situacion": "Ejecucion practica"},

@@ -27,6 +27,8 @@ Ver requisitos detallados en [README.md](README.md#61-requisitos-del-sistema).
 | `yap telemetria` | Resumen local de tu uso de Yap. |
 | `yap curso FPY1101` | Plan de estudio del curso. |
 | `yap iniciar EA1` | Comenzar una experiencia de aprendizaje. |
+| `yap ejercicios` | Practica evaluada con pistas y validacion automatica. |
+| `yap ejercicios lista` | Catalogo de ejercicios y estado. |
 | `yap <pregunta>` | Consulta directa al AI. |
 | `yap que es python` | Pregunta sobre programacion. |
 | `yap busca <tema>` | Buscar en Wikipedia y resumir con AI. |
@@ -144,9 +146,16 @@ No necesitas modificar el codigo — `listar_cursos()` descubre archivos por glo
 ```bash
 yap como hago un ciclo mientras   → Tutor PSeInt
 yap quiero aprender pseint         → Tutorial interactivo completo
+yap ejercicios lista               → Catalogo evaluable
+yap ejercicios                     → Practica con validacion y pistas
+yap ejercicios hola_mundo          → Un ejercicio
 ```
 
 El tutor responde con pseudocodigo paso a paso. El tutorial abre PSeInt y guia PDF con ejercicios asistidos por AI.
+
+La practica (`yap ejercicios`) es otro modo: el estudiante escribe la respuesta, Yap evalua (comparacion exacta o LLM) y ofrece pistas progresivas (3 niveles). El progreso queda en `~/.config/yap/progress.json` bajo `ejercicios`.
+
+Tipos: `codigo_pseint`, `respuesta_libre`, `opcion_multiple`, `completar`. `opcion_multiple` y `completar` no llaman al LLM. Comandos dentro de un ejercicio: respuesta, `pista`, `saltar`, `salir`.
 
 ## Busqueda en Wikipedia
 
