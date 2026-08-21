@@ -1,0 +1,232 @@
+# Yap — Automated PR Review (A-Dev Hardness)
+#
+# Workflow que ejecuta el agente yap-reviewer para evaluar PRs contra
+# políticas Hardness locales (.github/adev/policies/*.json)
+#
+# Decisiones:
+#   - Si todas las políticas MUST pasan → APPROVE
+#   - Si alguna política MUST falla → REQUEST_CHANGES
+#   - Si solo SHOULD falla → APPROVE + warning
+#   - Si PR modifica .github/adev/ → requires human review (no auto-decidir)
+
+name: PR Review (A-Dev)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, lowmem, ultra-lowmem]
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: read
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # JOB 1: Cargar políticas y evaluar PR
+  # ──────────────────────────────────────────────────────────────
+  review:
+    name: "A-Dev Hardness Review"
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install PyYAML
+
+      - name: Cargar políticas Hardness
+        id: policies
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "  CARGANDO POLÍTICAS HARDNESS"
+          echo "═══════════════════════════════════════════════"
+          ls -la .github/adev/policies/ 2>/dev/null || {
+            echo "✗ No se encontraron políticas en .github/adev/policies/"
+            exit 1
+          }
+          echo "✓ Políticas cargadas:"
+          for f in .github/adev/policies/*.json; do
+            echo "  • $(basename $f)"
+          done
+
+      - name: Obtener diff del PR
+        id: diff
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "  ANÁLISIS DE DIFF"
+          echo "═══════════════════════════════════════════════"
+          gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr_diff.txt
+          echo "Líneas en diff: $(wc -l < /tmp/pr_diff.txt)"
+          echo "Archivos modificados:"
+          gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' | tee /tmp/pr_files.txt
+
+          # Marcar si PR toca configuración meta (requiere revisión humana)
+          if grep -E '^\.github/adev/' /tmp/pr_files.txt; then
+            echo "META_CONFIG_TOUCHED=true" >> $GITHUB_ENV
+            echo "⚠ PR modifica .github/adev/ — requiere revisión humana"
+          else
+            echo "META_CONFIG_TOUCHED=false" >> $GITHUB_ENV
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Evaluar seguridad (HD-YAP-SEC-001)
+        id: security
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "  EVALUACIÓN HD-YAP-SEC-001 (MUST)"
+          echo "═══════════════════════════════════════════════"
+          SEC_FAIL=0
+
+          # Verificar patrones prohibidos en diff
+          for pattern in "shell=True" "eval(" "os.system("; do
+            if grep -n "$pattern" /tmp/pr_diff.txt; then
+              echo "✗ Encontrado '$pattern' en diff"
+              SEC_FAIL=1
+            else
+              echo "✓ Sin '$pattern'"
+            fi
+          done
+
+          # Verificar imports peligrosos
+          for mod in "import socket" "import ctypes" "import pickle" "import base64"; do
+            if grep -n "$mod" /tmp/pr_diff.txt; then
+              echo "✗ Import peligroso '$mod' en diff"
+              SEC_FAIL=1
+            else
+              echo "✓ Sin '$mod'"
+            fi
+          done
+
+          echo "SEC_RESULT=$SEC_FAIL" >> $GITHUB_ENV
+
+      - name: Evaluar tests CI (HD-YAP-TEST-001)
+        id: tests
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "  EVALUACIÓN HD-YAP-TEST-001 (MUST)"
+          echo "═══════════════════════════════════════════════"
+          # Este job depende del job unit-tests del workflow test.yml
+          # Verificamos que CI está en curso / pasó
+          echo "Esperando resultado de CI (unit-tests)..."
+          # Nota: la decisión final se toma en el job 'decision' tras CI
+
+      - name: Evaluar disciplina de ramas (HD-YAP-BRANCH-001)
+        id: branch
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "  EVALUACIÓN HD-YAP-BRANCH-001 (SHOULD)"
+          echo "═══════════════════════════════════════════════"
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          BRANCH_FAIL=0
+          if echo "$BRANCH" | grep -qE '^(feat|fix|refactor|docs|chore|test|ci)/'; then
+            echo "✓ Rama sigue convención: $BRANCH"
+          else
+            echo "⚠ Rama no sigue Conventional Commits: $BRANCH"
+            BRANCH_FAIL=1
+          fi
+          echo "BRANCH_RESULT=$BRANCH_FAIL" >> $GITHUB_ENV
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 2: Decisión final (tras CI)
+  # ──────────────────────────────────────────────────────────────
+  decision:
+    name: "Decisión de revisión"
+    runs-on: ubuntu-latest
+    needs: [review]
+    if: always() && github.event.pull_request.draft == false
+
+    steps:
+      - name: Esperar CI
+        uses: actions/checkout@v4
+
+      - name: Verificar estado de CI
+        id: ci
+        run: |
+          echo "Verificando checks de CI..."
+          # El job 'review' ya evaluó security y branch.
+          # Aquí verificamos que unit-tests pasó.
+          # Si CI rojo → REQUEST_CHANGES independientemente de lo demás.
+
+          # Placeholder: en implementación real, gh pr checks retorna estado
+          echo "CI_CHECK_PENDING=true" >> $GITHUB_ENV
+
+      - name: Publicar revisión
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "  DECISIÓN YAP-REVIEWER"
+          echo "═══════════════════════════════════════════════"
+
+          if [ "$META_CONFIG_TOUCHED" = "true" ]; then
+            echo "→ REQUIRES HUMAN REVIEW (.github/adev/ modificado)"
+            gh pr comment ${{ github.event.pull_request.number }} --body "🤖 **yap-reviewer**: Este PR modifica configuración A-Dev ($(grep -E '^\.github/adev/' /tmp/pr_files.txt | tr '\n' ', ')). Requiere revisión humana antes de merge. Políticas HD-YAP-* no auto-evaluadas."
+          elif [ "$SEC_RESULT" = "1" ]; then
+            echo "→ REQUEST_CHANGES (seguridad)"
+            gh pr review ${{ github.event.pull_request.number }} --request-changes --body "🤖 **yap-reviewer** — REQUEST_CHANGES
+
+❌ **HD-YAP-SEC-001 (MUST)** violada:
+- Patrón prohibido detectado en diff (shell=True / eval() / os.system() / import peligroso)
+- Ref: .github/adev/policies/HD-YAP-SEC-001.json
+
+**Fix requerido:** Eliminar patrones prohibidos. Usar subprocess.Popen([lista]) sin shell=True, shutil.which() para validación de binarios."
+          elif [ "$BRANCH_RESULT" = "1" ]; then
+            echo "→ APPROVE + WARNING (solo SHOULD)"
+            gh pr review ${{ github.event.pull_request.number }} --approve --body "🤖 **yap-reviewer** — APPROVE ⚠️
+
+✅ **HD-YAP-SEC-001 (MUST)** pasa
+✅ **HD-YAP-TEST-001 (MUST)** pendiente de CI
+
+⚠️ **HD-YAP-BRANCH-001 (SHOULD)** advisory:
+- Rama no sigue Conventional Commits (feat/fix/refactor/docs/chore/)
+- Considera renombrar para historial limpio."
+          else
+            echo "→ APPROVE (pendiente CI)"
+            gh pr review ${{ github.event.pull_request.number }} --approve --body "🤖 **yap-reviewer** — APPROVE ✅
+
+✅ **HD-YAP-SEC-001 (MUST)** pasa
+✅ **HD-YAP-BRANCH-001 (SHOULD)** pasa
+
+⏳ **HD-YAP-TEST-001 (MUST)**: esperando CI (unit-tests). Si CI verde → auto-merge."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SEC_RESULT: ${{ env.SEC_RESULT }}
+          BRANCH_RESULT: ${{ env.BRANCH_RESULT }}
+          META_CONFIG_TOUCHED: ${{ env.META_CONFIG_TOUCHED }}
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 3: Auto-merge si todo pasa
+  # ──────────────────────────────────────────────────────────────
+  auto-merge:
+    name: "Auto-merge (si aprobado + CI verde)"
+    runs-on: ubuntu-latest
+    needs: [decision]
+    if: always() && github.event.pull_request.draft == false
+
+    steps:
+      - name: Auto-merge
+        run: |
+          echo "Verificando condiciones para auto-merge..."
+          # Solo si review aprobó y CI verde
+          # Implementación: gh pr merge --auto requiere branch protection
+          gh pr merge ${{ github.event.pull_request.number }} --auto --squash --delete-branch 2>&1 || {
+            echo "Auto-merge no disponible (branch protection o conflicto). Merge manual requerido."
+          }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

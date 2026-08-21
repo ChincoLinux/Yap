@@ -1,0 +1,44 @@
+{
+  "id": "HD-YAP-TEST-001",
+  "statement": "Todos los 81 tests (25 seguridad + 56 funcional + 5 infra) deben pasar en CI antes de merge. Cero regresiones toleradas.",
+  "level": "MUST",
+  "scope": {
+    "repositories": ["ChincoLinux/Yap"],
+    "tasks": ["push", "pull_request", "merge"],
+    "roles": ["ci", "reviewer"],
+    "files": ["tests/*.py", ".github/workflows/test.yml"],
+    "tools": ["pytest", "github-actions"],
+    "environments": ["ci"]
+  },
+  "authority": {
+    "source": "repository",
+    "level": "repository"
+  },
+  "precedence": {
+    "authorityRank": 3,
+    "priority": 100,
+    "tieBreaker": "narrower-scope"
+  },
+  "rationale": "Yap es software educativo en entornos con recursos limitados. Un test roto = comportamiento no verificado = riesgo para estudiantes. La suite corre sin LLM/GPU/Internet (mocking total).",
+  "exceptions": [],
+  "evidence": {
+    "requirements": [
+      "unit-tests job success",
+      "branch-check job success",
+      "81/81 tests passed en logs"
+    ],
+    "retention": "repository-record"
+  },
+  "owner": {
+    "role": "maintainer",
+    "reviewer": "ci-engineer"
+  },
+  "review": {
+    "trigger": "cualquier cambio en tests/*, yap.py, o .github/workflows/test.yml",
+    "dueOn": "2026-12-31"
+  },
+  "expiry": {
+    "expiresOn": "2027-06-30",
+    "action": "review"
+  }
+}
