@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Control de sesiones dentro del agente (#21): crear, pausar, retomar, cerrar y
+  listar sesiones, con límite de 3 abiertas, prompt marcado con la sesión activa
+  y archivado en el historial al cerrar
 - Auto-asignación semanal de issues al equipo
 - Protección de rama main (sin push directo, sin bypass de admin)
 - A-Dev Hardness framework integration (políticas, skills, agentes, RAG)

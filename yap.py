@@ -394,6 +394,387 @@ def cmd_historial(resume_last=False):
     lines.append(f"  {C['GRAY']}Historial guardado en: {HISTORY_FILE}{C['RESET']}")
     return "\n".join(lines)
 
+# ── Control de sesiones (#21) ───────────────────────────────
+# Una sesion agrupa el contexto de trabajo: curso y EA asociados,
+# turnos de conversacion y estado. Permite pausar y reanudar
+# conservando dicho contexto. Al cerrarse se archiva en el historial (#13).
+
+SESSIONS_FILE = os.path.expanduser("~/.config/yap/sessions.json")
+MAX_OPEN_SESSIONS = int(os.environ.get("YAP_MAX_SESSIONS", "3"))
+
+ESTADO_ACTIVA = "activa"
+ESTADO_PAUSADA = "pausada"
+ESTADO_CERRADA = "cerrada"
+
+
+def _load_sessions():
+    """Load all sessions. Returns a list of session dicts."""
+    if not os.path.exists(SESSIONS_FILE):
+        return []
+    try:
+        with open(SESSIONS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+        return []
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def _write_sessions_file(sessions):
+    """Write sessions atomically to avoid corruption on power loss."""
+    os.makedirs(os.path.dirname(SESSIONS_FILE), exist_ok=True)
+    tmp = SESSIONS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(sessions, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, SESSIONS_FILE)  # atomic on Linux
+
+
+def _next_session_id(sessions):
+    """Return the next sequential session id."""
+    # ponytail: ids secuenciales, no uuid — la UX los muestra como 'S7'
+    return max((s.get("id", 0) for s in sessions), default=0) + 1
+
+
+def _sesiones_abiertas(sessions):
+    """Sessions that are not closed yet (activa or pausada)."""
+    return [s for s in sessions if s.get("estado") != ESTADO_CERRADA]
+
+
+def _sesion_activa(sessions):
+    """Return the currently active session dict, or None."""
+    for s in sessions:
+        if s.get("estado") == ESTADO_ACTIVA:
+            return s
+    return None
+
+
+def _turnos_desde_history():
+    """Snapshot the in-memory HISTORY as serializable turns."""
+    return [{"user": u, "assistant": a} for u, a in HISTORY]
+
+
+def _history_desde_turnos(turnos):
+    """Load stored turns back into the in-memory HISTORY."""
+    HISTORY.clear()
+    for turno in turnos[-MAX_HISTORY:]:
+        HISTORY.append((turno.get("user", ""), turno.get("assistant", "")))
+
+
+def _pausar(sesion):
+    """Mark a session as paused, capturing the live conversation context."""
+    sesion["estado"] = ESTADO_PAUSADA
+    sesion["turnos"] = _turnos_desde_history()
+    sesion["actualizada"] = _now_iso()
+
+
+def _archivar_en_historial(sesion):
+    """Append a closed session to history.json, reusing the #13 store."""
+    turnos = sesion.get("turnos", [])
+    if not turnos:
+        return
+    sesiones = _load_history_sessions()
+    sesiones.append({
+        "timestamp": sesion.get("actualizada") or _now_iso(),
+        "turns": turnos,
+    })
+    if len(sesiones) > MAX_HISTORY_SESSIONS:
+        sesiones = sesiones[-MAX_HISTORY_SESSIONS:]
+    _write_history_file(sesiones)
+
+
+# ── CRUD de sesiones ────────────────────────────────────────
+
+def sesion_nueva(curso=None, ea=None):
+    """Create a new session, pausing the active one if there is one.
+
+    Returns (sesion, None) on success, or (None, mensaje_error) when the
+    open-session limit is reached.
+    """
+    sessions = _load_sessions()
+    if len(_sesiones_abiertas(sessions)) >= MAX_OPEN_SESSIONS:
+        return None, (
+            f"Limite de {MAX_OPEN_SESSIONS} sesiones abiertas alcanzado.\n"
+            f"Cierra una con 'sesion cerrar' o retoma una con 'sesion retomar ID'."
+        )
+
+    activa = _sesion_activa(sessions)
+    if activa:
+        _pausar(activa)
+
+    nueva = {
+        "id": _next_session_id(sessions),
+        "inicio": _now_iso(),
+        "actualizada": _now_iso(),
+        "curso": curso,
+        "ea": ea,
+        "estado": ESTADO_ACTIVA,
+        "turnos": [],
+    }
+    sessions.append(nueva)
+    _write_sessions_file(sessions)
+    HISTORY.clear()
+    return nueva, None
+
+
+def sesion_pausar():
+    """Pause the active session. Returns it, or None if there is none."""
+    sessions = _load_sessions()
+    activa = _sesion_activa(sessions)
+    if not activa:
+        return None
+    _pausar(activa)
+    _write_sessions_file(sessions)
+    HISTORY.clear()
+    return activa
+
+
+def sesion_retomar(sid=None):
+    """Resume a paused session, loading its turns into HISTORY.
+
+    With no id, resumes the most recently paused session.
+    Returns (sesion, None) or (None, mensaje_error).
+    """
+    sessions = _load_sessions()
+    pausadas = [s for s in sessions if s.get("estado") == ESTADO_PAUSADA]
+    if not pausadas:
+        return None, "No hay sesiones pausadas que retomar."
+
+    if sid is None:
+        objetivo = pausadas[-1]
+    else:
+        objetivo = None
+        buscado = str(sid).lstrip("Ss#")
+        for s in pausadas:
+            if str(s.get("id")) == buscado:
+                objetivo = s
+                break
+        if objetivo is None:
+            ids = ", ".join(f"S{s.get('id')}" for s in pausadas)
+            return None, f"La sesion '{sid}' no esta pausada. Pausadas: {ids}"
+
+    activa = _sesion_activa(sessions)
+    if activa is not None and activa is not objetivo:
+        _pausar(activa)
+
+    objetivo["estado"] = ESTADO_ACTIVA
+    objetivo["actualizada"] = _now_iso()
+    _write_sessions_file(sessions)
+    _history_desde_turnos(objetivo.get("turnos", []))
+    return objetivo, None
+
+
+def sesion_cerrar():
+    """Close the active session and archive it in history.json (#13)."""
+    sessions = _load_sessions()
+    activa = _sesion_activa(sessions)
+    if not activa:
+        return None
+    activa["turnos"] = _turnos_desde_history()
+    activa["estado"] = ESTADO_CERRADA
+    activa["actualizada"] = _now_iso()
+    _write_sessions_file(sessions)
+    _archivar_en_historial(activa)
+    HISTORY.clear()
+    return activa
+
+
+def sesion_asociar(curso=None, ea=None):
+    """Attach a course/EA to the active session, opening one if needed.
+
+    Used by cmd_curso() and iniciar_ea() so that entering a course
+    implicitly starts a session. Returns the session, or None if the
+    open-session limit blocks it.
+    """
+    sessions = _load_sessions()
+    activa = _sesion_activa(sessions)
+    if activa is None:
+        nueva, err = sesion_nueva(curso=curso, ea=ea)
+        return nueva if err is None else None
+    if curso:
+        activa["curso"] = curso
+    if ea:
+        activa["ea"] = ea
+    activa["actualizada"] = _now_iso()
+    _write_sessions_file(sessions)
+    return activa
+
+
+# ── Presentacion de sesiones ────────────────────────────────
+
+def session_banner():
+    """Status line for the active session. Empty string when there is none."""
+    activa = _sesion_activa(_load_sessions())
+    if not activa:
+        return ""
+    partes = [f"Sesion: #{activa['id']} ({activa['estado']})"]
+    if activa.get("curso"):
+        partes.append(f"Curso: {activa['curso']}")
+    if activa.get("ea"):
+        partes.append(f"EA: {activa['ea']}")
+    return " | ".join(partes)
+
+
+def session_prompt():
+    """Interactive prompt, tagged with the active session id when there is one."""
+    activa = _sesion_activa(_load_sessions())
+    if activa:
+        return (f"{C['GREEN']}Chinco{C['RESET']} "
+                f"{C['GRAY']}[S{activa['id']}]{C['RESET']} > ")
+    return f"{C['GREEN']}Chinco{C['RESET']} > "
+
+
+def _linea_sesion(s):
+    """One-line summary of a session for the listing."""
+    marca = {
+        ESTADO_ACTIVA: f"{C['GREEN']}*{C['RESET']}",
+        ESTADO_PAUSADA: f"{C['YELLOW']}|{C['RESET']}",
+        ESTADO_CERRADA: f"{C['GRAY']}-{C['RESET']}",
+    }.get(s.get("estado"), " ")
+    detalle = []
+    if s.get("curso"):
+        detalle.append(s["curso"])
+    if s.get("ea"):
+        detalle.append(s["ea"])
+    detalle.append(f"{len(s.get('turnos', []))} turnos")
+    return (f"  {marca} {C['BOLD']}S{s.get('id')}{C['RESET']} "
+            f"[{s.get('estado', '?')}] — {' | '.join(detalle)}\n"
+            f"      {C['GRAY']}inicio: {s.get('inicio', '?')}{C['RESET']}")
+
+
+def _sesion_estado():
+    """Show the active session plus a summary of the paused ones."""
+    sessions = _load_sessions()
+    activa = _sesion_activa(sessions)
+    pausadas = [s for s in sessions if s.get("estado") == ESTADO_PAUSADA]
+
+    if not activa and not pausadas:
+        return display_box(
+            "No hay sesiones abiertas.\n"
+            "Inicia una con 'sesion nueva' o entrando a un curso.",
+            color="YELLOW")
+
+    lines = [display_header("Sesion")]
+    if activa:
+        lines.append(_linea_sesion(activa))
+    else:
+        lines.append(f"  {C['GRAY']}Sin sesion activa.{C['RESET']}")
+
+    if pausadas:
+        lines.append(f"\n  {C['BOLD']}Pausadas ({len(pausadas)}){C['RESET']}")
+        for s in pausadas:
+            lines.append(_linea_sesion(s))
+
+    abiertas = len(_sesiones_abiertas(sessions))
+    lines.append(f"\n  {C['GRAY']}Abiertas: {abiertas}/{MAX_OPEN_SESSIONS}"
+                 f" | Archivo: {SESSIONS_FILE}{C['RESET']}")
+    return "\n".join(lines)
+
+
+def _sesion_listar():
+    """List every session, whatever its state."""
+    sessions = _load_sessions()
+    if not sessions:
+        return display_box(
+            "No hay sesiones registradas.\n"
+            "Inicia una con 'sesion nueva'.",
+            color="YELLOW")
+
+    lines = [display_header("Sesiones")]
+    for s in sessions:
+        lines.append(_linea_sesion(s))
+    abiertas = len(_sesiones_abiertas(sessions))
+    lines.append(f"\n  {C['GRAY']}Total: {len(sessions)} | "
+                 f"Abiertas: {abiertas}/{MAX_OPEN_SESSIONS}{C['RESET']}")
+    return "\n".join(lines)
+
+
+AYUDA_SESION = (
+    "Subcomando no reconocido.\n\n"
+    "  sesion              - estado de la sesion activa\n"
+    "  sesion nueva        - iniciar una sesion limpia\n"
+    "  sesion pausar       - pausar y guardar el contexto\n"
+    "  sesion retomar [ID] - retomar una sesion pausada\n"
+    "  sesion cerrar       - cerrar y archivar en el historial\n"
+    "  sesion listar       - listar todas las sesiones"
+)
+
+
+def cmd_sesion(sub="", param=""):
+    """Dispatch a 'sesion' subcommand. Returns a display string."""
+    sub = (sub or "").strip().lower()
+    param = (param or "").strip()
+
+    if sub in ("", "estado"):
+        return _sesion_estado()
+
+    if sub in ("nueva", "nuevo", "new"):
+        nueva, err = sesion_nueva()
+        if err:
+            return display_box(err, color="YELLOW")
+        return display_box(
+            f"Sesion #{nueva['id']} iniciada.\n"
+            f"El contexto de conversacion empieza limpio.",
+            color="GREEN")
+
+    if sub in ("pausar", "pausa"):
+        s = sesion_pausar()
+        if not s:
+            return display_box("No hay ninguna sesion activa que pausar.", color="YELLOW")
+        return display_box(
+            f"Sesion #{s['id']} pausada con {len(s.get('turnos', []))} turnos guardados.\n"
+            f"Retomala con: yap sesion retomar {s['id']}",
+            color="GREEN")
+
+    if sub in ("retomar", "reanudar"):
+        s, err = sesion_retomar(param or None)
+        if err:
+            return display_box(err, color="YELLOW")
+        return display_box(
+            f"Sesion #{s['id']} retomada.\n"
+            f"Se cargaron {len(HISTORY)} turnos de contexto.",
+            color="GREEN")
+
+    if sub in ("cerrar", "cierra", "terminar"):
+        s = sesion_cerrar()
+        if not s:
+            return display_box("No hay ninguna sesion activa que cerrar.", color="YELLOW")
+        return display_box(
+            f"Sesion #{s['id']} cerrada y archivada en el historial.\n"
+            f"Consultala con: yap historial",
+            color="GREEN")
+
+    if sub in ("listar", "lista", "ls"):
+        return _sesion_listar()
+
+    return display_box(AYUDA_SESION, color="YELLOW")
+
+
+def _sesion_al_salir():
+    """On exit with an active session, ask whether to pause or close it."""
+    activa = _sesion_activa(_load_sessions())
+    if not activa:
+        return
+    # ponytail: sin TTY no se puede preguntar; pausar preserva el contexto
+    if not sys.stdin.isatty():
+        sesion_pausar()
+        return
+    try:
+        sys.stdout.write(
+            f"\n  {C['YELLOW']}Sesion #{activa['id']} activa. "
+            f"Pausar o cerrar? (p/C):{C['RESET']} ")
+        sys.stdout.flush()
+        resp = input().strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        resp = ""
+    if resp in ("p", "pausar", "pausa"):
+        sesion_pausar()
+        sys.stdout.write(f"  {C['GRAY']}Sesion #{activa['id']} pausada.{C['RESET']}\n")
+    else:
+        sesion_cerrar()
+        sys.stdout.write(f"  {C['GRAY']}Sesion #{activa['id']} cerrada y archivada.{C['RESET']}\n")
+
+
 def cargar_progreso():
     """Load student progress. Returns default empty dict if no file."""
     path = PROGRESS_FILE
@@ -425,6 +806,8 @@ def cmd_curso(codigo):
         return f"[ERROR] {e}"
     except (ValueError, json.JSONDecodeError) as e:
         return f"[ERROR] Curso corrupto: {e}"
+
+    sesion_asociar(curso=curso["codigo"])
 
     lines = [display_header(f"{curso['codigo']} — {curso['nombre']}")]
     lines.append(f"  Horas: {curso['horas']} | Semanas: {curso['semanas']}")
@@ -460,6 +843,8 @@ def iniciar_ea(curso_codigo, ea_id):
             break
     if not ea:
         return f"[ERROR] Experiencia '{ea_id}' no encontrada en {curso_codigo}"
+
+    sesion_asociar(curso=curso_codigo, ea=ea["id"])
 
     # Load progress and determine starting point
     progress = cargar_progreso()
@@ -1052,7 +1437,10 @@ def classify_intent(user_input):
             action, param = out.split("|", 1)
             action = action.strip().lower()
             param = param.strip()
-            if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "curso", "guia", "progreso", "help", "query"):
+            # ponytail: 'sesion' se acepta como accion valida, pero no se
+            # documenta en el prompt: interpret() la enruta por palabra clave
+            # antes del LLM, y alargar este prompt degrada al modelo 1B.
+            if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "curso", "guia", "progreso", "sesion", "help", "query"):
                 return action, param
     except subprocess.TimeoutExpired:
         pass
@@ -1072,6 +1460,10 @@ def interpret(user_input):
         if "--ultimo" in stripped:
             return "historial", "--ultimo"
         return "historial", "historial"
+    # sesion | sesion nueva | sesion retomar 3  -> ("sesion", "nueva 3")
+    if stripped in ("sesion", "sesión") or stripped.startswith(("sesion ", "sesión ")):
+        partes = stripped.split(" ", 1)
+        return "sesion", partes[1].strip() if len(partes) > 1 else ""
     if stripped in ("ayuda", "help", "--help", "-h", "comandos", "ayuda yap"):
         return "help", "ayuda"
     if stripped in ("--apparmor-status", "apparmor-status", "apparmor status"):
@@ -1123,14 +1515,19 @@ def main():
             "Curso FPY1101 — plan de estudio",
             "Historial — ver sesiones anteriores",
             "Historial --ultimo — retomar ultima sesion",
+            "Sesion — estado, pausar, retomar o cerrar sesion",
             "Ayuda — lista de comandos",
             "Salir — Ctrl+C o 'salir'",
         ]))
+        banner = session_banner()
+        if banner:
+            sys.stdout.write(f"  {C['CYAN']}{banner}{C['RESET']}\n")
         print()
         while True:
             try:
-                user_input = input(f"{C['GREEN']}Chinco{C['RESET']} > ").strip()
+                user_input = input(session_prompt()).strip()
             except (EOFError, KeyboardInterrupt):
+                _sesion_al_salir()
                 print(f"\n{C['YELLOW']}Chao{C['RESET']}")
                 sys.exit(0)
             if not user_input:
@@ -1228,6 +1625,12 @@ def handle_action(action, param, original_input):
         resume = param == "--ultimo"
         print(cmd_historial(resume_last=resume))
 
+    elif action == "sesion":
+        partes = param.split(" ", 1)
+        sub_cmd = partes[0] if partes else ""
+        arg = partes[1] if len(partes) > 1 else ""
+        print(cmd_sesion(sub_cmd, arg))
+
     elif action == "apparmor_status":
         print(cmd_apparmor_status())
 
@@ -1242,6 +1645,8 @@ def handle_action(action, param, original_input):
         print("  Iniciar EA:    'iniciar EA1' — comenzar experiencia de aprendizaje")
         print("  Historial:     'historial' — ver sesiones anteriores")
         print("  Retomar:       'historial --ultimo' — continuar última sesión")
+        print("  Sesion:        'sesion' — estado de la sesion activa")
+        print("                 'sesion nueva|pausar|retomar|cerrar|listar'")
         print()
 
     else:
