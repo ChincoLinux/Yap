@@ -343,6 +343,7 @@ yap Que es Debian?
 | **Guia rapida** | `yap guia` | Tutorial interactivo paso a paso de todas las funciones |
 | **Tutor PSeInt** | `yap como hago un ciclo mientras` | Consulta al tutor de programacion PSeInt. Responde paso a paso sin historial de conversacion. Contexto reducido (1024 tokens) para minimizar RAM |
 | **Tutorial PSeInt** | `yap quiero aprender pseint` | Inicia tutorial interactivo: abre PDF estatico, lanza PSeInt, guia paso a paso |
+| **Ejercicios** | `yap ejercicios` / `yap ejercicios lista` | Practica evaluada: 4 tipos, pistas progresivas, validacion exacta o LLM |
 | **Ver curso** | `yap curso FPY1101` | Muestra el plan completo: RAs, EAs, horas, ponderaciones |
 | **Iniciar EA** | `yap iniciar EA1` | Sesion guiada paso a paso por una experiencia de aprendizaje |
 | **Progreso** | `yap mi progreso` | Muestra el avance en todos los cursos activos |
@@ -361,12 +362,41 @@ La funcion **`classify_intent()`** utiliza el propio LLM para determinar la acci
 
 Al ejecutar `yap quiero aprender pseint` o seleccionar "Introduccion PSeInt" desde el menu de ayuda, el sistema ejecuta el siguiente flujo:
 
-1. **Carga de ejercicios**: `cargar_ejercicios()` lee `/etc/yap/pseint/ejercicios.conf` (formato `Titulo:Descripcion|GuiaSolucion`).
+1. **Carga de ejercicios**: `cargar_ejercicios()` lee `/etc/yap/pseint/ejercicios.conf` (bloques v2 `[id]` y lineas v1 `Titulo:Descripcion|GuiaSolucion`).
 2. **Apertura del PDF**: El sistema abre el archivo `guia_ejercicios.pdf` (pre-generado, instalado por `setup.sh` en `/etc/yap/pseint/`) que contiene los ejercicios y sus guias de resolucion paso a paso con formato profesional.
 3. **Apertura de PSeInt**: `cmd_open_app("pseint")` lanza el entorno PSeInt desde la whitelist.
 4. **Presentacion paso a paso**: El tutorial muestra cada paso de la guia uno por uno. El estudiante presiona Enter para avanzar.
 5. **Bucle de asistencia**: En cualquier momento, el estudiante puede escribir una pregunta. `cmd_pseint()` recibe el contexto completo: titulo del ejercicio, descripcion, guia de resolucion completa (todos los pasos) y el paso actual. Asi la IA responde con precision sobre exactamente donde esta atascado el estudiante.
 6. **Comandos**: `ayuda` (pista), `siguiente` (siguiente ejercicio), `salir` (terminar).
+
+### 8.5.1 Practica evaluada (`yap ejercicios`)
+
+Modo distinto al tutorial: el estudiante **escribe** la respuesta y Yap la evalua. La solucion permanece oculta.
+
+```bash
+yap ejercicios lista          # catalogo con estado
+yap ejercicios                # pendientes, con validacion
+yap ejercicios hola_mundo     # un ejercicio
+Chinco > ejercicios
+```
+
+Cada ejercicio v2 en `/etc/yap/pseint/ejercicios.conf` declara:
+
+| Campo | Uso |
+|---|---|
+| `tipo` | `codigo_pseint`, `respuesta_libre` (alias `respuesta_texto`), `opcion_multiple`, `completar` |
+| `enunciado` | Consigna visible |
+| `pista1` `pista2` `pista3` | Conceptual, parcial, casi solucion |
+| `solucion` / `criterio` | Referencia oculta y criterios |
+| `validacion` | `exacta` (sin LLM) o `llm` |
+
+- `opcion_multiple` y `completar` (con `solucion`) se comparan de forma exacta, sin LLM.
+- `codigo_pseint` y `respuesta_libre` usan el evaluador LLM (`evaluar_actividad` / `evaluar_ejercicio`).
+- Si la respuesta es incorrecta se ofrece `pista` (3 niveles). Hasta 3 intentos (`YAP_MAX_INTENTOS`).
+- El progreso se guarda en `progress.json` bajo `ejercicios.{id}`.
+- Una actividad de EA puede apuntar al catalogo con `"ejercicio_id": "hola_mundo"`.
+
+Las lineas v1 `Titulo:Descripcion|GuiaSolucion` siguen cargando para el tutorial; no son evaluables en `yap ejercicios`.
 
 ### 8.6 Sistema de Cursos
 
@@ -619,6 +649,7 @@ Pipeline definido en `.github/workflows/test.yml`.
 | **TestPSeIntTutor** | `test_cmd_pseint_respuesta_exitosa` | Tutor PSeInt devuelve guia paso a paso |
 | **TestArchitecture** | `test_*_existe` | Verifica que `main()`, `handle_action()`, `interpret()`, `load_whitelist()`, `load_domain_whitelist()`, `cmd_pseint()`, `cmd_intro_pseint()`, `cargar_ejercicios()`, `cargar_ejercicios()` existen y son callables |
 | **TestPSeIntConfig** | `test_cargar_ejercicios_*` | Carga de ejercicios desde archivo de configuracion PSeInt |
+| **test_yap_ejercicios** | `TestParserEjercicios`, `TestEvaluarEjercicio`, `TestPistas`, `TestFlujoEjercicio` | Parser v2, 4 tipos, pistas, CLI `yap ejercicios`, progress.json, hook EA |
 | **TestIntroduccionPSeInt** | `test_tutorial_*` | Tutorial interactivo: navegacion, ayuda, preguntas al tutor, finalizacion |
 
 ### 12.5 Mecanismo de pruebas
