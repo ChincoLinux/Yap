@@ -7,3 +7,8 @@ build/
 .slim/
 .opencode/
 yap-agent.md
+
+# Artefactos temporales de trabajo local
+commit-msg.txt
+.pytest_cache/
+resultado-*.txt
