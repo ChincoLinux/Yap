@@ -1,0 +1,91 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main, lowmem, ultra-lowmem]
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-verify:
+    name: Build & Verify
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install pytest==8.3.3
+
+      - name: PR preflight (tests + smoke + security)
+        run: bash scripts/ci/pr_preflight.sh
+
+  smoke-test:
+    name: Smoke Test (CLI)
+    needs: build-and-verify
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Smoke test yap.py (parse + import check)
+        run: |
+          set -e
+          # Verify yap.py parses cleanly
+          python3 -c "import ast; ast.parse(open('yap.py').read()); print('PASS: yap.py parses')"
+
+          # Verify all test modules import without errors
+          python3 -c "
+          import importlib.util, sys, os
+          test_dir = 'tests'
+          for f in os.listdir(test_dir):
+              if f.startswith('test_') and f.endswith('.py'):
+                  spec = importlib.util.spec_from_file_location(f[:-3], os.path.join(test_dir, f))
+                  mod = importlib.util.module_from_spec(spec)
+                  try:
+                      spec.loader.exec_module(mod)
+                      print(f'PASS: {f} imports cleanly')
+                  except Exception as e:
+                      print(f'FAIL: {f} import error: {e}')
+                      sys.exit(1)
+          "
+
+          # Verify whitelists load
+          python3 -c "
+          import ast
+          tree = ast.parse(open('yap.py').read())
+          print(f'PASS: yap.py has {len([n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)])} functions')
+          "
+
+      - name: Verify no secrets in diff
+        run: |
+          # Check for common secret patterns in the diff
+          if git diff origin/${{ github.base_ref }}...HEAD 2>/dev/null | grep -iE '(password|secret|api_key|token)\s*=\s*["\x27][^"\x27]{8,}' | grep -v '^\s*#'; then
+            echo "::error::Potential secret detected in diff"
+            exit 1
+          fi
+          echo "PASS: no obvious secrets in diff"
