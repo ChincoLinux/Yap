@@ -54,6 +54,13 @@ jobs:
           echo "═══════════════════════════════════════════════"
           python -m pytest tests/test_yap_functional.py -v --tb=short
 
+      - name: Ejecutar pruebas de evaluacion automatica
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "  PRUEBAS DE EVALUACION (#23)"
+          echo "═══════════════════════════════════════════════"
+          python -m pytest tests/test_yap_evaluacion.py -v --tb=short
+
       - name: Verificar ausencia de vulnerabilidades
         run: |
           echo "═══════════════════════════════════════════════"

@@ -6,6 +6,7 @@
 tests/
 ├── test_yap_security.py     # 25 pruebas de seguridad y configuracion
 ├── test_yap_functional.py   # 32 pruebas funcionales
+├── test_yap_evaluacion.py   # Evaluacion automatica de actividades (#23)
 ├── run_tests.py             # Ejecutor con reporte integrado
 ├── report/                  # Reportes generados (--report)
 └── README.md                # Este archivo
@@ -52,6 +53,7 @@ python3 tests/run_tests.py --vm --report
 | FUN-08 | Modo interactivo y comando | `TestArchitecture` |
 | FUN-09 | Tutor PSeInt paso a paso | `TestPSeIntTutor` |
 | FUN-10 | Tutorial interactivo PSeInt | `TestIntroduccionPSeInt` |
+| FUN-11 | Evaluacion automatica de actividades (#23) | `test_yap_evaluacion.py` |
 | SEC-01 | Carga de ejercicios PSeInt | `TestPSeIntConfig` |
 | CFG-01 | Archivos de configuracion validos | `TestRealConfig` |
 | CFG-02 | Symlink al repositorio | `run_tests.py` (infraestructura) |

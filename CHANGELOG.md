@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Evaluación automática de actividades de EA con feedback del LLM (#23)
+- Tipos `respuesta_libre`, `codigo_pseint`, `opcion_multiple` y `completar` en el JSON del curso
+- `progress.json` guarda puntaje, intentos y fecha de aprobación; máximo 3 intentos por actividad
+- `yap progreso` muestra % completado, promedio, reprobadas y nota chilena (1.0-7.0)
 - CI Quality Suite adaptada de Homedir (os-santiago/homedir): `pr-quality-suite.yml` (ruff style + pyflakes static + pytest coverage + pip-audit deps + arch validation), `pr-traceability-check.yml` (verifica `Closes #N` en cada PR), `pr-state-labeler.yml` (auto-label `pr:needs-review`/`pr:approved`/etc.), `quality-gates.yml` (CodeQL Python + TruffleHog secret scan + dependency review), `pr-validation.yml` (build & verify + smoke test CLI)
 - Scripts de CI: `scripts/ci/check_pr_traceability.py`, `scripts/ci/label_pr_state.py`, `scripts/ci/pr_preflight.sh`
 - Auto-asignación semanal de issues al equipo
