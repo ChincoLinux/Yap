@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `nota_chilena()` no redondea puntajes en [59.1, 60) a 4.0
 - Fallback de evaluación trata "no es correcto" / "no esta correcto" como reprobado
 - Parser JSON reconcilia `aprobado` y `puntaje` para que no se apruebe con 2.0 ni se repruebe con nota de aprobación
+- setup.sh lee VERSION despues de definir SCRIPT_DIR
+- auto-release.yml importa os al actualizar el CHANGELOG
+- fallback-merge.yml eliminado: mergeaba PRs no relacionadas y aceptaba aprobaciones obsoletas
 - setup.sh no falla cuando yap-agent.md no existe
 - Path traversal vulnerability en domain whitelist (#1)
 - Conversation history and context management (#2)
