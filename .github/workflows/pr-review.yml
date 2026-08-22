@@ -44,6 +44,7 @@ jobs:
           fetch-depth: 0
 
       - name: Cargar y evaluar políticas
+        id: review
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
