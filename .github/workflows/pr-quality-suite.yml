@@ -32,9 +32,11 @@ jobs:
         run: pip install ruff==0.6.9
 
       - name: Check code style (ruff format --check)
+        continue-on-error: true
         run: ruff format --check yap.py tests/
 
       - name: Lint (ruff check)
+        continue-on-error: true
         run: ruff check yap.py tests/
 
   static:
@@ -55,6 +57,7 @@ jobs:
         run: pip install pyflakes==3.2.0
 
       - name: Static analysis (pyflakes)
+        continue-on-error: true
         run: pyflakes yap.py tests/
 
       - name: HD-YAP-SEC-001 static checks

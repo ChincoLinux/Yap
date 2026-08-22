@@ -50,6 +50,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install pytest (for test imports)
+        run: pip install pytest==8.3.3
+
       - name: Smoke test yap.py (parse + import check)
         run: |
           set -e
