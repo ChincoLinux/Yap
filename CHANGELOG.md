@@ -8,13 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Telemetría local anónima (#38): contadores de uso por acción, resumen con
+  `yap telemetria`, exportación anónima opt-in y opción de desactivar la
+  recolección. No existe ninguna transmisión automática
 - Auto-asignación semanal de issues al equipo
-- Workflow de auto-merge cuando PR es aprobada y CI pasa
-- Protección de rama main (sin push directo, requiere approval)
+- Protección de rama main (sin push directo, sin bypass de admin)
+- A-Dev Hardness framework integration (políticas, skills, agentes, RAG)
+- `AGENTS.md`: guía para agentes IA (estilo Homedir) con labels, workflows, convenciones
 
 ### Changed
 - Post-checkout hook no aborta el checkout de ramas
 - README actualizado con URL correcta del repositorio
+- `pr-review.yml`: bot `yap-reviewer` ahora solo publica comentarios (advisory), no aprueba ni rechaza
+- Auto-merge nativo de GitHub (squash) habilitado desde settings del repo (sin workflow dedicado)
+- Docs alineadas con modelo Homedir: todo cambio vía PR, sin push directo, sin bypass de admin
+
+### Removed
+- `fallback-merge.yml`: merge sin branch protection (peligroso)
+- `auto-merge.yml`: workflow dedicado de auto-merge (reemplazado por auto-merge nativo de GitHub)
 
 ### Fixed
 - setup.sh no falla cuando yap-agent.md no existe
@@ -35,3 +46,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Historial persistente entre sesiones (#13)
 - Integración con AppArmor (#14)
 - Auditoría de seguridad post-talleres formativos (#15)
+
+## [1.0.0-beta] - 2026-08-21
+
+### Added
+- A-Dev Hardness framework integration
+  - Políticas: HD-YAP-SEC-001 (MUST), HD-YAP-TEST-001 (MUST), HD-YAP-BRANCH-001 (SHOULD)
+  - Skill: yap-read-only-inspection (R0)
+  - Agente: yap-reviewer (PR review automático)
+  - RAG: architecture.md, security.md, config.md
+- CLAUDE.md documentación completa del proyecto
+- Workflow pr-review.yml para revisión automática A-Dev
+- VERSION para versionado semver
+
+### Changed
+- Integración completa con doctrina A-Dev upstream
+
+### Fixed

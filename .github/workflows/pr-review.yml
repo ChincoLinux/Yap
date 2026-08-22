@@ -1,0 +1,277 @@
+# Yap — Automated PR Review (A-Dev Hardness)
+#
+# Workflow que evalúa PRs contra políticas Hardness locales
+# (.github/adev/policies/*.json) usando github-script.
+#
+# El bot SOLO publica comentarios con su análisis (advisory).
+# No aprueba ni rechaza PRs — la decisión final es siempre humana.
+# Modelo alineado con Homedir (os-santiago/homedir).
+
+name: PR Review (A-Dev)
+
+'on':
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, lowmem, ultra-lowmem]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review (optional, uses current PR if not specified)'
+        required: false
+        type: string
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: read
+
+jobs:
+  review:
+    name: "A-Dev Hardness Review"
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cargar y evaluar políticas
+        id: review
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            // ─── Helpers ──────────────────────────────────────────
+            const policyDir = '.github/adev/policies/';
+
+            // Get PR number from either PR event or workflow_dispatch input
+            let prNumber;
+
+            // Check if this is a workflow_dispatch event (no pull_request in payload)
+            // For workflow_dispatch, inputs are in context.payload.inputs
+            const isWorkflowDispatch = context.payload && !context.payload.pull_request && context.payload.inputs;
+
+            if (isWorkflowDispatch) {
+              // workflow_dispatch: use input pr_number from context.payload.inputs
+              if (context.payload.inputs && context.payload.inputs.pr_number) {
+                prNumber = parseInt(context.payload.inputs.pr_number);
+              } else {
+                core.setFailed('No PR number provided in workflow_dispatch inputs');
+                return;
+              }
+            } else if (context.payload && context.payload.pull_request) {
+              // pull_request event: use PR number from payload
+              prNumber = context.payload.pull_request.number;
+            } else {
+              core.setFailed('No PR number available - unknown event type');
+              return;
+            }
+
+            function readPolicies() {
+              const policies = {};
+              if (!fs.existsSync(policyDir)) {
+                core.setFailed(`No se encontró directorio de políticas: ${policyDir}`);
+                return policies;
+              }
+              const files = fs.readdirSync(policyDir).filter(f => f.endsWith('.json'));
+              for (const f of files) {
+                const content = fs.readFileSync(path.join(policyDir, f), 'utf8');
+                try {
+                  policies[f.replace('.json', '')] = JSON.parse(content);
+                } catch (e) {
+                  core.warning(`Error parsing ${f}: ${e.message}`);
+                }
+              }
+              return policies;
+            }
+
+            async function getDiff() {
+              const { data } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                mediaType: { format: 'diff' }
+              });
+              return data;
+            }
+
+            async function getFiles() {
+              const { data } = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+              return data.map(f => f.filename);
+            }
+
+            async function getCheckRuns() {
+              // Get the PR to find the head SHA
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+              const headSha = pr.head.sha;
+
+              const { data } = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: headSha
+              });
+              return data.check_runs;
+            }
+
+            // ─── Main ─────────────────────────────────────────────
+            console.log('═══════════════════════════════════════════════');
+            console.log('  YAP-REVIEWER: A-Dev Hardness Review');
+            console.log('═══════════════════════════════════════════════');
+
+            const policies = readPolicies();
+            console.log(`Políticas cargadas: ${Object.keys(policies).join(', ')}`);
+
+            const diff = await getDiff();
+            const files = await getFiles();
+            const checkRuns = await getCheckRuns();
+
+            console.log(`\nArchivos modificados (${files.length}):`);
+            files.forEach(f => console.log(`  • ${f}`));
+
+            // ─── Check: Meta config touched ──────────────────────
+            const metaConfigTouched = files.some(f => f.startsWith('.github/adev/'));
+            if (metaConfigTouched) {
+              console.log('\n⚠ PR modifica .github/adev/ — requiere revisión humana');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `🤖 **yap-reviewer**: Este PR modifica configuración A-Dev (${files.filter(f => f.startsWith('.github/adev/')).join(', ')}). Requiere revisión humana antes de merge. Políticas HD-YAP-* no auto-evaluadas.`
+              });
+              core.setOutput('decision', 'HUMAN_REVIEW');
+              return;
+            }
+
+            // ─── HD-YAP-SEC-001 (MUST) ─────────────────────────
+            console.log('\n🔒 Evaluando HD-YAP-SEC-001 (MUST)...');
+            const forbiddenPatterns = ['shell=True', 'eval(', 'os.system('];
+            const forbiddenImports = ['import socket', 'import ctypes', 'import pickle', 'import base64'];
+            let secFail = false;
+
+            for (const pattern of forbiddenPatterns) {
+              if (diff.includes(pattern)) {
+                console.log(`✗ Encontrado '${pattern}' en diff`);
+                secFail = true;
+              } else {
+                console.log(`✓ Sin '${pattern}'`);
+              }
+            }
+            for (const mod of forbiddenImports) {
+              if (diff.includes(mod)) {
+                console.log(`✗ Import peligroso '${mod}' en diff`);
+                secFail = true;
+              } else {
+                console.log(`✓ Sin '${mod}'`);
+              }
+            }
+
+            // ─── HD-YAP-BRANCH-001 (SHOULD) ────────────────────
+            console.log('\n🌿 Evaluando HD-YAP-BRANCH-001 (SHOULD)...');
+            // Get PR to access branch info
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            const branch = pr.head.ref;
+            const branchFail = !/^(feat|fix|refactor|docs|chore|test|ci)\//.test(branch);
+            if (branchFail) {
+              console.log(`⚠ Rama no sigue Conventional Commits: ${branch}`);
+            } else {
+              console.log(`✓ Rama sigue convención: ${branch}`);
+            }
+
+            // ─── HD-YAP-TEST-001 (MUST) ────────────────────────
+            console.log('\n🧪 Evaluando HD-YAP-TEST-001 (MUST)...');
+            const unitTests = checkRuns.find(c => c.name === 'Unit tests (49) - Python 3.12 (3.12)');
+            const branchCheck = checkRuns.find(c => c.name === 'Validacion de ramas');
+            const ciPassed = unitTests?.conclusion === 'success' && branchCheck?.conclusion === 'success';
+            const ciPending = !unitTests || !branchCheck || unitTests.status !== 'completed' || branchCheck.status !== 'completed';
+
+            if (ciPending) {
+              console.log('⏳ CI pendiente (unit-tests / branch-check)');
+            } else if (ciPassed) {
+              console.log('✓ CI verde (unit-tests + branch-check)');
+            } else {
+              console.log('✗ CI rojo');
+            }
+
+            // ─── Decisión ───────────────────────────────────────
+            let decision, body;
+
+            // Use variables for bold markdown to avoid YAML parsing issues
+            const B = '**';
+
+            if (secFail) {
+              decision = 'REQUEST_CHANGES';
+              body = '🤖 ' + B + 'yap-reviewer' + B + ' — REQUEST_CHANGES\n\n' +
+                '❌ ' + B + 'HD-YAP-SEC-001 (MUST)' + B + ' violada:\n' +
+                '- Patrón prohibido detectado en diff (shell=True / eval() / os.system() / import peligroso)\n' +
+                '- Ref: .github/adev/policies/HD-YAP-SEC-001.json\n\n' +
+                B + 'Fix requerido:' + B + ' Eliminar patrones prohibidos. Usar `subprocess.Popen([lista])` sin `shell=True`, `shutil.which()` para validación de binarios.';
+            } else if (ciPending) {
+              decision = 'APPROVE';
+              body = '🤖 ' + B + 'yap-reviewer' + B + ' — APPROVE ✅\n\n' +
+                '✅ ' + B + 'HD-YAP-SEC-001 (MUST)' + B + ' pasa\n' +
+                (branchFail ? 
+                  '⚠️ ' + B + 'HD-YAP-BRANCH-001 (SHOULD)' + B + ' advisory: rama no sigue Conventional Commits' :
+                  '✅ ' + B + 'HD-YAP-BRANCH-001 (SHOULD)' + B + ' pasa') + '\n\n' +
+                '⏳ ' + B + 'HD-YAP-TEST-001 (MUST)' + B + ': esperando CI (unit-tests). Si CI verde → auto-merge.';
+            } else if (!ciPassed) {
+              decision = 'REQUEST_CHANGES';
+              body = '🤖 ' + B + 'yap-reviewer' + B + ' — REQUEST_CHANGES\n\n' +
+                '❌ ' + B + 'HD-YAP-TEST-001 (MUST)' + B + ' falló:\n' +
+                '- CI no pasó (unit-tests: ' + (unitTests?.conclusion || 'pending') + ', branch-check: ' + (branchCheck?.conclusion || 'pending') + ')\n' +
+                '- Ref: .github/adev/policies/HD-YAP-TEST-001.json\n\n' +
+                B + 'Fix requerido:' + B + ' Corregir tests fallidos y volver a ejecutar CI.';
+            } else if (branchFail) {
+              decision = 'APPROVE';
+              body = '🤖 ' + B + 'yap-reviewer' + B + ' — APPROVE ⚠️\n\n' +
+                '✅ ' + B + 'HD-YAP-SEC-001 (MUST)' + B + ' pasa\n' +
+                '✅ ' + B + 'HD-YAP-TEST-001 (MUST)' + B + ' pasa\n\n' +
+                '⚠️ ' + B + 'HD-YAP-BRANCH-001 (SHOULD)' + B + ' advisory:\n' +
+                '- Rama no sigue Conventional Commits (feat/fix/refactor/docs/chore/)\n' +
+                '- Considera renombrar para historial limpio.';
+            } else {
+              decision = 'APPROVE';
+              body = '🤖 ' + B + 'yap-reviewer' + B + ' — APPROVE ✅\n\n' +
+                '✅ ' + B + 'HD-YAP-SEC-001 (MUST)' + B + ' pasa\n' +
+                '✅ ' + B + 'HD-YAP-TEST-001 (MUST)' + B + ' pasa\n' +
+                '✅ ' + B + 'HD-YAP-BRANCH-001 (SHOULD)' + B + ' pasa\n\n' +
+                '🎉 Todas las políticas A-Dev Hardness validadas. Auto-merge habilitado si branch protection lo permite.';
+            }
+
+            console.log(`\n📋 Decisión: ${decision}`);
+
+            // El bot SOLO publica comentarios (advisory). No aprueba ni rechaza.
+            // La decisión final es siempre humana (core-devs).
+            // Modelo alineado con Homedir.
+            const note = '\n\n---\n*🤖 Revisión automática del bot `yap-reviewer`. ' +
+              'Esta revisión es **advisory**: la aprobación final es humana ' +
+              '(`core-devs`). Auto-merge nativo se dispara tras approval + CI verde.*';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: body + note
+            });
+
+            core.setOutput('decision', decision);
