@@ -12,13 +12,13 @@ Gracias por contribuir / Thank you for contributing.
 
 ## Flujo de trabajo / Workflow
 
-Este repositorio trabaja bajo **trunk-based development**: ver **[docs/TRUNK-BASED.md](docs/TRUNK-BASED.md)**.
+Este repositorio trabaja bajo **trunk-based development**: ver **[docs/TRUNK-BASED.md](docs/TRUNK-BASED.md)** y **[AGENTS.md](AGENTS.md)** (contexto para agentes IA).
 
 - La línea de integración única es `main`; siempre en verde (CI: `.github/workflows/test.yml`).
 - **Ramas cortas** (idealmente <48h), una por objetivo, basadas en un issue (`Closes #N`).
 - **Commits atómicos** con **Conventional Commits** (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `test:`, `ci:`).
-- **Push directo a `main`**: permitido para cambios pequeños y verificados (docs, fixes triviales, chores) con la validación más acotada ejecutada (`python3 -m pytest tests/`).
-- **PR con revisión**: obligatoria para cambios con impacto (funcionalidad, API, seguridad, infraestructura, plantillas/comunidad).
+- **Todo cambio entra vía PR aprobado** — sin excepciones. No se permite push directo a `main`, `lowmem` o `ultra-lowmem`, ni siquiera a admins (ver `AGENTS.md` §2). El bypass de admin está prohibido por doctrina del repositorio.
+- **Auto-merge nativo**: tras CI verde + approval humana, GitHub fusiona automáticamente (squash). El bot `yap-reviewer` publica análisis como comentario; la aprobación es siempre humana (`core-devs`).
 - Doctrina general de la organización: **[A-Dev](ADEV.md)**.
 
 ## Reglas de calidad / Quality rules

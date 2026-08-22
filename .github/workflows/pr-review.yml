@@ -262,34 +262,30 @@ jobs:
 
             console.log(`\n📋 Decisión: ${decision}`);
 
-            // Submit review - handle GitHub Actions limitation on APPROVE
-            try {
-              await github.rest.pulls.createReview({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: prNumber,
-                event: decision === 'REQUEST_CHANGES' ? 'REQUEST_CHANGES' : 'APPROVE',
-                body
-              });
-            } catch (e) {
-              if (e.status === 422 && e.message.includes('not permitted to approve')) {
-                // Fallback: post comment instead of review when GITHUB_TOKEN can't approve
-                console.log('⚠ GITHUB_TOKEN cannot approve PR — posting comment instead');
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: prNumber,
-                  body: body + '\n\n---\n*Nota: GITHUB_TOKEN no puede aprobar PRs automáticamente. Esta revisión se publica como comentario.*'
-                });
-              } else {
-                throw e;
-              }
-            }
+            // GITHUB_TOKEN cannot submit APPROVE reviews (GitHub platform
+            // limitation). The bot only ever posts a COMMENT with its
+            // analysis; the actual approving review is always submitted by a
+            // human member of core-devs. See AGENTS.md §3.
+            //
+            // For REQUEST_CHANGES the bot CAN submit a real review, but we
+            // keep it as a comment too so it never blocks merge by itself
+            // (the human reviewer has the final call). The bot's
+            // CHANGES_REQUESTED is advisory, not authoritative.
+            const note = '\n\n---\n*🤖 Revisión automática del bot `yap-reviewer`. ' +
+              'Esta revisión es **advisory**: la aprobación final es humana ' +
+              '(un miembro de `core-devs`). Ver `AGENTS.md` §3.*';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: body + note
+            });
 
             core.setOutput('decision', decision);
 
-      - name: Habilitar auto-merge si aprobado
-        if: steps.review.outputs.decision == 'APPROVE'
+      - name: Habilitar auto-merge (siempre — se dispara tras approval humana + CI verde)
+        if: steps.review.outputs.decision == 'APPROVE' || steps.review.outputs.decision == 'HUMAN_REVIEW'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -313,7 +309,7 @@ jobs:
               return;
             }
 
-            console.log(`PR #${prNumber} aprobado — habilitando auto-merge (squash)`);
+            console.log(`PR #${prNumber} — habilitando auto-merge (squash)`);
 
             // Get PR details to find node_id
             const { data: pr } = await github.rest.pulls.get({

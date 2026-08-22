@@ -8,14 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AGENTS.md` — contexto canónico para agentes IA (Devin, Claude, etc.) con doctrina TBD, limitaciones del bot reviewer y reglas no negociables
+- Auto-merge nativo habilitado en el repositorio (squash, se dispara tras approval humana + CI verde)
 - Auto-asignación semanal de issues al equipo
 - Workflow de auto-merge cuando PR es aprobada y CI pasa
 - Protección de rama main (sin push directo, requiere approval)
 - A-Dev Hardness framework integration (políticas, skills, agentes, RAG)
 
 ### Changed
+- `pr-review.yml`: el bot `yap-reviewer` ahora solo publica comentarios (advisory), no intenta APPROVE (limitación de GITHUB_TOKEN documentada en AGENTS.md §3)
+- `auto-merge.yml`: usa `GITHUB_TOKEN` en lugar de `PROJECT_PAT` (que no existía); soporta main/lowmem/ultra-lowmem
+- `CONTRIBUTING.md`, `GOVERNANCE.md`, `docs/TRUNK-BASED.md`, `PULL_REQUEST_TEMPLATE.md`: eliminado el escape de "push directo permitido" y "bypass de admin"; todo cambio entra vía PR aprobado sin excepciones
 - Post-checkout hook no aborta el checkout de ramas
 - README actualizado con URL correcta del repositorio
+
+### Removed
+- `fallback-merge.yml` — workflow peligroso que hacía merge directo sin respetar branch protection usando PROJECT_PAT (que no existía)
 
 ### Fixed
 - setup.sh no falla cuando yap-agent.md no existe

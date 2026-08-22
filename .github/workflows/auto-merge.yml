@@ -13,21 +13,28 @@ permissions:
 jobs:
   enable-auto-merge:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.base.ref == 'main'
+    if: github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'lowmem' || github.event.pull_request.base.ref == 'ultra-lowmem'
     steps:
       - name: Enable auto-merge (squash) on PR
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.PROJECT_PAT }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const pr = context.payload.pull_request;
-            if (!pr) return;
+            if (!pr) {
+              console.log('No pull_request in payload — skip');
+              return;
+            }
 
             console.log(`PR #${pr.number}: ${pr.title}`);
             console.log(`  Base: ${pr.base.ref}`);
             console.log(`  Mergeable state: ${pr.mergeable_state}`);
 
-            // Enable auto-merge with squash
+            // Enable auto-merge with squash.
+            // Auto-merge only fires AFTER branch protection rules are satisfied
+            // (CI green + required approving review). GITHUB_TOKEN can enable
+            // auto-merge; it just cannot submit the approving review itself.
+            // See AGENTS.md §3 for the limitation rationale.
             try {
               await github.graphql(`
                 mutation($pullRequestId: ID!) {
