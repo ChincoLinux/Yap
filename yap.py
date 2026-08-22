@@ -880,8 +880,11 @@ def _llamar_llm_evaluacion(prompt):
             proc.kill()
             try:
                 proc.communicate()
-            except (OSError, subprocess.TimeoutExpired):
-                pass
+            except (OSError, subprocess.TimeoutExpired) as cleanup_err:
+                print(
+                    f"[WARN] Error limpiando proceso llama-cli tras timeout: {cleanup_err}",
+                    file=sys.stderr,
+                )
         return "[WARN] Tiempo de espera agotado (120s)"
     except FileNotFoundError:
         return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
