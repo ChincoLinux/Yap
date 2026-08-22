@@ -1,0 +1,103 @@
+name: Quality Gates
+
+on:
+  pull_request:
+    branches: [main, lowmem, ultra-lowmem]
+    types: [opened, reopened, synchronize, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sast-codeql:
+    name: SAST - CodeQL Analysis (Python)
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          queries: security-extended,security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
+
+  secret-scanning:
+    name: Secret Scanning
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog Secret Scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified --results=verified,unknown
+
+  dependency-review:
+    name: Dependency Review
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        continue-on-error: true
+        with:
+          fail-on-severity: moderate
+          # Yap is stdlib-only, so any new dependency is a red flag
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
+          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Python-2.0
+
+  quality-gate-summary:
+    name: Quality Gate Summary
+    needs: [sast-codeql, secret-scanning, dependency-review]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Quality gate result
+        run: |
+          echo "### Quality Gates Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Gate | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| SAST (CodeQL Python) | ${{ needs.sast-codeql.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Scanning (TruffleHog) | ${{ needs.secret-scanning.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Review | ${{ needs.dependency-review.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.sast-codeql.result }}" = "failure" ] || \
+             [ "${{ needs.secret-scanning.result }}" = "failure" ] || \
+             [ "${{ needs.dependency-review.result }}" = "failure" ]; then
+            echo "**Result:** FAILED - One or more quality gates did not pass" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "**Result:** PASSED - All quality gates passed" >> $GITHUB_STEP_SUMMARY
+          fi
