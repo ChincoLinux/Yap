@@ -1,0 +1,54 @@
+{
+  "id": "HD-YAP-SEC-001",
+  "statement": "Toda ejecución de aplicación o webfetch debe validarse contra whitelists (apps.conf, web.conf) antes de invocar subprocess o red.",
+  "level": "MUST",
+  "scope": {
+    "repositories": ["ChincoLinux/Yap"],
+    "tasks": ["open_app", "webfetch", "search"],
+    "roles": ["agent", "reviewer"],
+    "files": ["yap.py", "whitelist/apps.conf", "whitelist/web.conf"],
+    "tools": ["subprocess", "urllib"],
+    "environments": ["production", "ci"]
+  },
+  "authority": {
+    "source": "repository",
+    "level": "repository"
+  },
+  "precedence": {
+    "authorityRank": 3,
+    "priority": 100,
+    "tieBreaker": "narrower-scope"
+  },
+  "rationale": "El modelo de seguridad de Yap se basa enteramente en listas blancas. Cualquier bypass (inyección, dominios no permitidos, comandos arbitrarios) rompe la garantía de seguridad CPU-only para entornos educativos.",
+  "exceptions": [
+    {
+      "condition": "setup.sh durante instalación inicial",
+      "disposition": "not-applicable"
+    }
+  ],
+  "evidence": {
+    "requirements": [
+      "test_no_shell_true_en_subprocess",
+      "test_no_eval",
+      "test_no_os_system",
+      "test_command_injection_app_name",
+      "test_url_injection",
+      "test_notwikipedia_no_coincide",
+      "test_subdominio_permitido",
+      "test_dominio_bloqueado_muestra_alternativas"
+    ],
+    "retention": "repository-record"
+  },
+  "owner": {
+    "role": "maintainer",
+    "reviewer": "security-auditor"
+  },
+  "review": {
+    "trigger": "cualquier cambio en yap.py, whitelist/*, o nuevas acciones",
+    "dueOn": "2026-12-31"
+  },
+  "expiry": {
+    "expiresOn": "2027-06-30",
+    "action": "review"
+  }
+}
