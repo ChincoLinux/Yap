@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-asignación semanal de issues al equipo
 - Workflow de auto-merge cuando PR es aprobada y CI pasa
 - Protección de rama main (sin push directo, requiere approval)
+- A-Dev Hardness framework integration (políticas, skills, agentes, RAG)
 
 ### Changed
 - Post-checkout hook no aborta el checkout de ramas
@@ -39,3 +40,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Historial persistente entre sesiones (#13)
 - Integración con AppArmor (#14)
 - Auditoría de seguridad post-talleres formativos (#15)
+
+## [1.0.0-beta] - 2026-08-21
+
+### Added
+- A-Dev Hardness framework integration
+  - Políticas: HD-YAP-SEC-001 (MUST), HD-YAP-TEST-001 (MUST), HD-YAP-BRANCH-001 (SHOULD)
+  - Skill: yap-read-only-inspection (R0)
+  - Agente: yap-reviewer (PR review automático)
+  - RAG: architecture.md, security.md, config.md
+- CLAUDE.md documentación completa del proyecto
+- Workflow pr-review.yml para revisión automática A-Dev
+- VERSION para versionado semver
+
+### Changed
+- Integración completa con doctrina A-Dev upstream
+
+### Fixed
