@@ -139,7 +139,7 @@ sudo ./deploy-yap.sh --hosts /etc/yap/lab1.txt [opciones]
 
 # Opciones:
 #   --mirror /srv/mirror/Yap   Usar mirror local (NFS/HTTP) en lugar de clonar de GitHub
-#   --branch ultra-lowmem      Rama/modelo a desplegar (default: ultra-lowmem)
+#   --branch main              Rama/modelo a desplegar (default: main)
 #   --whitelist /etc/yap/whitelist  Empujar whitelists centralizadas tras instalar
 #   --user alumno              Usuario SSH remoto (default: alumno)
 #   --dry-run                  Solo mostrar qué se haría, sin ejecutar
@@ -152,11 +152,15 @@ Ejemplo completo para un laboratorio de 15 netbooks:
 sudo ./deploy-yap.sh \
   --hosts /etc/yap/lab1.txt \
   --mirror /srv/mirror/Yap \
-  --branch ultra-lowmem \
+  --branch main \
   --whitelist /etc/yap/whitelist \
   --user alumno \
   --parallel 4
 ```
+
+> **Nota de seguridad:** el default es `main` (con todos los fixes de seguridad).
+> Solo cambia a `lowmem` o `ultra-lowmem` si el hardware lo requiere, y verifica
+> que la rama elegida no esté detrás de `main` con `git log --oneline main..ultra-lowmem`.
 
 El script:
 

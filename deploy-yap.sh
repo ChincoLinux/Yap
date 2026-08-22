@@ -13,7 +13,7 @@ set -euo pipefail
 # Opciones:
 #   --hosts FILE        Archivo con un host por línea (IP o DNS). Obligatorio.
 #   --mirror PATH       Usar mirror local (NFS/HTTP) en lugar de clonar de GitHub.
-#   --branch BRANCH     Rama/modelo a desplegar (default: ultra-lowmem).
+#   --branch BRANCH     Rama/modelo a desplegar (default: main).
 #   --whitelist DIR     Empujar whitelists centralizadas tras instalar.
 #   --user USER         Usuario SSH remoto (default: alumno).
 #   --parallel N        Equipos simultáneos (default: 4).
@@ -29,7 +29,7 @@ set -euo pipefail
 # Valores por defecto
 HOSTS_FILE=""
 MIRROR=""
-BRANCH="ultra-lowmem"
+BRANCH="main"
 WHITELIST_DIR=""
 REMOTE_USER="alumno"
 PARALLEL=4
@@ -56,7 +56,7 @@ Uso:
 Opciones:
   --hosts FILE        Archivo con un host por línea (IP o DNS). Obligatorio.
   --mirror PATH       Usar mirror local (NFS/HTTP) en lugar de clonar de GitHub.
-  --branch BRANCH     Rama/modelo a desplegar (default: ultra-lowmem).
+  --branch BRANCH     Rama/modelo a desplegar (default: main).
   --whitelist DIR     Empujar whitelists centralizadas tras instalar.
   --user USER         Usuario SSH remoto (default: alumno).
   --parallel N        Equipos simultáneos (default: 4).
@@ -153,41 +153,56 @@ deploy_one() {
   fi
 
   # 1. Verificar conectividad SSH (timeout 10s)
-  if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$ssh_target" 'echo ok' >/dev/null 2>&1; then
+  if ! ssh -o BatchMode=yes -o ConnectTimeout=30 "$ssh_target" 'echo ok' >/dev/null 2>&1; then
     echo "${host}|FAIL|sin conexión SSH"
     return 0
   fi
 
   # 2. Asegurar /opt/Yap en el remoto (clonar o sincronizar desde mirror)
   if [ -n "$MIRROR" ]; then
-    # Sincronizar mirror local al remoto por rsync (reutiliza modelo ya descargado)
-    if ! rsync -a --delete --exclude='.git' "$MIRROR/" \
+    # Validar mirror antes de usar --delete (previene borrón masivo accidental)
+    if [ ! -d "$MIRROR" ] || [ -z "$(ls -A "$MIRROR" 2>/dev/null)" ]; then
+      echo "${host}|FAIL|mirror inválido o vacío: $MIRROR"
+      return 0
+    fi
+    # rsync con sudo en el remoto para mantener permisos consistentes con git clone
+    # (git clone se hace con sudo, dejando /opt/Yap con permisos de root)
+    if ! rsync -a --rsync-path="sudo rsync" --delete --exclude='.git' "$MIRROR/" \
          "${ssh_target}:${remote_dir}/" 2>/dev/null; then
       echo "${host}|FAIL|rsync desde mirror falló"
       return 0
     fi
   else
     # Clonar desde GitHub en el remoto (requiere internet en el host)
-    if ! ssh -o BatchMode=yes "$ssh_target" \
-         "sudo git clone --branch $BRANCH --depth 1 https://github.com/ChincoLinux/Yap.git ${remote_dir} 2>/dev/null || true" 2>/dev/null; then
-      echo "${host}|FAIL|git clone falló"
+    # Sin || true: si el clone falla, reportar el error real (no enmascararlo)
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=30 "$ssh_target" \
+         "sudo git clone --branch $BRANCH --depth 1 https://github.com/ChincoLinux/Yap.git ${remote_dir}" 2>/dev/null; then
+      echo "${host}|FAIL|git clone falló (rama $BRANCH)"
       return 0
     fi
   fi
 
-  # 3. Asegurar la rama correcta
-  ssh -o BatchMode=yes "$ssh_target" \
-      "sudo git -C ${remote_dir} checkout $BRANCH 2>/dev/null || true" >/dev/null 2>&1
+  # 3. Asegurar la rama correcta (sin || true — si checkout falla, reportar)
+  if ! ssh -o BatchMode=yes -o ConnectTimeout=30 "$ssh_target" \
+      "sudo git -C ${remote_dir} checkout $BRANCH" >/dev/null 2>&1; then
+    echo "${host}|FAIL|checkout de rama $BRANCH falló"
+    return 0
+  fi
 
   # 4. Ejecutar setup.sh en el remoto
-  if ssh -o BatchMode=yes "$ssh_target" "sudo ${remote_dir}/setup.sh" >/dev/null 2>&1; then
+  if ssh -o BatchMode=yes -o ConnectTimeout=30 "$ssh_target" "sudo ${remote_dir}/setup.sh" >/dev/null 2>&1; then
     # 5. Empujar whitelists centralizadas si se solicitó
     if [ -n "$WHITELIST_DIR" ]; then
-      scp -q "${WHITELIST_DIR}/apps.conf" "${WHITELIST_DIR}/web.conf" \
+      if scp -q "${WHITELIST_DIR}/apps.conf" "${WHITELIST_DIR}/web.conf" \
           "${ssh_target}:/tmp/" 2>/dev/null && \
-        ssh -o BatchMode=yes "$ssh_target" \
+        ssh -o BatchMode=yes -o ConnectTimeout=30 "$ssh_target" \
             "sudo mv /tmp/apps.conf /etc/yap/whitelist/apps.conf && sudo mv /tmp/web.conf /etc/yap/whitelist/web.conf" \
-            >/dev/null 2>&1 || true
+            >/dev/null 2>&1; then
+        : # whitelists empujadas OK
+      else
+        echo "${host}|WARN|setup OK pero empuje de whitelists falló"
+        return 0
+      fi
     fi
     echo "${host}|OK|instalado rama $BRANCH"
   else
