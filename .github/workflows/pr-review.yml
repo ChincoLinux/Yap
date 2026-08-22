@@ -3,11 +3,9 @@
 # Workflow que evalúa PRs contra políticas Hardness locales
 # (.github/adev/policies/*.json) usando github-script.
 #
-# Decisiones:
-#   - Si todas las políticas MUST pasan → APPROVE
-#   - Si alguna política MUST falla → REQUEST_CHANGES
-#   - Si solo SHOULD falla → APPROVE + warning
-#   - Si PR modifica .github/adev/ → requires human review
+# El bot SOLO publica comentarios con su análisis (advisory).
+# No aprueba ni rechaza PRs — la decisión final es siempre humana.
+# Modelo alineado con Homedir (os-santiago/homedir).
 
 name: PR Review (A-Dev)
 
@@ -262,85 +260,18 @@ jobs:
 
             console.log(`\n📋 Decisión: ${decision}`);
 
-            // Submit review - handle GitHub Actions limitation on APPROVE
-            try {
-              await github.rest.pulls.createReview({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: prNumber,
-                event: decision === 'REQUEST_CHANGES' ? 'REQUEST_CHANGES' : 'APPROVE',
-                body
-              });
-            } catch (e) {
-              if (e.status === 422 && e.message.includes('not permitted to approve')) {
-                // Fallback: post comment instead of review when GITHUB_TOKEN can't approve
-                console.log('⚠ GITHUB_TOKEN cannot approve PR — posting comment instead');
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: prNumber,
-                  body: body + '\n\n---\n*Nota: GITHUB_TOKEN no puede aprobar PRs automáticamente. Esta revisión se publica como comentario.*'
-                });
-              } else {
-                throw e;
-              }
-            }
+            // El bot SOLO publica comentarios (advisory). No aprueba ni rechaza.
+            // La decisión final es siempre humana (core-devs).
+            // Modelo alineado con Homedir.
+            const note = '\n\n---\n*🤖 Revisión automática del bot `yap-reviewer`. ' +
+              'Esta revisión es **advisory**: la aprobación final es humana ' +
+              '(`core-devs`). Auto-merge nativo se dispara tras approval + CI verde.*';
 
-            core.setOutput('decision', decision);
-
-      - name: Habilitar auto-merge si aprobado
-        if: steps.review.outputs.decision == 'APPROVE'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            // Get PR number from either PR event or workflow_dispatch input
-            let prNumber;
-            // Check if this is a workflow_dispatch event (no pull_request in payload)
-            // For workflow_dispatch, inputs are in context.payload.inputs
-            const isWorkflowDispatch = context.payload && !context.payload.pull_request && context.payload.inputs;
-            if (isWorkflowDispatch) {
-              if (context.payload.inputs && context.payload.inputs.pr_number) {
-                prNumber = parseInt(context.payload.inputs.pr_number);
-              } else {
-                console.log('No PR number provided in workflow_dispatch inputs');
-                return;
-              }
-            } else if (context.payload && context.payload.pull_request) {
-              prNumber = context.payload.pull_request.number;
-            } else {
-              console.log('No PR number available - unknown event type');
-              return;
-            }
-
-            console.log(`PR #${prNumber} aprobado — habilitando auto-merge (squash)`);
-
-            // Get PR details to find node_id
-            const { data: pr } = await github.rest.pulls.get({
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: prNumber
+              issue_number: prNumber,
+              body: body + note
             });
 
-            try {
-              await github.graphql(`
-                mutation($pullRequestId: ID!) {
-                  enablePullRequestAutoMerge(input: {
-                    pullRequestId: $pullRequestId
-                    mergeMethod: SQUASH
-                  }) {
-                    pullRequest {
-                      number
-                      autoMergeRequest { enabledAt mergeMethod }
-                    }
-                  }
-                }
-              `, { pullRequestId: pr.node_id });
-              console.log(`  Auto-merge enabled on PR #${prNumber}`);
-            } catch (e) {
-              if (e.message.includes('ALREADY_ENABLED')) {
-                console.log(`  Auto-merge already enabled`);
-              } else {
-                console.log(`  Could not enable auto-merge: ${e.message}`);
-              }
-            }
+            core.setOutput('decision', decision);
