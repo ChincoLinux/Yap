@@ -11,13 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI Quality Suite adaptada de Homedir (os-santiago/homedir): `pr-quality-suite.yml` (ruff style + pyflakes static + pytest coverage + pip-audit deps + arch validation), `pr-traceability-check.yml` (verifica `Closes #N` en cada PR), `pr-state-labeler.yml` (auto-label `pr:needs-review`/`pr:approved`/etc.), `quality-gates.yml` (CodeQL Python + TruffleHog secret scan + dependency review), `pr-validation.yml` (build & verify + smoke test CLI)
 - Scripts de CI: `scripts/ci/check_pr_traceability.py`, `scripts/ci/label_pr_state.py`, `scripts/ci/pr_preflight.sh`
 - Auto-asignación semanal de issues al equipo
-- Workflow de auto-merge cuando PR es aprobada y CI pasa
-- Protección de rama main (sin push directo, requiere approval)
+- Protección de rama main (sin push directo, sin bypass de admin)
 - A-Dev Hardness framework integration (políticas, skills, agentes, RAG)
+- `AGENTS.md`: guía para agentes IA (estilo Homedir) con labels, workflows, convenciones
 
 ### Changed
 - Post-checkout hook no aborta el checkout de ramas
 - README actualizado con URL correcta del repositorio
+- `pr-review.yml`: bot `yap-reviewer` ahora solo publica comentarios (advisory), no aprueba ni rechaza
+- Auto-merge nativo de GitHub (squash) habilitado desde settings del repo (sin workflow dedicado)
+- Docs alineadas con modelo Homedir: todo cambio vía PR, sin push directo, sin bypass de admin
+
+### Removed
+- `fallback-merge.yml`: merge sin branch protection (peligroso)
+- `auto-merge.yml`: workflow dedicado de auto-merge (reemplazado por auto-merge nativo de GitHub)
 
 ### Fixed
 - setup.sh no falla cuando yap-agent.md no existe

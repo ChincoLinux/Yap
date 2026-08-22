@@ -1,6 +1,6 @@
 # Pull Request / Solicitación de cambios
 
-> Trabajamos bajo **trunk-based development** ([docs/TRUNK-BASED.md](docs/TRUNK-BASED.md)), con la doctrina organizacional **[A-Dev](ADEV.md)**: ramas cortas, integración frecuente a `main`, PRs atómicas, commits convencionales y evidencia obligatoria.
+> Trabajamos bajo **trunk-based development** ([docs/TRUNK-BASED.md](docs/TRUNK-BASED.md), [AGENTS.md](AGENTS.md)), con la doctrina organizacional **[A-Dev](ADEV.md)**: ramas cortas, integración frecuente a `main`, PRs atómicas, commits convencionales y evidencia obligatoria. **Todo cambio entra vía PR aprobado — sin excepciones, sin bypass de admin.**
 
 ## Checklist previo (obligatorio) / Prior checklist (required)
 
@@ -25,4 +25,4 @@
 
 ## Revisión esperada / Review expectations
 
-Un mantenedor de `core-devs` debe aprobar antes del merge. Si la PR es grande, propón dividirla. Los cambios pequeños y verificados pueden integrarse directo a `main` (ver [docs/TRUNK-BASED.md](docs/TRUNK-BASED.md)).
+Un mantenedor de `core-devs` debe aprobar antes del merge. Si la PR es grande, propón dividirla. El bot `yap-reviewer` publica un comentario con análisis de políticas Hardness (advisory); la aprobación final es humana. Auto-merge (squash) se dispara tras approval + CI verde.
