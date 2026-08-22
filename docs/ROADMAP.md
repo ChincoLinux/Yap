@@ -1,6 +1,6 @@
 # Yap — Roadmap
 
-**Última actualización:** 2026-08-17
+**Última actualización:** 2026-08-22
 
 ## Visión
 
@@ -40,7 +40,7 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 |---|-------|-----------|--------|
 | 31 | Crear paquete .deb para Yap | P0 | Planeado |
 | 32 | Integrar Yap en el build de la ISO de ChincoLinux | P0 | Planeado |
-| 33 | Configuración post-install automática (systemd, AppArmor, whitelists) | P1 | Planeado |
+| 33 | Configuración post-install automática (systemd, AppArmor, whitelists) | P1 | Parcial (1) |
 | 34 | Tests de integración en ChincoLinux OS (Live USB / VM) | P1 | Planeado |
 | 35 | Documentación de despliegue para administradores escolares | P2 | Planeado |
 
@@ -65,6 +65,16 @@ pertenece al alcance de ese issue y todos requieren un issue propio.
 | B1 | El `sed` que extrae el nombre del modelo desde `yap.py` no elimina el paréntesis de cierre de `os.environ.get(...)`. El nombre resultante queda como `Llama-3.2-1B-Instruct-Q4_K_M.gguf)` y la URL de descarga se construye inválida, por lo que la instalación aborta al descargar el modelo. | `setup.sh:142` | P0 | Por revisar |
 | B2 | `cmd_curso()` captura `FileNotFoundError`, `ValueError` y `JSONDecodeError`, pero no `PermissionError`. Un fichero de curso sin permisos de lectura produce una traza completa en pantalla en lugar de un mensaje de error controlado. | `yap.py:804` | P2 | Por revisar |
 | B3 | El menú del modo interactivo numera las entradas como `[1] [2] [3]`, lo que sugiere que son opciones seleccionables. Al escribir un número, el texto se envía al LLM como consulta en lugar de ejecutar la acción correspondiente. | `yap.py` — `display_menu()` | P2 | Por revisar |
+### Notas
+
+**(1) #33 — entrega parcial.** Se cubren las whitelists escolares y queda
+verificado que el perfil AppArmor ya se carga en modo enforce desde #14.
+Los dos criterios restantes quedan pendientes por motivos distintos:
+
+| Criterio pendiente | Motivo |
+|---|---|
+| Servicio systemd `yap-daemon` | Yap invoca `llama-cli` de nuevo en cada consulta, sin proceso persistente. Precargar el modelo exige migrar a `llama-server`, lo que excede una tarea de configuración post-install y merece issue propio |
+| `postinst` del paquete | Depende de #31, aún sin empezar |
 
 ## Prioridades globales
 
