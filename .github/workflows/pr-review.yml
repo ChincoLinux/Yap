@@ -56,22 +56,15 @@ jobs:
 
             // Get PR number from either PR event or workflow_dispatch input
             let prNumber;
-            // DEBUG: log context structure
-            console.log('DEBUG context.payload:', JSON.stringify(context.payload, null, 2));
-            console.log('DEBUG github.event:', JSON.stringify(github.event, null, 2));
 
             // Check if this is a workflow_dispatch event (no pull_request in payload)
-            const isWorkflowDispatch = context.payload && !context.payload.pull_request && github.event.inputs;
-            console.log('DEBUG isWorkflowDispatch:', isWorkflowDispatch);
-            console.log('DEBUG has inputs:', !!github.event.inputs);
-            if (github.event.inputs) {
-              console.log('DEBUG inputs:', JSON.stringify(github.event.inputs, null, 2));
-            }
+            // For workflow_dispatch, inputs are in context.payload.inputs
+            const isWorkflowDispatch = context.payload && !context.payload.pull_request && context.payload.inputs;
 
             if (isWorkflowDispatch) {
-              // workflow_dispatch: use input pr_number
-              if (github.event.inputs && github.event.inputs.pr_number) {
-                prNumber = parseInt(github.event.inputs.pr_number);
+              // workflow_dispatch: use input pr_number from context.payload.inputs
+              if (context.payload.inputs && context.payload.inputs.pr_number) {
+                prNumber = parseInt(context.payload.inputs.pr_number);
               } else {
                 core.setFailed('No PR number provided in workflow_dispatch inputs');
                 return;
@@ -288,10 +281,11 @@ jobs:
             // Get PR number from either PR event or workflow_dispatch input
             let prNumber;
             // Check if this is a workflow_dispatch event (no pull_request in payload)
-            const isWorkflowDispatch = context.payload && !context.payload.pull_request && github.event.inputs;
+            // For workflow_dispatch, inputs are in context.payload.inputs
+            const isWorkflowDispatch = context.payload && !context.payload.pull_request && context.payload.inputs;
             if (isWorkflowDispatch) {
-              if (github.event.inputs && github.event.inputs.pr_number) {
-                prNumber = parseInt(github.event.inputs.pr_number);
+              if (context.payload.inputs && context.payload.inputs.pr_number) {
+                prNumber = parseInt(context.payload.inputs.pr_number);
               } else {
                 console.log('No PR number provided in workflow_dispatch inputs');
                 return;
