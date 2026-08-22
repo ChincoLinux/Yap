@@ -1,1 +1,1 @@
-# Test file for PR review verification
+# Test file for auto-merge verification
