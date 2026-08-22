@@ -14,6 +14,7 @@ Cubre:
 import json
 import os
 import tempfile
+from contextlib import contextmanager
 from unittest.mock import Mock, patch
 
 import pytest
@@ -23,6 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import yap
 
 REPO_CURSOS = os.path.join(os.path.dirname(__file__), "..", "cursos")
+LLAMA_BIN = "/usr/bin/llama-cli"
 
 
 def _eval_ok(**overrides):
@@ -53,10 +55,30 @@ def _eval_fail(**overrides):
     return data
 
 
-def _llm_stdout(payload):
+def _llm_proc(payload):
     if isinstance(payload, dict):
         payload = json.dumps(payload, ensure_ascii=False)
-    return Mock(stdout=payload, stderr="")
+    proc = Mock()
+    proc.communicate.return_value = (payload, "")
+    proc.returncode = 0
+    return proc
+
+
+@contextmanager
+def _mock_llama(payload=None, timeout=False, missing=False):
+    which_val = None if missing else LLAMA_BIN
+    with patch("shutil.which", return_value=which_val) as mock_which:
+        with patch("subprocess.Popen") as mock_popen:
+            if timeout:
+                proc = Mock()
+                from subprocess import TimeoutExpired
+                proc.communicate.side_effect = TimeoutExpired(LLAMA_BIN, 120)
+                mock_popen.return_value = proc
+            elif not missing:
+                mock_popen.return_value = _llm_proc(
+                    payload if payload is not None else {}
+                )
+            yield mock_popen, mock_which
 
 
 # ============================================================
@@ -261,9 +283,10 @@ class TestEvaluarActividad:
     CRITERIOS = ["criterio uno", "criterio dos"]
 
     def test_respuesta_vacia_no_llama_llm(self):
-        with patch("subprocess.run") as mock_run:
+        with _mock_llama() as (mock_popen, mock_which):
             r = yap.evaluar_actividad("", self.CRITERIOS, tipo="respuesta_libre")
-        mock_run.assert_not_called()
+        mock_popen.assert_not_called()
+        mock_which.assert_not_called()
         assert r["aprobado"] is False
         assert r["puntaje"] == 0
 
@@ -274,13 +297,13 @@ class TestEvaluarActividad:
             "respuesta_correcta": "for i in range(10)",
             "criterios_evaluacion": self.CRITERIOS,
         }
-        with patch("subprocess.run") as mock_run:
+        with _mock_llama() as (mock_popen, _mock_which):
             r = yap.evaluar_actividad("B", self.CRITERIOS, tipo="opcion_multiple", actividad=act)
             r2 = yap.evaluar_actividad(
                 "for i in range(10)", self.CRITERIOS, tipo="opcion_multiple", actividad=act
             )
             r3 = yap.evaluar_actividad("b)", self.CRITERIOS, tipo="opcion_multiple", actividad=act)
-        mock_run.assert_not_called()
+        mock_popen.assert_not_called()
         assert r["aprobado"] is True
         assert r["puntaje"] == 100
         assert r2["aprobado"] is True
@@ -291,9 +314,9 @@ class TestEvaluarActividad:
             "opciones": ["A", "B", "C"],
             "respuesta_correcta": "A",
         }
-        with patch("subprocess.run") as mock_run:
+        with _mock_llama() as (mock_popen, _mock_which):
             r = yap.evaluar_actividad("C", ["elige A"], tipo="opcion_multiple", actividad=act)
-        mock_run.assert_not_called()
+        mock_popen.assert_not_called()
         assert r["aprobado"] is False
         assert r["puntaje"] == 0
 
@@ -306,38 +329,40 @@ class TestEvaluarActividad:
         r = yap.evaluar_actividad("A", [], tipo="opcion_multiple", actividad=act)
         assert r["aprobado"] is False
 
-    @patch("subprocess.run")
-    def test_respuesta_libre_usa_llm(self, mock_run):
-        mock_run.return_value = _llm_stdout({
+    def test_respuesta_libre_usa_llm(self):
+        payload = {
             "aprobado": True,
             "puntaje": 85,
             "feedback": "Cubre los componentes",
             "criterios_cumplidos": ["criterio uno"],
             "criterios_fallidos": [],
             "sugerencia": "",
-        })
-        r = yap.evaluar_actividad(
-            "Un algoritmo es una receta con entrada proceso y salida",
-            self.CRITERIOS,
-            tipo="respuesta_libre",
-            actividad={"nombre": "Algoritmos", "descripcion": "Define algoritmo"},
-        )
+        }
+        with _mock_llama(payload) as (mock_popen, mock_which):
+            r = yap.evaluar_actividad(
+                "Un algoritmo es una receta con entrada proceso y salida",
+                self.CRITERIOS,
+                tipo="respuesta_libre",
+                actividad={"nombre": "Algoritmos", "descripcion": "Define algoritmo"},
+            )
         assert r["aprobado"] is True
         assert r["puntaje"] == 85
-        mock_run.assert_called_once()
-        cmd = mock_run.call_args[0][0]
-        assert cmd[0] == "llama-cli"
+        mock_which.assert_called()
+        mock_popen.assert_called_once()
+        cmd = mock_popen.call_args[0][0]
+        assert isinstance(cmd, list)
+        assert cmd[0] == LLAMA_BIN
+        assert mock_popen.call_args[1].get("shell", False) is False
 
-    @patch("subprocess.run")
-    def test_codigo_pseint_valida_sintaxis_y_logica(self, mock_run):
-        mock_run.return_value = _llm_stdout({
+    def test_codigo_pseint_valida_sintaxis_y_logica(self):
+        payload = {
             "aprobado": True,
             "puntaje": 92,
             "feedback": "Sintaxis PSeInt correcta y suma bien",
             "criterios_cumplidos": self.CRITERIOS,
             "criterios_fallidos": [],
             "sugerencia": "",
-        })
+        }
         codigo = (
             "Algoritmo Suma\n"
             "Definir a, b, c Como Entero\n"
@@ -346,59 +371,68 @@ class TestEvaluarActividad:
             "Escribir c\n"
             "FinAlgoritmo"
         )
-        r = yap.evaluar_actividad(
-            codigo, self.CRITERIOS, tipo="codigo_pseint",
-            actividad={"nombre": "Suma", "enunciado": "Suma dos numeros"},
-        )
+        with _mock_llama(payload) as (mock_popen, _mock_which):
+            r = yap.evaluar_actividad(
+                codigo, self.CRITERIOS, tipo="codigo_pseint",
+                actividad={"nombre": "Suma", "enunciado": "Suma dos numeros"},
+            )
         assert r["aprobado"] is True
-        prompt = mock_run.call_args[0][0][mock_run.call_args[0][0].index("-p") + 1]
+        cmd = mock_popen.call_args[0][0]
+        prompt = cmd[cmd.index("-p") + 1]
         assert "PSeInt" in prompt or "pseint" in prompt.lower()
         assert "Algoritmo Suma" in prompt
 
-    @patch("subprocess.run")
-    def test_completar_usa_llm(self, mock_run):
-        mock_run.return_value = _llm_stdout({
+    def test_completar_usa_llm(self):
+        payload = {
             "aprobado": True,
             "puntaje": 100,
             "feedback": "Completo entrada, proceso y salida",
             "criterios_cumplidos": self.CRITERIOS,
             "criterios_fallidos": [],
             "sugerencia": "",
-        })
-        r = yap.evaluar_actividad(
-            "entrada, proceso y salida",
-            self.CRITERIOS,
-            tipo="completar",
-            actividad={"enunciado": "Completa las tres partes"},
-        )
+        }
+        with _mock_llama(payload) as (mock_popen, _mock_which):
+            r = yap.evaluar_actividad(
+                "entrada, proceso y salida",
+                self.CRITERIOS,
+                tipo="completar",
+                actividad={"enunciado": "Completa las tres partes"},
+            )
         assert r["aprobado"] is True
-        prompt = mock_run.call_args[0][0][mock_run.call_args[0][0].index("-p") + 1]
+        cmd = mock_popen.call_args[0][0]
+        prompt = cmd[cmd.index("-p") + 1]
         assert "completar" in prompt.lower()
 
-    @patch("subprocess.run")
-    def test_llm_texto_plano_se_parsea(self, mock_run):
-        mock_run.return_value = _llm_stdout(
+    def test_llm_texto_plano_se_parsea(self):
+        with _mock_llama(
             "El estudiante no cumple el criterio. Respuesta incorrecta. puntaje 35"
-        )
-        r = yap.evaluar_actividad("asdf", self.CRITERIOS, tipo="respuesta_libre")
+        ) as (_mock_popen, _mock_which):
+            r = yap.evaluar_actividad("asdf", self.CRITERIOS, tipo="respuesta_libre")
         assert r["aprobado"] is False
         assert r["parseado"] is False
         assert r["error"] is False
 
-    @patch("subprocess.run")
-    def test_llm_timeout_no_aprueba_y_marca_error(self, mock_run):
-        from subprocess import TimeoutExpired
-        mock_run.side_effect = TimeoutExpired("llama-cli", 120)
-        r = yap.evaluar_actividad("algo", self.CRITERIOS, tipo="respuesta_libre")
+    def test_llm_timeout_no_aprueba_y_marca_error(self):
+        with _mock_llama(timeout=True) as (mock_popen, _mock_which):
+            r = yap.evaluar_actividad("algo", self.CRITERIOS, tipo="respuesta_libre")
+        assert r["error"] is True
+        assert r["aprobado"] is False
+        mock_popen.return_value.kill.assert_called()
+
+    def test_llama_cli_ausente_no_ejecuta(self):
+        with _mock_llama(missing=True) as (mock_popen, mock_which):
+            r = yap.evaluar_actividad("algo", self.CRITERIOS, tipo="respuesta_libre")
+        mock_which.assert_called()
+        mock_popen.assert_not_called()
         assert r["error"] is True
         assert r["aprobado"] is False
 
     def test_tipo_desconocido_cae_a_respuesta_libre(self):
-        with patch("subprocess.run", return_value=_llm_stdout({
-            "aprobado": True, "puntaje": 70, "feedback": "ok",
-        })) as mock_run:
+        with _mock_llama({"aprobado": True, "puntaje": 70, "feedback": "ok"}) as (
+            mock_popen, _mock_which
+        ):
             r = yap.evaluar_actividad("x", self.CRITERIOS, tipo="ensayo")
-        mock_run.assert_called_once()
+        mock_popen.assert_called_once()
         assert r["aprobado"] is True
 
 
@@ -796,28 +830,28 @@ class TestIntegracionFPY1101:
             if act:
                 break
         assert act is not None
-        with patch("subprocess.run") as mock_run:
+        with _mock_llama() as (mock_popen, _mock_which):
             r = yap.evaluar_actividad(
                 act["respuesta_correcta"],
                 act["criterios_evaluacion"],
                 tipo="opcion_multiple",
                 actividad=act,
             )
-        mock_run.assert_not_called()
+        mock_popen.assert_not_called()
         assert r["aprobado"] is True
 
     def test_evaluar_respuesta_libre_de_fpy1101_con_mock(self):
         curso = yap.cargar_curso("FPY1101")
         act = curso["eas"][0]["actividades"][0]
         assert act["tipo"] == "respuesta_libre"
-        with patch("subprocess.run", return_value=_llm_stdout({
+        with _mock_llama({
             "aprobado": True,
             "puntaje": 80,
             "feedback": "Define algoritmo y da ejemplo",
             "criterios_cumplidos": act["criterios_evaluacion"],
             "criterios_fallidos": [],
             "sugerencia": "",
-        })):
+        }):
             r = yap.evaluar_actividad(
                 "Un algoritmo es una secuencia de pasos. Entrada, proceso y salida. "
                 "Ejemplo: receta de cocina.",
@@ -832,14 +866,14 @@ class TestIntegracionFPY1101:
         curso = yap.cargar_curso("FPY1101")
         act = curso["eas"][0]["actividades"][1]
         assert act["tipo"] == "codigo_pseint"
-        with patch("subprocess.run", return_value=_llm_stdout({
+        with _mock_llama({
             "aprobado": False,
             "puntaje": 40,
             "feedback": "Falta FinAlgoritmo",
             "criterios_cumplidos": [],
             "criterios_fallidos": act["criterios_evaluacion"][:1],
             "sugerencia": "Cierra el algoritmo",
-        })):
+        }):
             r = yap.evaluar_actividad(
                 "Algoritmo X",
                 act["criterios_evaluacion"],

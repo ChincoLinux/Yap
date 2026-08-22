@@ -560,7 +560,7 @@ Cada `push` y `pull request` a `main`, `lowmem` o `ultra-lowmem` ejecuta automat
 
 | Job | Que hace |
 |---|---|
-| **unit-tests** | 218 pruebas en Python 3.12 + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
+| **unit-tests** | 81 pruebas en Python 3.12 + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
 | **branch-check** | Verifica que `MODEL_PATH` en cada rama apunte al modelo correcto |
 | **results** | Resumen del pipeline |
 

@@ -836,13 +836,17 @@ def _prompt_evaluacion(respuesta, criterios, tipo, actividad, contexto):
 
 def _llamar_llm_evaluacion(prompt):
     """Run llama-cli for evaluation. Returns raw text or an [ERROR]/[WARN] marker."""
+    bin_path = shutil.which("llama-cli")
+    if not bin_path:
+        return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
+
     parts = [BOS]
     parts.append(f"{HEADER}system{FOOTER}\n\n{EVAL_SYSTEM_PROMPT}{EOT}")
     parts.append(f"{HEADER}user{FOOTER}\n\n{prompt}{EOT}")
     parts.append(f"{HEADER}assistant{FOOTER}\n\n")
     full_prompt = "".join(parts)
     cmd = [
-        "llama-cli",
+        bin_path,
         "-m", MODEL_PATH,
         "-p", full_prompt,
         "-n", "320",
@@ -855,10 +859,29 @@ def _llamar_llm_evaluacion(prompt):
         "-no-cnv",
         "--no-display-prompt",
     ]
+    proc = None
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        stdout, stderr = proc.communicate(timeout=120)
+        result = subprocess.CompletedProcess(
+            cmd,
+            proc.returncode if proc.returncode is not None else 0,
+            stdout,
+            stderr,
+        )
         return _clean_output(result)
     except subprocess.TimeoutExpired:
+        if proc is not None:
+            proc.kill()
+            try:
+                proc.communicate()
+            except (OSError, subprocess.TimeoutExpired):
+                pass
         return "[WARN] Tiempo de espera agotado (120s)"
     except FileNotFoundError:
         return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
