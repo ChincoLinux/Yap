@@ -1,6 +1,6 @@
 # Yap — Roadmap
 
-**Última actualización:** 2026-08-14
+**Última actualización:** 2026-08-22
 
 ## Visión
 
@@ -40,7 +40,7 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 |---|-------|-----------|--------|
 | 31 | Crear paquete .deb para Yap | P0 | Planeado |
 | 32 | Integrar Yap en el build de la ISO de ChincoLinux | P0 | Planeado |
-| 33 | Configuración post-install automática (systemd, AppArmor, whitelists) | P1 | Planeado |
+| 33 | Configuración post-install automática (systemd, AppArmor, whitelists) | P1 | Parcial (1) |
 | 34 | Tests de integración en ChincoLinux OS (Live USB / VM) | P1 | Planeado |
 | 35 | Documentación de despliegue para administradores escolares | P2 | Planeado |
 
@@ -54,6 +54,17 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 | 38 | Telemetría local anónima — métricas de uso para mejorar el agente | P3 | Planeado |
 | 39 | Modo offline total — sin dependencia de red en ningún flujo | P1 | Planeado |
 | 40 | Benchmarks de rendimiento en hardware educativo real | P1 | Planeado |
+
+### Notas
+
+**(1) #33 — entrega parcial.** Se cubren las whitelists escolares y queda
+verificado que el perfil AppArmor ya se carga en modo enforce desde #14.
+Los dos criterios restantes quedan pendientes por motivos distintos:
+
+| Criterio pendiente | Motivo |
+|---|---|
+| Servicio systemd `yap-daemon` | Yap invoca `llama-cli` de nuevo en cada consulta, sin proceso persistente. Precargar el modelo exige migrar a `llama-server`, lo que excede una tarea de configuración post-install y merece issue propio |
+| `postinst` del paquete | Depende de #31, aún sin empezar |
 
 ## Prioridades globales
 
