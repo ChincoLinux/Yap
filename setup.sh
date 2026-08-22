@@ -10,7 +10,7 @@ set -euo pipefail
 # faltante. El resto de pasos detectan lo ya instalado.
 # ============================================================
 
-YAP_VERSION="1.0.0"
+YAP_VERSION="$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "1.0.0")"
 YAP_DIR="/opt/yap"
 MODEL_DIR="$YAP_DIR/models"
 CONFIG_DIR="/etc/yap"
