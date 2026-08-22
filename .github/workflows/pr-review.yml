@@ -57,13 +57,18 @@ jobs:
             // Get PR number from either PR event or workflow_dispatch input
             let prNumber;
             if (github.event_name === 'workflow_dispatch') {
-              prNumber = parseInt(github.event.inputs.pr_number) || context.payload.pull_request?.number;
-            } else {
+              // workflow_dispatch: use input pr_number
+              if (github.event.inputs && github.event.inputs.pr_number) {
+                prNumber = parseInt(github.event.inputs.pr_number);
+              } else {
+                core.setFailed('No PR number provided in workflow_dispatch inputs');
+                return;
+              }
+            } else if (context.payload && context.payload.pull_request) {
+              // pull_request event: use PR number from payload
               prNumber = context.payload.pull_request.number;
-            }
-
-            if (!prNumber) {
-              core.setFailed('No PR number available');
+            } else {
+              core.setFailed('No PR number available for event: ' + github.event_name);
               return;
             }
 
@@ -271,13 +276,16 @@ jobs:
             // Get PR number from either PR event or workflow_dispatch input
             let prNumber;
             if (github.event_name === 'workflow_dispatch') {
-              prNumber = parseInt(github.event.inputs.pr_number) || context.payload.pull_request?.number;
-            } else {
+              if (github.event.inputs && github.event.inputs.pr_number) {
+                prNumber = parseInt(github.event.inputs.pr_number);
+              } else {
+                console.log('No PR number provided in workflow_dispatch inputs');
+                return;
+              }
+            } else if (context.payload && context.payload.pull_request) {
               prNumber = context.payload.pull_request.number;
-            }
-
-            if (!prNumber) {
-              console.log('No PR number available for auto-merge');
+            } else {
+              console.log('No PR number available for event: ' + github.event_name);
               return;
             }
 
