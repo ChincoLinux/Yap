@@ -19,6 +19,7 @@ Ver requisitos detallados en [README.md](README.md#61-requisitos-del-sistema).
 | `yap guia` | Tutorial interactivo de 7 pasos. |
 | `yap ayuda` | Lista de comandos disponibles. |
 | `yap progreso` | Progreso de cursos. |
+| `yap telemetria` | Resumen local de tu uso de Yap. |
 | `yap curso FPY1101` | Plan de estudio del curso. |
 | `yap iniciar EA1` | Comenzar una experiencia de aprendizaje. |
 | `yap <pregunta>` | Consulta directa al AI. |
@@ -167,6 +168,61 @@ yap progreso
 Muestra el avance por curso y EA: actividades completadas y estado (en curso ✓, pendiente ▶).
 
 El archivo de progreso esta en `~/.config/yap/progress.json`. Se guarda atomicamente (sin riesgo de corruption por corte de energia).
+
+## Telemetria local
+
+Yap lleva un registro de **cuantas veces** se usa cada funcion, para saber que
+partes resultan utiles y cuales pasan desapercibidas.
+
+### Que se registra, y que no
+
+| Se registra | No se registra |
+|-------------|----------------|
+| Contadores por accion (`query: 7`, `curso: 3`) | El texto de tus consultas |
+| Fecha del primer y ultimo uso | Los parametros de los comandos |
+| Que funciones no has usado nunca | Nombres, rutas o cualquier dato personal |
+
+**Nada se transmite.** El archivo vive en `~/.config/yap/telemetry.json` y no
+existe ningun envio automatico. Compartirlo requiere una accion explicita tuya.
+
+### Comandos
+
+| Comando | Descripcion |
+|---------|-------------|
+| `yap telemetria` | Resumen de uso: mas usadas, nunca usadas y total. |
+| `yap telemetria exportar` | Crea una copia anonima que puedes compartir. |
+| `yap telemetria desactivar` | Deja de registrar uso. |
+| `yap telemetria activar` | Vuelve a registrar. |
+| `yap telemetria borrar` | Elimina los datos acumulados. |
+
+### Exportacion
+
+```bash
+yap telemetria exportar
+```
+
+Genera `~/.config/yap/telemetry-export.json` con unicamente los contadores:
+
+```json
+{
+  "version": 1,
+  "comandos": { "curso": 3, "open_app": 1, "query": 7 },
+  "total": 11,
+  "sin_usar": ["search", "webfetch", "pseint"]
+}
+```
+
+Sin fechas, sin rutas y sin identificadores. El archivo queda en tu equipo; si
+decides enviarlo a los desarrolladores, lo haces tu manualmente.
+
+### Desactivar la recoleccion
+
+```bash
+yap telemetria desactivar
+```
+
+Los contadores dejan de incrementarse de inmediato. Los datos previos se
+conservan hasta que ejecutes `yap telemetria borrar`.
 
 ## Ramas de configuracion
 

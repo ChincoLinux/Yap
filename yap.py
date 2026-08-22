@@ -394,6 +394,225 @@ def cmd_historial(resume_last=False):
     lines.append(f"  {C['GRAY']}Historial guardado en: {HISTORY_FILE}{C['RESET']}")
     return "\n".join(lines)
 
+# ── Telemetría local anónima (#38) ──────────────────────────
+# Registra únicamente contadores de uso por acción. No se almacena
+# el texto de las consultas, ni parámetros, ni ningún dato que permita
+# identificar a una persona. Nada se transmite: el envío es una
+# exportación manual que el usuario decide realizar.
+
+TELEMETRY_FILE = os.path.expanduser("~/.config/yap/telemetry.json")
+TELEMETRY_EXPORT = os.path.expanduser("~/.config/yap/telemetry-export.json")
+TELEMETRY_VERSION = 1
+
+# Acciones que el agente sabe despachar. Sirve para detectar cuáles
+# no se han usado nunca.
+ACCIONES_CONOCIDAS = (
+    "open_app", "search", "webfetch", "pseint", "introduccion_pseint",
+    "curso", "guia", "progreso", "historial", "apparmor_status",
+    "telemetria", "help", "query",
+)
+
+# Nombres legibles para el resumen
+ACCIONES_NOMBRES = {
+    "open_app": "Abrir aplicaciones",
+    "search": "Buscar en Wikipedia",
+    "webfetch": "Obtener contenido web",
+    "pseint": "Tutor PSeInt",
+    "introduccion_pseint": "Tutorial PSeInt",
+    "curso": "Cursos y experiencias",
+    "guia": "Guia rapida",
+    "progreso": "Ver progreso",
+    "historial": "Historial de sesiones",
+    "apparmor_status": "Estado de AppArmor",
+    "telemetria": "Telemetria",
+    "help": "Ayuda",
+    "query": "Consulta directa al AI",
+}
+
+
+def _telemetria_vacia():
+    """Return a fresh telemetry structure."""
+    return {
+        "version": TELEMETRY_VERSION,
+        "activa": True,
+        "creado": _now_iso(),
+        "actualizado": None,
+        "comandos": {},
+    }
+
+
+def _load_telemetry():
+    """Load telemetry counters. Returns a fresh structure if absent or corrupt."""
+    if not os.path.exists(TELEMETRY_FILE):
+        return _telemetria_vacia()
+    try:
+        with open(TELEMETRY_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict) or "comandos" not in data:
+            return _telemetria_vacia()
+        return data
+    except (json.JSONDecodeError, OSError):
+        return _telemetria_vacia()
+
+
+def _write_telemetry_file(datos):
+    """Write telemetry atomically to avoid corruption on power loss."""
+    os.makedirs(os.path.dirname(TELEMETRY_FILE), exist_ok=True)
+    tmp = TELEMETRY_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(datos, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, TELEMETRY_FILE)  # atomic on Linux
+
+
+def telemetria_activa():
+    """Whether usage counting is enabled. Enabled by default, opt-out available."""
+    return _load_telemetry().get("activa", True) is not False
+
+
+def registrar_uso(accion):
+    """Increment the counter for one action.
+
+    Only the action name is stored, never its parameter. Unknown actions
+    are recorded as 'query', which is how handle_action() treats them.
+    """
+    datos = _load_telemetry()
+    if datos.get("activa", True) is False:
+        return datos
+    clave = accion if accion in ACCIONES_CONOCIDAS else "query"
+    datos["comandos"][clave] = datos["comandos"].get(clave, 0) + 1
+    datos["actualizado"] = _now_iso()
+    try:
+        _write_telemetry_file(datos)
+    except OSError:
+        pass  # ponytail: la telemetria nunca debe romper el flujo del usuario
+    return datos
+
+
+def _acciones_sin_usar(comandos):
+    """Known actions that have never been invoked."""
+    return [a for a in ACCIONES_CONOCIDAS if comandos.get(a, 0) == 0]
+
+
+def _telemetria_resumen():
+    """Render the usage summary for the student or teacher."""
+    datos = _load_telemetry()
+    comandos = datos.get("comandos", {})
+    total = sum(comandos.values())
+
+    if total == 0:
+        return display_box(
+            "Todavia no hay datos de uso registrados.\n"
+            "Las metricas se van acumulando a medida que usas Yap.",
+            color="YELLOW")
+
+    lines = [display_header("Telemetria de uso")]
+    lines.append(f"  Total de comandos ejecutados: {total}")
+    lines.append(f"  Registro iniciado: {datos.get('creado', '?')}")
+    lines.append("")
+
+    lines.append(f"  {C['BOLD']}Mas usados{C['RESET']}")
+    ordenados = sorted(comandos.items(), key=lambda kv: kv[1], reverse=True)
+    ancho = max(len(ACCIONES_NOMBRES.get(a, a)) for a, _ in ordenados)
+    for accion, veces in ordenados:
+        nombre = ACCIONES_NOMBRES.get(accion, accion)
+        pct = (veces * 100) // total
+        barra = "█" * max(1, (pct * 20) // 100)
+        lines.append(f"    {nombre:<{ancho}}  {veces:>4}  {C['GREEN']}{barra}{C['RESET']} {pct}%")
+
+    sin_usar = _acciones_sin_usar(comandos)
+    if sin_usar:
+        lines.append(f"\n  {C['BOLD']}Nunca usadas{C['RESET']}")
+        for accion in sin_usar:
+            lines.append(f"    {C['GRAY']}{ACCIONES_NOMBRES.get(accion, accion)}{C['RESET']}")
+
+    estado = "activa" if datos.get("activa", True) else "desactivada"
+    lines.append(f"\n  {C['GRAY']}Recoleccion: {estado} | Archivo local: {TELEMETRY_FILE}{C['RESET']}")
+    lines.append(f"  {C['GRAY']}Ningun dato se envia automaticamente. "
+                 f"Usa 'telemetria exportar' si quieres compartirlo.{C['RESET']}")
+    return "\n".join(lines)
+
+
+def _telemetria_exportar():
+    """Write an anonymous copy the user may share, if they choose to."""
+    datos = _load_telemetry()
+    comandos = datos.get("comandos", {})
+    if not comandos:
+        return display_box("No hay datos que exportar todavia.", color="YELLOW")
+
+    # Solo contadores y version. Sin rutas, sin usuario, sin fechas de uso.
+    export = {
+        "version": datos.get("version", TELEMETRY_VERSION),
+        "comandos": dict(sorted(comandos.items())),
+        "total": sum(comandos.values()),
+        "sin_usar": _acciones_sin_usar(comandos),
+    }
+    os.makedirs(os.path.dirname(TELEMETRY_EXPORT), exist_ok=True)
+    tmp = TELEMETRY_EXPORT + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(export, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, TELEMETRY_EXPORT)
+
+    return display_box(
+        f"Exportacion creada en:\n{TELEMETRY_EXPORT}\n\n"
+        f"Contiene unicamente contadores de uso: ni consultas, ni nombres,\n"
+        f"ni rutas, ni fechas. El archivo NO se ha enviado a ninguna parte;\n"
+        f"compartirlo es decision tuya.",
+        color="GREEN")
+
+
+def _telemetria_conmutar(activar):
+    """Enable or disable usage counting."""
+    datos = _load_telemetry()
+    datos["activa"] = bool(activar)
+    datos["actualizado"] = _now_iso()
+    _write_telemetry_file(datos)
+    if activar:
+        return display_box("Recoleccion de telemetria activada.", color="GREEN")
+    return display_box(
+        "Recoleccion de telemetria desactivada.\n"
+        "Los datos ya registrados se conservan; puedes borrarlos con\n"
+        "'telemetria borrar'.",
+        color="YELLOW")
+
+
+def _telemetria_borrar():
+    """Reset all counters, keeping the opt-out preference."""
+    datos = _load_telemetry()
+    activa = datos.get("activa", True)
+    nuevos = _telemetria_vacia()
+    nuevos["activa"] = activa
+    _write_telemetry_file(nuevos)
+    return display_box("Datos de telemetria borrados.", color="GREEN")
+
+
+AYUDA_TELEMETRIA = (
+    "Subcomando no reconocido.\n\n"
+    "  telemetria             - resumen de uso\n"
+    "  telemetria exportar    - copia anonima para compartir\n"
+    "  telemetria desactivar  - dejar de registrar uso\n"
+    "  telemetria activar     - volver a registrar\n"
+    "  telemetria borrar      - eliminar los datos acumulados"
+)
+
+
+def cmd_telemetria(sub="", param=""):
+    """Dispatch a 'telemetria' subcommand. Returns a display string."""
+    sub = (sub or "").strip().lower()
+
+    if sub in ("", "resumen", "ver"):
+        return _telemetria_resumen()
+    if sub in ("exportar", "export"):
+        return _telemetria_exportar()
+    if sub in ("desactivar", "off"):
+        return _telemetria_conmutar(False)
+    if sub in ("activar", "on"):
+        return _telemetria_conmutar(True)
+    if sub in ("borrar", "limpiar", "reset"):
+        return _telemetria_borrar()
+
+    return display_box(AYUDA_TELEMETRIA, color="YELLOW")
+
+
 def cargar_progreso():
     """Load student progress. Returns default empty dict if no file."""
     path = PROGRESS_FILE
@@ -1072,6 +1291,10 @@ def interpret(user_input):
         if "--ultimo" in stripped:
             return "historial", "--ultimo"
         return "historial", "historial"
+    # telemetria | telemetria exportar  -> ("telemetria", "exportar")
+    if stripped in ("telemetria", "telemetría") or stripped.startswith(("telemetria ", "telemetría ")):
+        partes = stripped.split(" ", 1)
+        return "telemetria", partes[1].strip() if len(partes) > 1 else ""
     if stripped in ("ayuda", "help", "--help", "-h", "comandos", "ayuda yap"):
         return "help", "ayuda"
     if stripped in ("--apparmor-status", "apparmor-status", "apparmor status"):
@@ -1123,6 +1346,7 @@ def main():
             "Curso FPY1101 — plan de estudio",
             "Historial — ver sesiones anteriores",
             "Historial --ultimo — retomar ultima sesion",
+            "Telemetria — ver tu uso de Yap (100% local)",
             "Ayuda — lista de comandos",
             "Salir — Ctrl+C o 'salir'",
         ]))
@@ -1147,6 +1371,8 @@ def main():
 
 
 def handle_action(action, param, original_input):
+    registrar_uso(action)
+
     if action == "open_app":
         if confirm_action("open_app", param, f"Abrir aplicación '{param}'"):
             print(cmd_open_app(param))
@@ -1228,6 +1454,9 @@ def handle_action(action, param, original_input):
         resume = param == "--ultimo"
         print(cmd_historial(resume_last=resume))
 
+    elif action == "telemetria":
+        print(cmd_telemetria(param))
+
     elif action == "apparmor_status":
         print(cmd_apparmor_status())
 
@@ -1242,6 +1471,7 @@ def handle_action(action, param, original_input):
         print("  Iniciar EA:    'iniciar EA1' — comenzar experiencia de aprendizaje")
         print("  Historial:     'historial' — ver sesiones anteriores")
         print("  Retomar:       'historial --ultimo' — continuar última sesión")
+        print("  Telemetria:    'telemetria' — resumen local de tu uso")
         print()
 
     else:

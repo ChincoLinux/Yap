@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Telemetría local anónima (#38): contadores de uso por acción, resumen con
+  `yap telemetria`, exportación anónima opt-in y opción de desactivar la
+  recolección. No existe ninguna transmisión automática
 - Auto-asignación semanal de issues al equipo
 - Protección de rama main (sin push directo, sin bypass de admin)
 - A-Dev Hardness framework integration (políticas, skills, agentes, RAG)
