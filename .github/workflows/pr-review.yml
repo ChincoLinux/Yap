@@ -56,8 +56,18 @@ jobs:
 
             // Get PR number from either PR event or workflow_dispatch input
             let prNumber;
+            // DEBUG: log context structure
+            console.log('DEBUG context.payload:', JSON.stringify(context.payload, null, 2));
+            console.log('DEBUG github.event:', JSON.stringify(github.event, null, 2));
+
             // Check if this is a workflow_dispatch event (no pull_request in payload)
             const isWorkflowDispatch = context.payload && !context.payload.pull_request && github.event.inputs;
+            console.log('DEBUG isWorkflowDispatch:', isWorkflowDispatch);
+            console.log('DEBUG has inputs:', !!github.event.inputs);
+            if (github.event.inputs) {
+              console.log('DEBUG inputs:', JSON.stringify(github.event.inputs, null, 2));
+            }
+
             if (isWorkflowDispatch) {
               // workflow_dispatch: use input pr_number
               if (github.event.inputs && github.event.inputs.pr_number) {
