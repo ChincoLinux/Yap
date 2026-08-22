@@ -11,7 +11,7 @@
 
 name: PR Review (A-Dev)
 
-on:
+'on':
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main, lowmem, ultra-lowmem]
@@ -207,51 +207,46 @@ jobs:
             // ─── Decisión ───────────────────────────────────────
             let decision, body;
 
+            // Use variables for bold markdown to avoid YAML parsing issues
+            const B = '**';
+
             if (secFail) {
               decision = 'REQUEST_CHANGES';
-              body = `🤖 **yap-reviewer** — REQUEST_CHANGES
-
-❌ **HD-YAP-SEC-001 (MUST)** violada:
-- Patrón prohibido detectado en diff (shell=True / eval() / os.system() / import peligroso)
-- Ref: .github/adev/policies/HD-YAP-SEC-001.json
-
-**Fix requerido:** Eliminar patrones prohibidos. Usar \`subprocess.Popen([lista])\` sin \`shell=True\`, \`shutil.which()\` para validación de binarios.`;
+              body = '🤖 ' + B + 'yap-reviewer' + B + ' — REQUEST_CHANGES\n\n' +
+                '❌ ' + B + 'HD-YAP-SEC-001 (MUST)' + B + ' violada:\n' +
+                '- Patrón prohibido detectado en diff (shell=True / eval() / os.system() / import peligroso)\n' +
+                '- Ref: .github/adev/policies/HD-YAP-SEC-001.json\n\n' +
+                B + 'Fix requerido:' + B + ' Eliminar patrones prohibidos. Usar `subprocess.Popen([lista])` sin `shell=True`, `shutil.which()` para validación de binarios.';
             } else if (ciPending) {
               decision = 'APPROVE';
-              body = `🤖 **yap-reviewer** — APPROVE ✅
-
-✅ **HD-YAP-SEC-001 (MUST)** pasa
-${branchFail ? `⚠️ **HD-YAP-BRANCH-001 (SHOULD)** advisory: rama no sigue Conventional Commits` : `✅ **HD-YAP-BRANCH-001 (SHOULD)** pasa`}
-
-⏳ **HD-YAP-TEST-001 (MUST)**: esperando CI (unit-tests). Si CI verde → auto-merge.`;
+              body = '🤖 ' + B + 'yap-reviewer' + B + ' — APPROVE ✅\n\n' +
+                '✅ ' + B + 'HD-YAP-SEC-001 (MUST)' + B + ' pasa\n' +
+                (branchFail ? 
+                  '⚠️ ' + B + 'HD-YAP-BRANCH-001 (SHOULD)' + B + ' advisory: rama no sigue Conventional Commits' :
+                  '✅ ' + B + 'HD-YAP-BRANCH-001 (SHOULD)' + B + ' pasa') + '\n\n' +
+                '⏳ ' + B + 'HD-YAP-TEST-001 (MUST)' + B + ': esperando CI (unit-tests). Si CI verde → auto-merge.';
             } else if (!ciPassed) {
               decision = 'REQUEST_CHANGES';
-              body = `🤖 **yap-reviewer** — REQUEST_CHANGES
-
-❌ **HD-YAP-TEST-001 (MUST)** falló:
-- CI no pasó (unit-tests: ${unitTests?.conclusion || 'pending'}, branch-check: ${branchCheck?.conclusion || 'pending'})
-- Ref: .github/adev/policies/HD-YAP-TEST-001.json
-
-**Fix requerido:** Corregir tests fallidos y volver a ejecutar CI.`;
+              body = '🤖 ' + B + 'yap-reviewer' + B + ' — REQUEST_CHANGES\n\n' +
+                '❌ ' + B + 'HD-YAP-TEST-001 (MUST)' + B + ' falló:\n' +
+                '- CI no pasó (unit-tests: ' + (unitTests?.conclusion || 'pending') + ', branch-check: ' + (branchCheck?.conclusion || 'pending') + ')\n' +
+                '- Ref: .github/adev/policies/HD-YAP-TEST-001.json\n\n' +
+                B + 'Fix requerido:' + B + ' Corregir tests fallidos y volver a ejecutar CI.';
             } else if (branchFail) {
               decision = 'APPROVE';
-              body = `🤖 **yap-reviewer** — APPROVE ⚠️
-
-✅ **HD-YAP-SEC-001 (MUST)** pasa
-✅ **HD-YAP-TEST-001 (MUST)** pasa
-
-⚠️ **HD-YAP-BRANCH-001 (SHOULD)** advisory:
-- Rama no sigue Conventional Commits (feat/fix/refactor/docs/chore/)
-- Considera renombrar para historial limpio.`;
+              body = '🤖 ' + B + 'yap-reviewer' + B + ' — APPROVE ⚠️\n\n' +
+                '✅ ' + B + 'HD-YAP-SEC-001 (MUST)' + B + ' pasa\n' +
+                '✅ ' + B + 'HD-YAP-TEST-001 (MUST)' + B + ' pasa\n\n' +
+                '⚠️ ' + B + 'HD-YAP-BRANCH-001 (SHOULD)' + B + ' advisory:\n' +
+                '- Rama no sigue Conventional Commits (feat/fix/refactor/docs/chore/)\n' +
+                '- Considera renombrar para historial limpio.';
             } else {
               decision = 'APPROVE';
-              body = `🤖 **yap-reviewer** — APPROVE ✅
-
-✅ **HD-YAP-SEC-001 (MUST)** pasa
-✅ **HD-YAP-TEST-001 (MUST)** pasa
-✅ **HD-YAP-BRANCH-001 (SHOULD)** pasa
-
-🎉 Todas las políticas A-Dev Hardness validadas. Auto-merge habilitado si branch protection lo permite.`;
+              body = '🤖 ' + B + 'yap-reviewer' + B + ' — APPROVE ✅\n\n' +
+                '✅ ' + B + 'HD-YAP-SEC-001 (MUST)' + B + ' pasa\n' +
+                '✅ ' + B + 'HD-YAP-TEST-001 (MUST)' + B + ' pasa\n' +
+                '✅ ' + B + 'HD-YAP-BRANCH-001 (SHOULD)' + B + ' pasa\n\n' +
+                '🎉 Todas las políticas A-Dev Hardness validadas. Auto-merge habilitado si branch protection lo permite.';
             }
 
             console.log(`\n📋 Decisión: ${decision}`);
