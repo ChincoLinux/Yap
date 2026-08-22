@@ -164,6 +164,49 @@ class TestSetupShIntegration:
         assert "apparmor_parser" in content
         assert "usr.local.bin.yap" in content
 
+    def test_setup_reads_version_after_script_dir(self):
+        """SCRIPT_DIR must be set before YAP_VERSION reads $SCRIPT_DIR/VERSION."""
+        setup_path = os.path.join(os.path.dirname(yap.__file__), "setup.sh")
+        with open(setup_path) as f:
+            lines = f.readlines()
+        script_dir_line = None
+        version_line = None
+        for i, line in enumerate(lines, 1):
+            if script_dir_line is None and line.startswith("SCRIPT_DIR="):
+                script_dir_line = i
+            if version_line is None and line.startswith("YAP_VERSION=") and "VERSION" in line:
+                version_line = i
+        assert script_dir_line is not None, "SCRIPT_DIR assignment not found"
+        assert version_line is not None, "YAP_VERSION assignment not found"
+        assert script_dir_line < version_line, (
+            f"SCRIPT_DIR (line {script_dir_line}) must be defined before "
+            f"YAP_VERSION (line {version_line})"
+        )
+
+
+class TestCiWorkflows:
+    """CI workflows must not merge unreviewed code or crash on release."""
+
+    def test_fallback_merge_workflow_removed(self):
+        path = os.path.join(
+            os.path.dirname(yap.__file__),
+            ".github", "workflows", "fallback-merge.yml",
+        )
+        assert not os.path.exists(path), (
+            "fallback-merge.yml must stay removed: it merged PRs with stale "
+            "approvals and scanned every open PR on main"
+        )
+
+    def test_auto_release_imports_os_before_environ(self):
+        path = os.path.join(
+            os.path.dirname(yap.__file__),
+            ".github", "workflows", "auto-release.yml",
+        )
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "import os" in content
+        assert content.index("import os") < content.index("os.environ")
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

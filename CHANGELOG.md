@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README actualizado con URL correcta del repositorio
 
 ### Fixed
+- setup.sh lee VERSION despues de definir SCRIPT_DIR
+- auto-release.yml importa os al actualizar el CHANGELOG
+- fallback-merge.yml eliminado: mergeaba PRs no relacionadas y aceptaba aprobaciones obsoletas
 - setup.sh no falla cuando yap-agent.md no existe
 - Path traversal vulnerability en domain whitelist (#1)
 - Conversation history and context management (#2)
