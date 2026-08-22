@@ -56,7 +56,9 @@ jobs:
 
             // Get PR number from either PR event or workflow_dispatch input
             let prNumber;
-            if (context.eventName === 'workflow_dispatch') {
+            // Check if this is a workflow_dispatch event (no pull_request in payload)
+            const isWorkflowDispatch = context.payload && !context.payload.pull_request && github.event.inputs;
+            if (isWorkflowDispatch) {
               // workflow_dispatch: use input pr_number
               if (github.event.inputs && github.event.inputs.pr_number) {
                 prNumber = parseInt(github.event.inputs.pr_number);
@@ -68,7 +70,7 @@ jobs:
               // pull_request event: use PR number from payload
               prNumber = context.payload.pull_request.number;
             } else {
-              core.setFailed('No PR number available for event: ' + context.eventName);
+              core.setFailed('No PR number available - unknown event type');
               return;
             }
 
@@ -275,7 +277,9 @@ jobs:
           script: |
             // Get PR number from either PR event or workflow_dispatch input
             let prNumber;
-            if (context.eventName === 'workflow_dispatch') {
+            // Check if this is a workflow_dispatch event (no pull_request in payload)
+            const isWorkflowDispatch = context.payload && !context.payload.pull_request && github.event.inputs;
+            if (isWorkflowDispatch) {
               if (github.event.inputs && github.event.inputs.pr_number) {
                 prNumber = parseInt(github.event.inputs.pr_number);
               } else {
@@ -285,7 +289,7 @@ jobs:
             } else if (context.payload && context.payload.pull_request) {
               prNumber = context.payload.pull_request.number;
             } else {
-              console.log('No PR number available for event: ' + context.eventName);
+              console.log('No PR number available - unknown event type');
               return;
             }
 
