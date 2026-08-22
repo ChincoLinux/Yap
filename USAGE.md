@@ -136,11 +136,27 @@ Obtiene contenido de Wikipedia, lo resume con el LLM local, y muestra la fuente.
 
 ```bash
 yap abre firefox
-yap abre terminal
-yap abre vscode
+yap abre thonny
+yap abre geogebra
 ```
 
-Las apps permitidas se configuran en `/etc/yap/whitelist/apps.conf`. Intentar abrir una app no listada muestra sugerencias de alternativas.
+Las apps permitidas se configuran en `/etc/yap/whitelist/apps.conf`. Intentar abrir una app no listada muestra la lista de las disponibles.
+
+La whitelist viene preconfigurada para un entorno escolar:
+
+| Area | Aplicaciones |
+|------|--------------|
+| Ofimatica | LibreOffice, Evince |
+| Navegacion | Firefox |
+| Programacion | PSeInt, Thonny, Scratch |
+| Ciencias y matematicas | Kalzium, Geogebra |
+| Arte | Krita |
+| Educacion infantil | GCompris |
+| Sistema | Micro, Htop |
+
+Una aplicacion solo se abre si ademas esta instalada en el equipo. Las entradas
+admiten varios binarios separados por coma, porque el nombre cambia entre
+versiones de Debian: `Firefox:firefox-esr,firefox`.
 
 ## Progreso
 
