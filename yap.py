@@ -432,8 +432,8 @@ def cargar_perfil():
             data = json.load(f)
         if isinstance(data, dict):
             return _normalizar_perfil(data)
-    except (json.JSONDecodeError, OSError):
-        pass
+    except (json.JSONDecodeError, OSError) as err:
+        print(f"[yap] No se pudo cargar el perfil ({err}); se regenerará uno por defecto.", file=sys.stderr)
     perfil = _perfil_por_defecto()
     guardar_perfil(perfil)  # autogenera el archivo con valores válidos
     return perfil
