@@ -1,0 +1,19 @@
+Package: yap
+Version: @VERSION@
+Section: education
+Priority: optional
+Architecture: amd64
+Depends: python3 (>= 3.11), libnotify-bin, apparmor
+Recommends: yap-models-1b | yap-models-3b
+Suggests: firefox-esr, libreoffice, evince, micro, htop
+Maintainer: ChincoLinux <chincolinux@users.noreply.github.com>
+Homepage: https://github.com/ChincoLinux/Yap
+Installed-Size: @INSTALLED_SIZE@
+Description: Asistente IA local CPU-only para entornos educativos
+ Yap es un agente conversacional basado en Llama 3.2 Instruct
+ (GGUF Q4_K_M), ejecucion CPU-only con llama.cpp de enlace
+ estatico, disenado para ChincoLinux / Debian.
+ .
+ Incluye el agente (yap.py), el binario llama-cli, whitelists
+ educativas y el perfil AppArmor. El modelo GGUF se instala
+ por separado: apt install yap-models-1b o yap-models-3b.

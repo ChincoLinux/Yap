@@ -206,7 +206,17 @@ El instalador automatiza la configuracion del entorno. Conceptos clave:
 - **Disco:** 5 GB de espacio libre.
 - **Red:** Conexion a Internet (solo durante la instalacion).
 
-### 6.2 Procedimiento
+### 6.2 Paquete .deb (recomendado en aulas)
+
+```bash
+sudo apt install ./yap_1.0.0_amd64.deb
+sudo apt install ./yap-models-1b_1.0.0_all.deb    # ~2 GB RAM
+# sudo apt install ./yap-models-3b_1.0.0_all.deb  # ~3.5 GB RAM
+```
+
+El `.deb` instala el agente, `llama-cli` precompilado, whitelists en `/etc/yap/` y el perfil AppArmor. No requiere `setup.sh` ni `build-essential`. Guia completa: [docs/PACKAGING.md](docs/PACKAGING.md).
+
+### 6.3 Procedimiento de desarrollo (`setup.sh`)
 
 ```bash
 git clone https://github.com/ChincoLinux/Yap.git
@@ -232,7 +242,7 @@ El instalador realiza automaticamente:
 5. Instalacion de aplicaciones sugeridas (LibreOffice, Firefox, Evince, Micro, Htop).
 6. Verificacion de componentes.
 
-### 6.3 Actualizacion
+### 6.4 Actualizacion
 
 ```bash
 cd ~/Yap
@@ -515,7 +525,7 @@ git checkout lowmem
 - [ ] Historial de contexto persistente entre sesiones.
 - [ ] Sugerencias de apps alternativas al bloquear.
 - [ ] Integracion con **AppArmor**.
-- [ ] Instalador `.deb`.
+- [x] Instalador `.deb`.
 - [ ] Mas fuentes en whitelist educativa.
 - [ ] Interfaz de configuracion grafica.
 

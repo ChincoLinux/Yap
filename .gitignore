@@ -12,3 +12,7 @@ yap-agent.md
 commit-msg.txt
 .pytest_cache/
 resultado-*.txt
+
+# Paquetes Debian generados (#31)
+dist/
+*.deb

@@ -1,0 +1,13 @@
+Package: yap-models-3b
+Version: @VERSION@
+Section: education
+Priority: optional
+Architecture: all
+Depends: yap, wget | curl
+Maintainer: ChincoLinux <chincolinux@users.noreply.github.com>
+Homepage: https://github.com/ChincoLinux/Yap
+Installed-Size: @INSTALLED_SIZE@
+Description: Modelo Llama 3.2 3B Instruct (Q4_K_M) para Yap
+ Paquete de modelo GGUF ~1.9 GB para equipos con 3.5 GB RAM
+ o mas (ramas main / lowmem). Si el archivo no viene embebido,
+ postinst lo descarga desde Hugging Face.

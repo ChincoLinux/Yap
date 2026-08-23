@@ -1,0 +1,8 @@
+# Maintainer scripts y el builder deben usar LF (dpkg rechaza CRLF)
+build-deb.sh                         text eol=lf
+packaging/**/DEBIAN/postinst         text eol=lf
+packaging/**/DEBIAN/prerm            text eol=lf
+packaging/**/DEBIAN/postrm           text eol=lf
+packaging/**/DEBIAN/control          text eol=lf
+packaging/test-install-debian.sh     text eol=lf
+.github/workflows/*.yml              text eol=lf
