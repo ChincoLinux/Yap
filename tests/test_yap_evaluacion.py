@@ -252,6 +252,10 @@ class TestParserEvaluacion:
 
     def test_fallback_niega_no_es_correcto(self):
         for text in (
+            "Tu respuesta es incorrecta.",
+            "La respuesta no es del todo correcta.",
+            "No es correcto, revisa el ciclo.",
+            "Esto no esta correcto todavia.",
             "no es correcto",
             "no esta correcto",
             "no está correcto",
@@ -284,13 +288,18 @@ class TestParserEvaluacion:
         assert r["aprobado"] is True
 
     def test_normalizar_reconcilia_aprobado_y_puntaje(self):
+        r = yap.parsear_json_evaluacion('{"aprobado": true, "puntaje": 20}')
+        assert r["aprobado"] is True
+        assert r["puntaje"] >= yap.PUNTAJE_APROBACION
+        assert yap.nota_chilena(r["puntaje"]) >= 4.0
+        r = yap.parsear_json_evaluacion('{"aprobado": false, "puntaje": 95}')
+        assert r["aprobado"] is False
+        assert r["puntaje"] < yap.PUNTAJE_APROBACION
+        assert yap.nota_chilena(r["puntaje"]) < 4.0
         r = yap.parsear_json_evaluacion('{"aprobado": true, "puntaje": 2.0}')
         assert r["aprobado"] is True
         assert r["puntaje"] >= yap.PUNTAJE_APROBACION
         r = yap.parsear_json_evaluacion('{"aprobado": false, "puntaje": 66}')
-        assert r["aprobado"] is False
-        assert r["puntaje"] < yap.PUNTAJE_APROBACION
-        r = yap.parsear_json_evaluacion('{"aprobado": false, "puntaje": 90}')
         assert r["aprobado"] is False
         assert r["puntaje"] < yap.PUNTAJE_APROBACION
 

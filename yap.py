@@ -352,11 +352,13 @@ PUNTAJE_APROBACION = int(os.environ.get("YAP_PUNTAJE_APROBACION", "60"))
 LLAMA_TEMP_EVAL = float(os.environ.get("YAP_LLAMA_TEMP_EVAL", "0.2"))
 MAX_RESPUESTA_EVAL = 1200
 # Fallback de texto: las negaciones ganan a "correcto"/"aprobado".
+# Permite hasta 3 palabras entre el verbo y "correcto" ("no es del todo correcta").
 _RE_EVAL_NEG = re.compile(
     r"(?:incorrect[oa]s?|reprobado|desaprobado|insuficiente|"
     r"\bfallas?\b|\bfallos?\b|\bno cumple|"
-    r"\bno\s+(?:es\s+|esta\s+|está\s+|fue\s+|era\s+)?"
-    r"(?:correct[oa]s?|aprobad[oa]s?))"
+    r"\bno\s+(?:es|esta|está|fue|era)\s+(?:\w+\s+){0,3}"
+    r"(?:correct[oa]s?|aprobad[oa]s?)|"
+    r"\bno\s+(?:correct[oa]s?|aprobad[oa]s?))"
 )
 _RE_EVAL_POS = re.compile(
     r"(?:aprobado|correct[oa]s?|\bcumple\b|bien hecho)"
