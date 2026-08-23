@@ -498,8 +498,8 @@ def _system_prompt():
             contexto.append(f"su nivel es {perfil['nivel']}")
         if perfil.get("curso_activo"):
             contexto.append(f"su curso activo es {perfil['curso_activo']}")
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        print(f"[yap] Aviso: no se pudo cargar el perfil para contexto del prompt: {exc}", file=sys.stderr)
     if not contexto:
         return SYSTEM_PROMPT
     return SYSTEM_PROMPT + " Contexto: " + ", ".join(contexto) + "."
