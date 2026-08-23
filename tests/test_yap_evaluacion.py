@@ -250,6 +250,20 @@ class TestParserEvaluacion:
         assert r["parseado"] is False
         assert r["criterios_fallidos"] == self.CRITERIOS
 
+    def test_fallback_niega_no_es_correcto(self):
+        for text in (
+            "no es correcto",
+            "no esta correcto",
+            "no está correcto",
+            "esto no es correcto",
+            "no es correcta",
+            "no correcto",
+            "no aprobado",
+        ):
+            r = yap.parsear_json_evaluacion(text, self.CRITERIOS)
+            assert r["aprobado"] is False, text
+            assert r["puntaje"] < yap.PUNTAJE_APROBACION, text
+
     def test_error_llm_no_aprueba(self):
         r = yap.parsear_json_evaluacion("[ERROR] llama-cli no instalado.", self.CRITERIOS)
         assert r["error"] is True
@@ -268,6 +282,17 @@ class TestParserEvaluacion:
     def test_aprobado_string_si(self):
         r = yap.parsear_json_evaluacion('{"aprobado": "si", "puntaje": 70}')
         assert r["aprobado"] is True
+
+    def test_normalizar_reconcilia_aprobado_y_puntaje(self):
+        r = yap.parsear_json_evaluacion('{"aprobado": true, "puntaje": 2.0}')
+        assert r["aprobado"] is True
+        assert r["puntaje"] >= yap.PUNTAJE_APROBACION
+        r = yap.parsear_json_evaluacion('{"aprobado": false, "puntaje": 66}')
+        assert r["aprobado"] is False
+        assert r["puntaje"] < yap.PUNTAJE_APROBACION
+        r = yap.parsear_json_evaluacion('{"aprobado": false, "puntaje": 90}')
+        assert r["aprobado"] is False
+        assert r["puntaje"] < yap.PUNTAJE_APROBACION
 
     def test_vacio_cae_a_fallback(self):
         r = yap.parsear_json_evaluacion("", self.CRITERIOS)
@@ -512,6 +537,14 @@ class TestNotaChilena:
         assert yap.nota_chilena(0) == 1.0
         assert yap.nota_chilena(60) == 4.0
         assert yap.nota_chilena(100) == 7.0
+
+    def test_bajo_60_nunca_redondea_a_aprobacion(self):
+        assert yap.nota_chilena(59.0) == 3.9
+        assert yap.nota_chilena(59.1) == 3.9
+        assert yap.nota_chilena(59.5) == 3.9
+        assert yap.nota_chilena(59.9) == 3.9
+        for p in (50, 58.9, 59.0, 59.1, 59.5, 59.9, 59.99):
+            assert yap.nota_chilena(p) < 4.0
 
     def test_intermedios(self):
         assert yap.nota_chilena(30) == 2.5

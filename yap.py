@@ -351,6 +351,16 @@ MAX_INTENTOS_ACTIVIDAD = int(os.environ.get("YAP_MAX_INTENTOS", "3"))
 PUNTAJE_APROBACION = int(os.environ.get("YAP_PUNTAJE_APROBACION", "60"))
 LLAMA_TEMP_EVAL = float(os.environ.get("YAP_LLAMA_TEMP_EVAL", "0.2"))
 MAX_RESPUESTA_EVAL = 1200
+# Fallback de texto: las negaciones ganan a "correcto"/"aprobado".
+_RE_EVAL_NEG = re.compile(
+    r"(?:incorrect[oa]s?|reprobado|desaprobado|insuficiente|"
+    r"\bfallas?\b|\bfallos?\b|\bno cumple|"
+    r"\bno\s+(?:es\s+|esta\s+|está\s+|fue\s+|era\s+)?"
+    r"(?:correct[oa]s?|aprobad[oa]s?))"
+)
+_RE_EVAL_POS = re.compile(
+    r"(?:aprobado|correct[oa]s?|\bcumple\b|bien hecho)"
+)
 
 # ── Historial persistente entre sesiones (#13) ──────────────
 HISTORY_FILE = os.path.expanduser("~/.config/yap/history.json")
@@ -515,6 +525,7 @@ def nota_chilena(puntaje):
     """Convert a 0-100 score to the Chilean 1.0-7.0 scale.
 
     60% maps to 4.0 (aprobacion). Linear below and above that threshold.
+    [0, 60) maps to [1.0, 3.9] so a failing score never rounds up to 4.0.
     """
     try:
         p = float(puntaje)
@@ -523,8 +534,8 @@ def nota_chilena(puntaje):
     p = max(0.0, min(100.0, p))
     if p < 60.0:
         nota = 1.0 + (p / 60.0) * 3.0
-    else:
-        nota = 4.0 + ((p - 60.0) / 40.0) * 3.0
+        return min(round(nota, 1), 3.9)
+    nota = 4.0 + ((p - 60.0) / 40.0) * 3.0
     return round(nota, 1)
 
 
@@ -572,6 +583,15 @@ def _resultado_error(mensaje, criterios=None):
     }
 
 
+def _reconciliar_aprobado_puntaje(aprobado, puntaje):
+    """Keep aprobado and puntaje on the same side of PUNTAJE_APROBACION."""
+    if aprobado and puntaje < PUNTAJE_APROBACION:
+        return PUNTAJE_APROBACION
+    if not aprobado and puntaje >= PUNTAJE_APROBACION:
+        return max(0, PUNTAJE_APROBACION - 10)
+    return puntaje
+
+
 def _normalizar_resultado(data, criterios):
     """Coerce an LLM JSON object into the canonical evaluation dict."""
     puntaje = data.get("puntaje", data.get("score", data.get("puntos")))
@@ -590,6 +610,7 @@ def _normalizar_resultado(data, criterios):
     if puntaje is None:
         puntaje = 70 if aprobado else 40
     puntaje = max(0, min(100, puntaje))
+    puntaje = _reconciliar_aprobado_puntaje(aprobado, puntaje)
 
     cumplidos = data.get("criterios_cumplidos") or []
     fallidos = data.get("criterios_fallidos") or []
@@ -620,18 +641,11 @@ def _normalizar_resultado(data, criterios):
 def _evaluacion_fallback_texto(text, criterios):
     """Best-effort result when the LLM returns prose instead of JSON."""
     lower = (text or "").lower()
-    negativo = any(
-        p in lower
-        for p in (
-            "no aprobado", "incorrecto", "reprobado", "no cumple",
-            "desaprobado", "falla", "fallo", "insuficiente",
-        )
-    )
-    positivo = any(
-        p in lower
-        for p in ("aprobado", "correcto", "cumple", "bien hecho")
-    )
-    aprobado = positivo and not negativo
+    # Negation first: "no es correcto" contains "correcto" but must fail.
+    if _RE_EVAL_NEG.search(lower):
+        aprobado = False
+    else:
+        aprobado = bool(_RE_EVAL_POS.search(lower))
 
     m = re.search(r"\bpuntaje\D{0,8}(\d{1,3})\b", lower)
     if not m:
@@ -640,11 +654,7 @@ def _evaluacion_fallback_texto(text, criterios):
         puntaje = max(0, min(100, int(m.group(1))))
     else:
         puntaje = 70 if aprobado else 40
-
-    if aprobado and puntaje < PUNTAJE_APROBACION:
-        puntaje = PUNTAJE_APROBACION
-    if not aprobado and puntaje >= PUNTAJE_APROBACION:
-        puntaje = PUNTAJE_APROBACION - 10
+    puntaje = _reconciliar_aprobado_puntaje(aprobado, puntaje)
 
     criterios = list(criterios or [])
     feedback = (text or "").strip()[:500] or "Sin feedback."

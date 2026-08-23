@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `auto-merge.yml`: workflow dedicado de auto-merge (reemplazado por auto-merge nativo de GitHub)
 
 ### Fixed
+- `nota_chilena()` no redondea puntajes en [59.1, 60) a 4.0
+- Fallback de evaluación trata "no es correcto" / "no esta correcto" como reprobado
+- Parser JSON reconcilia `aprobado` y `puntaje` para que no se apruebe con 2.0 ni se repruebe con nota de aprobación
 - setup.sh no falla cuando yap-agent.md no existe
 - Path traversal vulnerability en domain whitelist (#1)
 - Conversation history and context management (#2)
