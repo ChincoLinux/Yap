@@ -522,22 +522,31 @@ def _buscar_ea(curso, ea_id):
             return e
     return None
 
+import math
 
 def nota_chilena(puntaje):
     """Convert a 0-100 score to the Chilean 1.0-7.0 scale.
 
     60% maps to 4.0 (aprobacion). Linear below and above that threshold.
-    [0, 60) maps to [1.0, 3.9] so a failing score never rounds up to 4.0.
     """
     try:
         p = float(puntaje)
     except (TypeError, ValueError):
         p = 0.0
     p = max(0.0, min(100.0, p))
-    if p < 60.0:
+
+    # Redondeo condicional: <= .4 baja, >= .5 sube
+    entero = math.floor(p)
+    decimal = p - entero
+    if decimal <= 0.4:
+        p = entero
+    else:
+        p = entero + 1
+
+    if p < 60:
         nota = 1.0 + (p / 60.0) * 3.0
-        return min(round(nota, 1), 3.9)
-    nota = 4.0 + ((p - 60.0) / 40.0) * 3.0
+    else:
+        nota = 4.0 + ((p - 60.0) / 40.0) * 3.0
     return round(nota, 1)
 
 
