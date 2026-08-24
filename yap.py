@@ -535,13 +535,8 @@ def nota_chilena(puntaje):
         p = 0.0
     p = max(0.0, min(100.0, p))
 
-    # Redondeo condicional: <= .4 baja, >= .5 sube
-    entero = math.floor(p)
-    decimal = p - entero
-    if decimal <= 0.4:
-        p = entero
-    else:
-        p = entero + 1
+    # Siempre redondea hacia abajo
+    p = math.floor(p)
 
     if p < 60:
         nota = 1.0 + (p / 60.0) * 3.0
