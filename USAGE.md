@@ -59,13 +59,15 @@ yap iniciar EA1
 
 Flujo de la sesion:
 
-1. **Vista general** — descripcion de la EA, actividades listadas.
-2. **Por cada actividad** — descripcion, herramienta sugerida.
-   - `Enter` = marcar como completada y avanzar.
-   - `salir` = guardar progreso y salir.
-   - `pregunta` = consultar al AI con contexto del curso.
+1. **Vista general** — descripcion de la EA, actividades listadas (con tipo de evaluacion si aplica).
+2. **Por cada actividad** — descripcion, consigna, herramienta sugerida.
+   - Si la actividad tiene `tipo` de evaluacion: escribe tu respuesta. El LLM (o comparacion exacta en opcion multiple) devuelve puntaje y feedback.
+   - Hasta 3 intentos por actividad (configurable con `YAP_MAX_INTENTOS` o `max_intentos` en el JSON). Si repruebas, puedes `saltar`.
+   - `pregunta ...` = consultar al tutor con contexto del curso y de la sesion activa.
    - `abrir pseint` = lanzar herramienta sugerida.
-3. **Al completar todas** — mensaje de cierre con enlace a evaluaciones.
+   - `salir` = guardar progreso y salir.
+   - Actividades sin `tipo` siguen el flujo anterior: `Enter` = marcar como hecha.
+3. **Al completar todas** — promedio 0-100 y nota final en escala chilena (1.0-7.0, 60% = 4.0).
 
 El progreso se guarda automaticamente al completar cada actividad (archivo atomico en `~/.config/yap/progress.json`).
 
@@ -101,8 +103,24 @@ Crea un archivo JSON en `/etc/yap/cursos/MAT1101.json`:
       "descripcion": "Resolucion de sistemas...",
       "herramientas": ["Python 3"],
       "actividades": [
-        {"orden": 1, "nombre": "Sistemas 2x2", "descripcion": "Resuelve sistemas...", "tool_hint": "Python 3"},
-        {"orden": 2, "nombre": "Sistemas 3x3", "descripcion": "...", "tool_hint": "Python 3"}
+        {
+          "orden": 1,
+          "nombre": "Sistemas 2x2",
+          "descripcion": "Resuelve sistemas...",
+          "tool_hint": "Python 3",
+          "tipo": "respuesta_libre",
+          "criterios_evaluacion": ["Plantea el sistema", "Obtiene la solucion correcta"]
+        },
+        {
+          "orden": 2,
+          "nombre": "Sistemas 3x3",
+          "descripcion": "...",
+          "tool_hint": "Python 3",
+          "tipo": "opcion_multiple",
+          "opciones": ["Una solucion", "Infinitas", "Ninguna"],
+          "respuesta_correcta": "Una solucion",
+          "criterios_evaluacion": ["Identifica el caso"]
+        }
       ],
       "evaluaciones": [
         {"nombre": "Eva Parcial", "descripcion": "Evaluacion parcial...", "tipo": "individual", "ponderacion": 20}
@@ -164,9 +182,24 @@ versiones de Debian: `Firefox:firefox-esr,firefox`.
 yap progreso
 ```
 
-Muestra el avance por curso y EA: actividades completadas y estado (en curso ✓, pendiente ▶).
+Muestra el avance por curso y EA: porcentaje completado, puntaje promedio, actividades reprobadas o saltadas, y nota (1.0-7.0).
 
-El archivo de progreso esta en `~/.config/yap/progress.json`. Se guarda atomicamente (sin riesgo de corruption por corte de energia).
+El archivo de progreso esta en `~/.config/yap/progress.json`. Se guarda atomicamente (sin riesgo de corruption por corte de energia). Cada actividad evaluada guarda `puntaje`, `intentos` y `fecha_aprobacion`.
+
+### Tipos de evaluacion en actividades
+
+Cada actividad de una EA puede declarar:
+
+| `tipo` | Como se evalua |
+|--------|----------------|
+| `respuesta_libre` | El LLM verifica los `criterios_evaluacion` |
+| `codigo_pseint` | El LLM valida sintaxis PSeInt y la logica |
+| `opcion_multiple` | Comparacion exacta con `respuesta_correcta` (sin LLM) |
+| `completar` | El LLM valida si la respuesta completa lo pedido |
+
+Campos: `criterios_evaluacion` (lista), `enunciado` (opcional), `opciones` y `respuesta_correcta` (requeridos en opcion multiple), `max_intentos` (opcional, default 3).
+
+El evaluador responde JSON `{aprobado, puntaje, feedback, criterios_cumplidos, criterios_fallidos, sugerencia}`. Si el LLM devuelve texto plano, Yap lo interpreta igual.
 
 ## Ramas de configuracion
 

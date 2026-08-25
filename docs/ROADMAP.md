@@ -18,7 +18,7 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 |---|-------|-----------|--------|
 | 21 | Control de sesiones dentro del agente | P0 | Planeado |
 | 22 | Explicación automática al abrir Yap (onboarding interactivo) | P0 | Planeado |
-| 23 | Sistema de evaluación automática con feedback del LLM | P1 | Planeado |
+| 23 | Sistema de evaluación automática con feedback del LLM | P1 | Completado |
 | 24 | Perfil de estudiante (nombre, nivel, cursos activos, preferencias) | P1 | Planeado |
 | 25 | Modo profesor — panel de monitoreo de progreso de estudiantes | P2 | Planeado |
 
