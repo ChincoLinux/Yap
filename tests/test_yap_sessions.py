@@ -15,7 +15,6 @@ Verifica:
 Ejecucion: python3 -m pytest tests/test_yap_sessions.py -v
 """
 
-import pytest
 import sys
 import os
 import tempfile
