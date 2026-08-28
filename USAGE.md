@@ -19,6 +19,9 @@ Ver requisitos detallados en [README.md](README.md#61-requisitos-del-sistema).
 | `yap guia` | Tutorial interactivo de 7 pasos. |
 | `yap ayuda` | Lista de comandos disponibles. |
 | `yap progreso` | Progreso de cursos. |
+| `yap sesion` | Estado de la sesion activa. |
+| `yap sesion pausar` | Pausar la sesion y guardar el contexto. |
+| `yap sesion retomar 3` | Retomar una sesion pausada. |
 | `yap curso FPY1101` | Plan de estudio del curso. |
 | `yap iniciar EA1` | Comenzar una experiencia de aprendizaje. |
 | `yap <pregunta>` | Consulta directa al AI. |
@@ -200,6 +203,52 @@ Cada actividad de una EA puede declarar:
 Campos: `criterios_evaluacion` (lista), `enunciado` (opcional), `opciones` y `respuesta_correcta` (requeridos en opcion multiple), `max_intentos` (opcional, default 3).
 
 El evaluador responde JSON `{aprobado, puntaje, feedback, criterios_cumplidos, criterios_fallidos, sugerencia}`. Si el LLM devuelve texto plano, Yap lo interpreta igual.
+
+## Sesiones
+
+Una **sesion** agrupa el contexto de trabajo: el curso y la EA en curso, junto con los
+turnos de conversacion con el tutor. Puede pausarse y reanudarse posteriormente
+conservando dicho contexto.
+
+### Comandos
+
+| Comando | Descripcion |
+|---------|-------------|
+| `yap sesion` | Estado de la sesion activa y resumen de las pausadas. |
+| `yap sesion nueva` | Inicia una sesion limpia (pausa la anterior si la hay). |
+| `yap sesion pausar` | Pausa la sesion y guarda el contexto de conversacion. |
+| `yap sesion retomar [ID]` | Retoma una sesion pausada. Sin ID, retoma la ultima. |
+| `yap sesion cerrar` | Cierra la sesion y la archiva en el historial. |
+| `yap sesion listar` | Lista todas las sesiones, incluidas las cerradas. |
+
+El identificador se muestra en el prompt del modo interactivo:
+
+```
+Chinco [S1] > que es un ciclo mientras
+```
+
+### Flujo tipico
+
+```bash
+yap curso FPY1101        # abre una sesion asociada al curso automaticamente
+yap iniciar EA1          # asocia la EA a la sesion activa
+yap sesion pausar        # interrupcion: guarda el contexto y libera la sesion
+yap sesion retomar       # reanudacion: restaura la conversacion previa
+yap sesion cerrar        # cierre de la unidad: archiva en el historial
+```
+
+Al salir del modo interactivo con una sesion activa, Yap solicita confirmacion para
+pausarla o cerrarla (`p/C`, cierra por defecto).
+
+### Limites y almacenamiento
+
+- Maximo **3 sesiones abiertas** simultaneamente (activas o pausadas). Configurable
+  mediante la variable de entorno `YAP_MAX_SESSIONS`.
+- Solo puede existir **una sesion activa**: abrir o retomar otra pausa la anterior.
+- Las sesiones se almacenan en `~/.config/yap/sessions.json`, con escritura atomica.
+- Al **cerrar** una sesion, su conversacion se traslada a `~/.config/yap/history.json`
+  y queda disponible mediante `yap historial` y `yap historial --ultimo`. Las sesiones
+  **pausadas no** se archivan hasta su cierre.
 
 ## Ramas de configuracion
 

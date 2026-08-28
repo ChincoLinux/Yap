@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Control de sesiones dentro del agente (#21): crear, pausar, retomar, cerrar y
+  listar sesiones, con límite de 3 abiertas, prompt marcado con la sesión activa
+  y archivado en el historial al cerrar
 - Evaluación automática de actividades de EA con feedback del LLM (#23)
 - Tipos `respuesta_libre`, `codigo_pseint`, `opcion_multiple` y `completar` en el JSON del curso
 - `progress.json` guarda puntaje, intentos y fecha de aprobación; máximo 3 intentos por actividad
