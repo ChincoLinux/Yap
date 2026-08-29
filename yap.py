@@ -345,6 +345,227 @@ def listar_cursos():
     return cursos
 
 
+# ── Perfil del estudiante (#24) ─────────────────────────────
+# ponytail: XDG_CONFIG_HOME respetado; escritura atómica (.tmp + os.replace)
+# para evitar corrupción si el proceso muere a mitad de guardado (Ctrl+C).
+
+def _config_dir():
+    """Return Yap's user config dir, honoring $XDG_CONFIG_HOME if set."""
+    base = os.environ.get("XDG_CONFIG_HOME")
+    # ponytail: XDG exige rutas absolutas; "/x" es absoluta en POSIX aunque
+    # ntpath.isabs la rechace sin unidad en Windows. Relativas/vacías se ignoran.
+    if not base or not (base.startswith("/") or os.path.isabs(base)):
+        base = os.path.expanduser("~/.config")
+    return os.path.join(base, "yap")
+
+PROFILE_FILE = os.path.join(_config_dir(), "profile.json")
+
+NIVELES_VALIDOS = ("basico", "intermedio", "avanzado")
+IDIOMAS_VALIDOS = ("es", "en")
+
+
+def _perfil_por_defecto():
+    """Fresh default profile. New dicts each call to avoid shared state."""
+    return {
+        "nombre": "",
+        "fecha_primer_uso": _now_iso(),
+        "nivel": "basico",
+        "cursos_inscritos": [],
+        "curso_activo": None,
+        "preferencias": {
+            "idioma": "es",
+            "tema": "claro",
+            "feedback_detallado": True,
+            "notificaciones": True,
+        },
+        "onboarding_completed": False,
+        "estadisticas": {
+            "sesiones_totales": 0,
+            "tiempo_total_minutos": 0,
+            "preguntas_totales": 0,
+        },
+    }
+
+
+def _normalizar_perfil(data):
+    """Coerce a loaded profile onto the schema; invalid values fall back."""
+    perfil = _perfil_por_defecto()
+    if not isinstance(data, dict):
+        return perfil
+
+    for clave in ("nombre", "fecha_primer_uso", "nivel", "cursos_inscritos",
+                  "curso_activo", "onboarding_completed"):
+        valor = data.get(clave)
+        if valor is not None:
+            perfil[clave] = valor
+
+    prefs_data = data.get("preferencias")
+    if isinstance(prefs_data, dict):
+        for clave in list(perfil["preferencias"]):
+            if clave in prefs_data:
+                perfil["preferencias"][clave] = prefs_data[clave]
+
+    stats_data = data.get("estadisticas")
+    if isinstance(stats_data, dict):
+        for clave in list(perfil["estadisticas"]):
+            if clave in stats_data:
+                perfil["estadisticas"][clave] = stats_data[clave]
+
+    # Validaciones de dominio: valores corruptos vuelven al default
+    if not isinstance(perfil["nombre"], str):
+        perfil["nombre"] = ""
+    if perfil["nivel"] not in NIVELES_VALIDOS:
+        perfil["nivel"] = "basico"
+    if not isinstance(perfil["cursos_inscritos"], list):
+        perfil["cursos_inscritos"] = []
+    if perfil["curso_activo"] is not None and not isinstance(perfil["curso_activo"], str):
+        perfil["curso_activo"] = None
+    if perfil["preferencias"]["idioma"] not in IDIOMAS_VALIDOS:
+        perfil["preferencias"]["idioma"] = "es"
+    return perfil
+
+
+def cargar_perfil():
+    """Load the student profile; regenerate defaults if missing or corrupt."""
+    try:
+        with open(PROFILE_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return _normalizar_perfil(data)
+    except (json.JSONDecodeError, OSError) as err:
+        print(f"[yap] No se pudo cargar el perfil ({err}); se regenerará uno por defecto.", file=sys.stderr)
+    perfil = _perfil_por_defecto()
+    guardar_perfil(perfil)  # autogenera el archivo con valores válidos
+    return perfil
+
+
+def guardar_perfil(perfil):
+    """Save profile atomically: write .tmp first, then replace the original."""
+    os.makedirs(os.path.dirname(PROFILE_FILE), exist_ok=True)
+    tmp = PROFILE_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(perfil, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, PROFILE_FILE)  # atomic on Linux
+
+
+def actualizar_nombre(valor):
+    """Set student name. Raises ValueError if empty."""
+    valor = str(valor).strip()
+    if not valor:
+        raise ValueError("El nombre no puede estar vacío.")
+    perfil = cargar_perfil()
+    perfil["nombre"] = valor
+    guardar_perfil(perfil)
+    return perfil
+
+
+def actualizar_nivel(nivel):
+    """Set skill level. Only basico/intermedio/avanzado accepted."""
+    nivel = str(nivel).strip().lower()
+    if nivel not in NIVELES_VALIDOS:
+        raise ValueError(
+            f"Nivel no válido: '{nivel}'. Opciones: {', '.join(NIVELES_VALIDOS)}")
+    perfil = cargar_perfil()
+    perfil["nivel"] = nivel
+    guardar_perfil(perfil)
+    return perfil
+
+
+def actualizar_idioma(idioma):
+    """Set preferred language. Only es/en accepted."""
+    idioma = str(idioma).strip().lower()
+    if idioma not in IDIOMAS_VALIDOS:
+        raise ValueError(
+            f"Idioma no válido: '{idioma}'. Opciones: {', '.join(IDIOMAS_VALIDOS)}")
+    perfil = cargar_perfil()
+    perfil["preferencias"]["idioma"] = idioma
+    guardar_perfil(perfil)
+    return perfil
+
+
+def _system_prompt():
+    """SYSTEM_PROMPT + light profile context (#24).
+
+    Solo inyecta nombre, nivel y curso_activo; las estadísticas quedan
+    fuera para no desperdiciar KV cache/tokens en cada consulta.
+    """
+    contexto = []
+    try:
+        perfil = cargar_perfil()
+        if perfil.get("nombre"):
+            contexto.append(f"el estudiante se llama {perfil['nombre']}")
+        if perfil.get("nivel"):
+            contexto.append(f"su nivel es {perfil['nivel']}")
+        if perfil.get("curso_activo"):
+            contexto.append(f"su curso activo es {perfil['curso_activo']}")
+    except (OSError, ValueError) as exc:
+        print(f"[yap] Aviso: no se pudo cargar el perfil para contexto del prompt: {exc}", file=sys.stderr)
+    if not contexto:
+        return SYSTEM_PROMPT
+    return SYSTEM_PROMPT + " Contexto: " + ", ".join(contexto) + "."
+
+
+def _formatar_perfil(perfil):
+    """Render the profile as a formatted TUI string."""
+    lines = [display_header("Mi Perfil")]
+    lines.append(f"\n  {C['BOLD']}Nombre:{C['RESET']} {perfil['nombre'] or '(sin definir)'}")
+    lines.append(f"  {C['BOLD']}Nivel:{C['RESET']} {perfil['nivel']}")
+    lines.append(f"  {C['BOLD']}Curso activo:{C['RESET']} {perfil['curso_activo'] or '(ninguno)'}")
+    lines.append(f"  {C['BOLD']}Cursos inscritos:{C['RESET']} "
+                 f"{', '.join(perfil['cursos_inscritos']) or '(ninguno)'}")
+    lines.append(f"  {C['BOLD']}Primer uso:{C['RESET']} {perfil['fecha_primer_uso']}")
+    prefs = perfil["preferencias"]
+    lines.append(f"\n  {C['BOLD']}Preferencias:{C['RESET']}")
+    lines.append(f"    Idioma: {prefs['idioma']} | Tema: {prefs['tema']}")
+    fb = "sí" if prefs['feedback_detallado'] else "no"
+    notif = "sí" if prefs['notificaciones'] else "no"
+    lines.append(f"    Feedback detallado: {fb} | Notificaciones: {notif}")
+    stats = perfil["estadisticas"]
+    lines.append(f"\n  {C['BOLD']}Estadísticas:{C['RESET']}")
+    lines.append(f"    Sesiones: {stats['sesiones_totales']} | "
+                 f"Preguntas: {stats['preguntas_totales']} | "
+                 f"Tiempo total: {stats['tiempo_total_minutos']} min")
+    lines.append(f"\n  {C['GRAY']}Perfil guardado en: {PROFILE_FILE}{C['RESET']}")
+    lines.append(f"  {C['GRAY']}Actualizar: yap perfil nombre|nivel|idioma <valor>{C['RESET']}")
+    return "\n".join(lines)
+
+
+def cmd_perfil(args=""):
+    """Handle `yap perfil [subcomando]`.
+
+    Subcomandos:
+      (ninguno)              — muestra el perfil formateado
+      nombre <valor>         — actualiza el nombre
+      nivel <basico|...>     — actualiza el nivel
+      idioma <es|en>         — actualiza preferencias.idioma
+    """
+    partes = args.strip().split(None, 1) if args.strip() else []
+    if not partes or partes[0].lower() in ("ver", "mostrar"):
+        return _formatar_perfil(cargar_perfil())
+
+    campo = partes[0].lower()
+    if len(partes) < 2 or not partes[1].strip():
+        return f"[ERROR] Falta el valor para '{campo}'. Uso: yap perfil {campo} <valor>"
+    valor = partes[1].strip()
+
+    try:
+        if campo == "nombre":
+            actualizar_nombre(valor)
+        elif campo == "nivel":
+            actualizar_nivel(valor)
+        elif campo == "idioma":
+            actualizar_idioma(valor)
+        else:
+            return (f"[ERROR] Campo desconocido: '{campo}'. "
+                    "Campos disponibles: nombre, nivel, idioma")
+    except ValueError as e:
+        return f"[ERROR] {e}"
+    except OSError as e:
+        return f"[ERROR] No se pudo guardar el perfil: {e}"
+
+    return f"[OK] Perfil actualizado ({campo} = {valor})."
+
+
 # ── Progreso del estudiante ─────────────────────────────────
 PROGRESS_FILE = os.path.expanduser("~/.config/yap/progress.json")
 MAX_INTENTOS_ACTIVIDAD = int(os.environ.get("YAP_MAX_INTENTOS", "3"))
@@ -2283,7 +2504,7 @@ def _clean_output(result):
 
 def cmd_query(prompt, context=None, store_history=True):
     parts = [BOS]
-    parts.append(f"{HEADER}system{FOOTER}\n\n{SYSTEM_PROMPT}{EOT}")
+    parts.append(f"{HEADER}system{FOOTER}\n\n{_system_prompt()}{EOT}")
 
     # Add conversation history (store original user prompt, not fabricated ones)
     for user_msg, assistant_msg in HISTORY:
@@ -2559,6 +2780,9 @@ def interpret(user_input):
         return "guia", "guia"
     if stripped in ("progreso", "avance", "mi progreso", "mi avance", "avance curso"):
         return "progreso", "progreso"
+    # perfil [nombre|nivel|idioma <valor>] — conserva mayúsculas del valor
+    if stripped == "perfil" or stripped == "mi perfil" or stripped.startswith("perfil "):
+        return "perfil", user_input[6:].strip()
     if stripped == "historial" or stripped == "historial --ultimo":
         if "--ultimo" in stripped:
             return "historial", "--ultimo"
@@ -2622,6 +2846,7 @@ def main():
             "Busca [tema] — buscar en Wikipedia",
             "Tutor PSeInt — preguntas de programacion",
             "Curso FPY1101 — plan de estudio",
+            "Perfil — ver o actualizar tu perfil",
             "Historial — ver sesiones anteriores",
             "Historial --ultimo — retomar ultima sesion",
 
@@ -2735,6 +2960,9 @@ def handle_action(action, param, original_input):
     elif action == "progreso":
         print(cmd_mostrar_progreso())
 
+    elif action == "perfil":
+        print(cmd_perfil(param))
+
     elif action == "historial":
         resume = param == "--ultimo"
         print(cmd_historial(resume_last=resume))
@@ -2769,6 +2997,8 @@ def handle_action(action, param, original_input):
         print("                 'sesion nueva|pausar|retomar|cerrar|listar'")
 
         print("  Telemetria:    'telemetria' — resumen local de tu uso")
+        print("  Perfil:        'perfil' — ver tu perfil")
+        print("  Actualizar:    'perfil nombre Maria' | 'perfil nivel basico' | 'perfil idioma es'")
         print()
 
     else:
