@@ -1,0 +1,40 @@
+#!/bin/sh
+set -e
+
+# postinst de yap-models-1b — instala el GGUF 1B en /opt/yap/models/.
+# Si el .deb ya trae el archivo (build --embed-models), no descarga.
+
+MODEL_DIR="/opt/yap/models"
+MODEL_FILE="Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+MODEL_URL="https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+
+download_model() {
+    dest="$1"
+    url="$2"
+    tmp="$dest.part"
+    if command -v wget >/dev/null 2>&1; then
+        wget --progress=bar:force -O "$tmp" "$url"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -L --fail -o "$tmp" "$url"
+    else
+        echo "ERROR: se necesita wget o curl para descargar el modelo" >&2
+        exit 1
+    fi
+    mv "$tmp" "$dest"
+}
+
+case "$1" in
+    configure)
+        mkdir -p "$MODEL_DIR"
+        if [ -s "$MODEL_DIR/$MODEL_FILE" ]; then
+            echo "yap-models-1b: $MODEL_FILE ya existe, no se descarga."
+            exit 0
+        fi
+        echo "yap-models-1b: descargando $MODEL_FILE (~0.81 GB)..."
+        download_model "$MODEL_DIR/$MODEL_FILE" "$MODEL_URL"
+        chmod 0644 "$MODEL_DIR/$MODEL_FILE"
+        echo "yap-models-1b: modelo instalado en $MODEL_DIR/$MODEL_FILE"
+        ;;
+esac
+
+exit 0

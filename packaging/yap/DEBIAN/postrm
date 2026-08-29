@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+# postrm de yap
+#  - remove: quita el perfil AppArmor; conserva /etc/yap (configs del admin)
+#  - purge:  elimina /etc/yap
+# Nunca toca ~/.config/yap/ (progreso, historial, confirmaciones del estudiante)
+
+case "$1" in
+    remove)
+        rm -f /etc/apparmor.d/usr.local.bin.yap
+        ;;
+    purge)
+        rm -f /etc/apparmor.d/usr.local.bin.yap
+        rm -rf /etc/yap
+        ;;
+esac
+
+exit 0

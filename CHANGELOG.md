@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tipos `respuesta_libre`, `codigo_pseint`, `opcion_multiple` y `completar` en el JSON del curso
 - `progress.json` guarda puntaje, intentos y fecha de aprobación; máximo 3 intentos por actividad
 - `yap progreso` muestra % completado, promedio, reprobadas y nota chilena (1.0-7.0)
+- Paquete `.deb` de Yap (`build-deb.sh`, `packaging/`) con `postinst` (whitelists, AppArmor, symlink `/usr/local/bin/yap`) y paquetes de modelo `yap-models-1b` / `yap-models-3b` (#31)
+- CI `build-deb.yml`: genera `.deb` en cada release y prueba instalación limpia en Debian 12
+- `docs/PACKAGING.md`: guía de construcción e instalación del paquete
 - CI Quality Suite adaptada de Homedir (os-santiago/homedir): `pr-quality-suite.yml` (ruff style + pyflakes static + pytest coverage + pip-audit deps + arch validation), `pr-traceability-check.yml` (verifica `Closes #N` en cada PR), `pr-state-labeler.yml` (auto-label `pr:needs-review`/`pr:approved`/etc.), `quality-gates.yml` (CodeQL Python + TruffleHog secret scan + dependency review), `pr-validation.yml` (build & verify + smoke test CLI)
 - Scripts de CI: `scripts/ci/check_pr_traceability.py`, `scripts/ci/label_pr_state.py`, `scripts/ci/pr_preflight.sh`
 - Auto-asignación semanal de issues al equipo

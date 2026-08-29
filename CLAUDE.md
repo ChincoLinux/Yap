@@ -92,7 +92,9 @@ El hook `.githooks/post-checkout` informa del cambio de modelo al hacer `git che
 ```
 Yap/
 ├── yap.py                 # Agente principal (36KB, ~640 líneas)
-├── setup.sh               # Instalador (compila llama.cpp, descarga modelo)
+├── setup.sh               # Instalador de desarrollo (compila llama.cpp)
+├── build-deb.sh           # Genera yap_*.deb y yap-models-*.deb (#31)
+├── packaging/             # Plantillas DEBIAN (control, postinst, prerm, postrm)
 ├── whitelist/
 │   ├── apps.conf          # Apps permitidas
 │   └── web.conf           # Dominios permitidos
@@ -105,7 +107,7 @@ Yap/
 ├── .github/
 │   ├── workflows/test.yml      # CI: 81 pruebas + verificación estática
 │   └── adev/                   # Configuración A-Dev (ver sección 7)
-├── docs/                  # Documentación
+├── docs/                  # ROADMAP, PACKAGING, TRUNK-BASED, SECURITY-AUDIT
 └── USAGE.md              # Guía de uso
 ```
 

@@ -1,0 +1,69 @@
+#!/bin/sh
+set -e
+
+# postinst de yap — copia configs, instala AppArmor y asegura el launcher.
+# No sobrescribe whitelists ya personalizadas en /etc/yap/.
+
+YAP_SHARE="/usr/share/yap"
+YAP_ETC="/etc/yap"
+
+install_if_missing() {
+    src="$1"
+    dest="$2"
+    if [ ! -e "$dest" ]; then
+        mkdir -p "$(dirname "$dest")"
+        cp "$src" "$dest"
+    fi
+}
+
+case "$1" in
+    configure)
+        mkdir -p "$YAP_ETC/whitelist" "$YAP_ETC/pseint" "$YAP_ETC/cursos" \
+                 "$YAP_ETC/agent" /opt/yap/models
+
+        if [ -f "$YAP_SHARE/whitelist/apps.conf" ]; then
+            install_if_missing "$YAP_SHARE/whitelist/apps.conf" \
+                               "$YAP_ETC/whitelist/apps.conf"
+        fi
+        if [ -f "$YAP_SHARE/whitelist/web.conf" ]; then
+            install_if_missing "$YAP_SHARE/whitelist/web.conf" \
+                               "$YAP_ETC/whitelist/web.conf"
+        fi
+        if [ -f "$YAP_SHARE/pseint/ejercicios.conf" ]; then
+            install_if_missing "$YAP_SHARE/pseint/ejercicios.conf" \
+                               "$YAP_ETC/pseint/ejercicios.conf"
+        fi
+        if [ -f "$YAP_SHARE/pseint/guia_ejercicios.pdf" ]; then
+            install_if_missing "$YAP_SHARE/pseint/guia_ejercicios.pdf" \
+                               "$YAP_ETC/pseint/guia_ejercicios.pdf"
+        fi
+        if [ -d "$YAP_SHARE/cursos" ]; then
+            for curso in "$YAP_SHARE/cursos"/*.json; do
+                [ -f "$curso" ] || continue
+                install_if_missing "$curso" "$YAP_ETC/cursos/$(basename "$curso")"
+            done
+        fi
+        if [ -f "$YAP_SHARE/agent/yap.md" ]; then
+            install_if_missing "$YAP_SHARE/agent/yap.md" "$YAP_ETC/agent/yap.md"
+        fi
+
+        if [ -f /opt/yap/yap.py ]; then
+            chmod 0755 /opt/yap/yap.py
+        fi
+
+        # Launcher: symlink /usr/local/bin/yap -> /opt/yap/yap.py
+        mkdir -p /usr/local/bin
+        ln -sf /opt/yap/yap.py /usr/local/bin/yap
+
+        # Perfil AppArmor (no abortar si el parser no esta activo, p.ej. contenedores)
+        if [ -f "$YAP_SHARE/apparmor/usr.local.bin.yap" ]; then
+            mkdir -p /etc/apparmor.d
+            cp "$YAP_SHARE/apparmor/usr.local.bin.yap" /etc/apparmor.d/usr.local.bin.yap
+            if command -v apparmor_parser >/dev/null 2>&1; then
+                apparmor_parser -r /etc/apparmor.d/usr.local.bin.yap 2>/dev/null || true
+            fi
+        fi
+        ;;
+esac
+
+exit 0
