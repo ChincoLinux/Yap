@@ -10,6 +10,7 @@ set -euo pipefail
 # faltante. El resto de pasos detectan lo ya instalado.
 # ============================================================
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 YAP_VERSION="$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "1.0.0")"
 YAP_DIR="/opt/yap"
 MODEL_DIR="$YAP_DIR/models"
@@ -17,7 +18,6 @@ CONFIG_DIR="/etc/yap"
 WHITELIST_DIR="$CONFIG_DIR/whitelist"
 PSEINT_DIR="$CONFIG_DIR/pseint"
 BIN_DIR="/usr/local/bin"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LLAMACPP_REPO="https://github.com/ggerganov/llama.cpp.git"
 LLAMACPP_BRANCH="b5097"
 

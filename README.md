@@ -111,7 +111,7 @@ El instalador automatiza la configuracion del entorno. Conceptos clave:
 | Linea(s) | Concepto | Explicacion |
 |---|---|---|
 | 2 | **`set -euo pipefail`** | Modo estricto: `-e` aborta en error; `-u` variables no definidas como error; `-o pipefail` propaga errores en tuberias |
-| 14 | **`SCRIPT_DIR`** | Obtiene la ruta absoluta del directorio del script mediante `${BASH_SOURCE[0]}` |
+| 13 | **`SCRIPT_DIR`** | Obtiene la ruta absoluta del directorio del script mediante `${BASH_SOURCE[0]}` antes de leer `VERSION` |
 | 38 | **`git clone --depth 1`** | Clonado superficial (un solo commit) para minimizar ancho de banda |
 | 41-42 | **`cmake` + `cmake --build`** | Configuracion y compilacion con `-DBUILD_SHARED_LIBS=OFF` para enlace estatico |
 | 47-52 | **Descarga del modelo** | Lee `MODEL_PATH` de `yap.py` y descarga el `.gguf` correspondiente (3B o 1B) |
