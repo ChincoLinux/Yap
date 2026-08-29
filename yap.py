@@ -1345,7 +1345,6 @@ def nota_chilena(puntaje):
     # Siempre redondea hacia abajo
     p = math.floor(p)
 
-    if p < 60:
     if p < 60.0:
         nota = 1.0 + (p / 60.0) * 3.0
     else:
@@ -1473,7 +1472,7 @@ def _evaluacion_fallback_texto(text, criterios):
         p in lower
         for p in ("aprobado", "correcto", "cumple", "bien hecho")
     )
-    aprobado = positivo and not negativo
+    aprobado = positivo and not (negativo or bool(_RE_EVAL_NEG.search(lower)))
 
     m = re.search(r"\bpuntaje\D{0,8}(\d{1,3})\b", lower)
     if not m:
@@ -1705,13 +1704,7 @@ def _evaluar_exacta(ejercicio, respuesta):
 def _prompt_evaluacion(respuesta, criterios, tipo, actividad, contexto):
     """Compact evaluator prompt. Kept short for the 2048-token context."""
     nombre = _truncar((actividad or {}).get("nombre", ""), 80)
-    descripcion = _truncar(
-        (actividad or {}).get("enunciado") or (actividad or {}).get("descripcion") or "",
-        (actividad or {}).get("enunciado")
-        or (actividad or {}).get("descripcion")
-        or "",
-        400,
-    )
+    descripcion = _truncar((actividad or {}).get("enunciado") or (actividad or {}).get("descripcion") or "", 400)
     crit_lines = "\n".join(f"- {c}" for c in (criterios or [])[:8]) or "- (sin criterios)"
     extra = ""
     if tipo == "codigo_pseint":
@@ -1844,6 +1837,173 @@ def evaluar_actividad(respuesta, criterios, tipo="respuesta_libre",
 
     ctx = contexto if contexto is not None else _contexto_sesion_activa()
     return _evaluar_con_llm(respuesta, criterios, tipo, actividad, ctx)
+
+
+# ── Ejercicios interactivos del catálogo (#27) ────────────
+
+def _max_intentos_ejercicio(ejercicio):
+    """Per-exercise attempt cap, falling back to YAP_MAX_INTENTOS (default 3)."""
+    try:
+        n = int((ejercicio or {}).get("max_intentos", MAX_INTENTOS_EJERCICIO))
+    except (TypeError, ValueError):
+        n = MAX_INTENTOS_EJERCICIO
+    return max(1, min(10, n))
+
+
+def evaluar_ejercicio(ejercicio, respuesta):
+    """Evaluate a catalog exercise against a student answer.
+
+    validacion='llm' routes to the LLM evaluator; otherwise exact/normalized
+    comparison is used. Returns dict: aprobado, puntaje, feedback,
+    criterios_cumplidos, criterios_fallidos, sugerencia, error. error=True when
+    the LLM could not be reached (that case must NOT consume an attempt).
+    """
+    ejercicio = ejercicio or {}
+    tipo = _alias_tipo(ejercicio.get("tipo"))
+    validacion = (ejercicio.get("validacion") or "exacta").strip().lower()
+    criterios = list(ejercicio.get("criterios") or [])
+    respuesta = (respuesta or "").strip()
+
+    if not respuesta:
+        return {
+            "aprobado": False,
+            "puntaje": 0,
+            "feedback": "No se recibio una respuesta.",
+            "criterios_cumplidos": [],
+            "criterios_fallidos": criterios,
+            "sugerencia": "Escribe una respuesta antes de enviar.",
+            "error": False,
+            "parseado": True,
+        }
+
+    if validacion == "llm":
+        actividad = {
+            "nombre": ejercicio.get("titulo", ""),
+            "enunciado": ejercicio.get("enunciado")
+                        or ejercicio.get("descripcion") or "",
+            "criterios_evaluacion": criterios,
+        }
+        return evaluar_actividad(
+            respuesta, criterios, tipo=tipo, actividad=actividad,
+        )
+
+    return _evaluar_exacta(ejercicio, respuesta)
+
+
+def pista_siguiente(ejercicio, pistas_usadas):
+    """Return (nivel, texto) for the next hint, or None when exhausted.
+
+    nivel is 1-based; pistas_usadas is the number of hints already shown.
+    """
+    pistas = list((ejercicio or {}).get("pistas") or [])
+    nivel = int(pistas_usadas or 0) + 1
+    if nivel < 1 or nivel > len(pistas):
+        return None
+    return (nivel, pistas[nivel - 1])
+
+
+def _registro_ejercicio(progress, eid):
+    """Return (creating if needed) the per-exercise progress record."""
+    ej_prog = progress.setdefault("ejercicios", {})
+    return ej_prog.setdefault(eid, {
+        "intentos": 0,
+        "pistas_usadas": 0,
+        "puntaje": None,
+        "aprobado": False,
+        "saltado": False,
+        "completado": False,
+    })
+
+
+def registrar_intento_ejercicio(progress, eid, resultado,
+                                pistas_usadas=0, origen="standalone",
+                                curso="", ea=""):
+    """Persist one exercise attempt. LLM errors do NOT increment intentos."""
+    rec = _registro_ejercicio(progress, eid)
+    if not resultado.get("error"):
+        rec["intentos"] = int(rec.get("intentos") or 0) + 1
+    rec["puntaje"] = resultado.get("puntaje", rec.get("puntaje"))
+    rec["aprobado"] = bool(resultado.get("aprobado"))
+    rec["pistas_usadas"] = int(pistas_usadas or 0)
+    if origen:
+        rec["origen"] = origen
+    if curso:
+        rec["curso"] = curso
+    if ea:
+        rec["ea"] = ea
+    if rec["aprobado"]:
+        rec["completado"] = True
+        rec["saltado"] = False
+        if not rec.get("fecha"):
+            rec["fecha"] = _now_iso()
+    return rec
+
+
+def saltar_ejercicio(progress, eid, origen="standalone", curso="", ea=""):
+    """Mark an exercise as skipped (not approved); keeps last score if any."""
+    rec = _registro_ejercicio(progress, eid)
+    rec["saltado"] = True
+    rec["aprobado"] = False
+    rec["completado"] = True
+    if rec.get("puntaje") is None:
+        rec["puntaje"] = 0
+    if origen:
+        rec["origen"] = origen
+    if curso:
+        rec["curso"] = curso
+    if ea:
+        rec["ea"] = ea
+    return rec
+
+
+def _mostrar_resultado_ejercicio(resultado, intentos, max_intentos):
+    """Render an exercise evaluation result (mirrors the activity renderer)."""
+    return _mostrar_resultado_evaluacion(resultado, intentos, max_intentos)
+
+
+def _ejercicio_pendiente(progress, eid):
+    """True if the exercise is not yet approved nor skipped."""
+    rec = (progress.get("ejercicios") or {}).get(eid) or {}
+    return not (rec.get("aprobado") or rec.get("saltado"))
+
+
+def resumen_ejercicios(progress=None):
+    """Aggregate exercise progress for summaries."""
+    progress = progress if progress is not None else cargar_progreso()
+    recs = (progress.get("ejercicios") or {}).values()
+    total = aprobados = saltados = completados = 0
+    primer_intento = pistas_usadas = 0
+    puntajes = []
+    for rec in recs:
+        if not isinstance(rec, dict):
+            continue
+        total += 1
+        if rec.get("aprobado"):
+            aprobados += 1
+        if rec.get("saltado"):
+            saltados += 1
+        if rec.get("completado"):
+            completados += 1
+        if int(rec.get("intentos") or 0):
+            primer_intento += 1
+        pistas_usadas += int(rec.get("pistas_usadas") or 0)
+        if rec.get("puntaje") is not None:
+            try:
+                puntajes.append(float(rec["puntaje"]))
+            except (TypeError, ValueError):
+                pass
+    promedio = round(sum(puntajes) / len(puntajes), 1) if puntajes else 0
+    nota = nota_chilena(promedio) if puntajes else None
+    return {
+        "total": total,
+        "aprobados": aprobados,
+        "saltados": saltados,
+        "completados": completados,
+        "primer_intento": primer_intento,
+        "pistas_usadas": pistas_usadas,
+        "promedio": promedio,
+        "nota": nota,
+    }
 
 
 def _registro_actividad(ea_prog, orden):
@@ -2524,7 +2684,7 @@ def cmd_guia():
          "  curso CODIGO — ver plan de un curso\n"
          "  iniciar EA1  — empezar sesion guiada\n"
          "  ejercicios   — practica con validacion automatica\n"
-         ""  mi progreso  — ver avance, puntajes y notas\n"\n"
+         "  mi progreso  — ver avance, puntajes y notas\n"
          "  salir / Ctrl+C — terminar"),
     ]
 
@@ -2639,6 +2799,20 @@ def cmd_mostrar_progreso():
             w = sum(pesos) or 1.0
             nota_curso = round(sum(n * p for n, p in zip(notas, pesos)) / w, 1)
             lines.append(f"    {C['CYAN']}Nota curso: {nota_curso}{C['RESET']}")
+
+    if ej_prog:
+        r = resumen_ejercicios(progress)
+        lines.append("")
+        lines.append(f"  {C['BOLD']}Ejercicios{C['RESET']}")
+        lines.append(
+            f"    Total: {r['total']}   aprobados: {r['aprobados']}   "
+            f"Saltados: {r['saltados']}"
+        )
+        lines.append(
+            f"    Promedio: {r['promedio']}/100"
+            + (f"   Nota: {r['nota']}" if r["nota"] is not None else "")
+        )
+
     lines.append(f"\n  {C['GRAY']}Progreso guardado en ~/.config/yap/progress.json{C['RESET']}")
     return "\n".join(lines)
 
