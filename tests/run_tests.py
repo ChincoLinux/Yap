@@ -37,6 +37,7 @@ REQUISITOS = {
     "FUN-07": "Notificaciones graficas via notify-send",
     "FUN-08": "Modo interactivo (loop while True) y modo comando directo",
     "FUN-11": "Evaluacion automatica de actividades con feedback del LLM",
+    "FUN-11": "Ejercicios interactivos: 4 tipos, pistas, validacion exacta/LLM, progress.json",
     "CFG-01": "Archivos de configuracion existen y son validos",
     "CFG-02": "Symlink /usr/local/bin/yap apunta al repositorio",
     "CFG-03": "llama-cli compilado con enlace estatico",

@@ -12,6 +12,7 @@ import urllib.request
 import urllib.parse
 import re
 import atexit
+import unicodedata
 
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
@@ -83,6 +84,15 @@ LLAMA_THREADS = int(os.environ.get("YAP_LLAMA_THREADS", "2"))
 LLAMA_TEMP_QUERY = float(os.environ.get("YAP_LLAMA_TEMP_QUERY", "0.7"))
 LLAMA_TEMP_PSEINT = float(os.environ.get("YAP_LLAMA_TEMP_PSEINT", "0.5"))
 LLAMA_TEMP_CLASSIFY = float(os.environ.get("YAP_LLAMA_TEMP_CLASSIFY", "0.1"))
+LLAMA_TEMP_EVAL = float(os.environ.get("YAP_LLAMA_TEMP_EVAL", "0.2"))
+MAX_INTENTOS_EJERCICIO = int(os.environ.get("YAP_MAX_INTENTOS", "3"))
+PUNTAJE_APROBACION = int(os.environ.get("YAP_PUNTAJE_APROBACION", "60"))
+MAX_RESPUESTA_EVAL = 1200
+
+# Tipos de ejercicio / evaluacion (#23 + #27). respuesta_texto es alias de respuesta_libre.
+TIPOS_EVALUACION = ("respuesta_libre", "codigo_pseint", "opcion_multiple", "completar")
+TIPOS_EJERCICIO = TIPOS_EVALUACION + ("respuesta_texto",)
+ID_EJERCICIO_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 
 BOS = "<|begin_of_text|>"
 HEADER = "<|start_header_id|>"
@@ -211,26 +221,220 @@ def load_domain_whitelist(path):
     return domains
 
 
+def _alias_tipo(tipo):
+    """Canonical exercise/evaluation type. respuesta_texto -> respuesta_libre."""
+    t = (tipo or "").strip().lower()
+    if t == "respuesta_texto":
+        return "respuesta_libre"
+    return t
+
+
+def _slug_ejercicio(titulo):
+    """Build a stable id from a v1 title."""
+    s = unicodedata.normalize("NFD", titulo or "")
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    s = re.sub(r"[^a-zA-Z0-9]+", "_", s.lower()).strip("_")[:40]
+    return s or "ejercicio"
+
+
+def _parsear_v1_ejercicio(line):
+    """Parse Titulo:Descripcion|GuiaSolucion into a dict (formato=v1)."""
+    rest = line.split(":", 1)
+    if len(rest) < 2:
+        return None
+    titulo = rest[0].strip()
+    sub = rest[1].split("|", 1)
+    desc = sub[0].strip()
+    sol = sub[1].strip() if len(sub) > 1 else ""
+    if not titulo or not desc:
+        return None
+    return {
+        "id": _slug_ejercicio(titulo),
+        "titulo": titulo,
+        "enunciado": desc,
+        "tipo": "codigo_pseint",
+        "solucion": sol,
+        "pistas": [],
+        "criterios": [],
+        "opciones": [],
+        "respuesta_correcta": "",
+        "validacion": None,
+        "curso": "",
+        "ea": "",
+        "actividad": "",
+        "max_intentos": MAX_INTENTOS_EJERCICIO,
+        "formato": "v1",
+    }
+
+
+def _aplicar_clave_ejercicio(bloque, key, val):
+    """Apply one key=value line to an in-progress v2 block."""
+    if key in ("titulo", "enunciado", "tipo", "validacion", "curso", "ea",
+               "actividad", "respuesta_correcta"):
+        bloque[key] = val
+    elif key == "max_intentos":
+        bloque[key] = val
+    elif key == "solucion":
+        bloque.setdefault("_solucion", []).append(val)
+    elif key in ("pista1", "pista2", "pista3"):
+        bloque[key] = val
+    elif key in ("criterio", "criterios"):
+        bloque.setdefault("_criterios", []).append(val)
+    elif key in ("opcion", "opciones"):
+        bloque.setdefault("_opciones", []).append(val)
+
+
+def _finalizar_bloque_ejercicio(bloque):
+    """Validate a v2 block. Returns a dict or None if the block is invalid."""
+    eid = (bloque.get("id") or "").strip().lower()
+    if not ID_EJERCICIO_RE.match(eid):
+        return None
+    titulo = (bloque.get("titulo") or "").strip()
+    enunciado = (bloque.get("enunciado") or "").strip()
+    tipo = _alias_tipo(bloque.get("tipo"))
+    if not titulo or not enunciado or tipo not in TIPOS_EVALUACION:
+        return None
+    pistas = [
+        (bloque.get("pista1") or "").strip(),
+        (bloque.get("pista2") or "").strip(),
+        (bloque.get("pista3") or "").strip(),
+    ]
+    if not all(pistas):
+        return None
+    opciones = [o for o in (bloque.get("_opciones") or []) if str(o).strip()]
+    respuesta_correcta = (bloque.get("respuesta_correcta") or "").strip()
+    if tipo == "opcion_multiple":
+        if len(opciones) < 2 or not respuesta_correcta:
+            return None
+    solucion = "\n".join(bloque.get("_solucion") or []).strip()
+    criterios = [c for c in (bloque.get("_criterios") or []) if str(c).strip()]
+    validacion = (bloque.get("validacion") or "").strip().lower() or None
+    if validacion not in (None, "exacta", "llm"):
+        return None
+    if validacion == "exacta" and tipo != "opcion_multiple" and not solucion:
+        return None
+    if (validacion or _validacion_default(tipo, {"solucion": solucion})) == "llm":
+        if not criterios:
+            return None
+    try:
+        max_intentos = int(bloque.get("max_intentos", MAX_INTENTOS_EJERCICIO))
+    except (TypeError, ValueError):
+        max_intentos = MAX_INTENTOS_EJERCICIO
+    max_intentos = max(1, min(10, max_intentos))
+    return {
+        "id": eid,
+        "titulo": titulo,
+        "enunciado": enunciado,
+        "tipo": tipo,
+        "solucion": solucion,
+        "pistas": pistas,
+        "criterios": criterios,
+        "opciones": opciones,
+        "respuesta_correcta": respuesta_correcta,
+        "validacion": validacion,
+        "curso": (bloque.get("curso") or "").strip(),
+        "ea": (bloque.get("ea") or "").strip(),
+        "actividad": (bloque.get("actividad") or "").strip(),
+        "max_intentos": max_intentos,
+        "formato": "v2",
+    }
+
+
+def _validacion_default(tipo, ejercicio=None):
+    """Default validation mode per type."""
+    tipo = _alias_tipo(tipo)
+    if tipo == "opcion_multiple":
+        return "exacta"
+    if tipo == "completar":
+        if (ejercicio or {}).get("solucion"):
+            return "exacta"
+        return "llm"
+    return "llm"
+
+
 def cargar_ejercicios():
-    """Carga ejercicios PSeInt desde archivo de configuracion.
-    Formato: Titulo:Descripcion|GuiaSolucion
-    Retorna lista de (titulo, descripcion, solucion) o lista vacia si no existe.
+    """Load exercises from ejercicios.conf (v2 blocks + v1 one-liners).
+
+    Returns a list of dicts. Invalid v2 blocks are skipped. Missing file
+    returns an empty list. Duplicate ids: the first wins.
     """
     ejercicios = []
-    if os.path.exists(PSEINT_EXERCISES):
-        with open(PSEINT_EXERCISES, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    # Formato: Titulo:Descripcion|Solucion
-                    rest = line.split(":", 1)
-                    if len(rest) >= 2:
-                        titulo = rest[0].strip()
-                        sub = rest[1].split("|", 1)
-                        desc = sub[0].strip()
-                        sol = sub[1].strip() if len(sub) > 1 else ""
-                        ejercicios.append((titulo, desc, sol))
+    seen = set()
+    if not os.path.exists(PSEINT_EXERCISES):
+        return ejercicios
+
+    def _push(ej):
+        if not ej:
+            return
+        eid = ej.get("id")
+        if not eid or eid in seen:
+            return
+        seen.add(eid)
+        ejercicios.append(ej)
+
+    current = None
+    with open(PSEINT_EXERCISES, encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            m = re.match(r"^\[([A-Za-z0-9_]{1,40})\]$", line)
+            if m:
+                if current is not None:
+                    _push(_finalizar_bloque_ejercicio(current))
+                current = {"id": m.group(1).lower()}
+                continue
+            if current is not None:
+                if "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                _aplicar_clave_ejercicio(current, key.strip().lower(), val.strip())
+                continue
+            _push(_parsear_v1_ejercicio(line))
+        if current is not None:
+            _push(_finalizar_bloque_ejercicio(current))
     return ejercicios
+
+
+def ejercicio_por_id(eid):
+    """Lookup an exercise by id. Rejects path-like values. Returns dict or None."""
+    eid = os.path.basename(str(eid or "")).strip().lower()
+    if not ID_EJERCICIO_RE.match(eid):
+        return None
+    for ej in cargar_ejercicios():
+        if ej.get("id") == eid:
+            return ej
+    return None
+
+
+def _es_ejercicio_evaluable(ejercicio):
+    """True if the exercise can be used in 'yap ejercicios' (v2 with 3 hints)."""
+    if not ejercicio:
+        return False
+    tipo = _alias_tipo(ejercicio.get("tipo"))
+    if tipo not in TIPOS_EVALUACION:
+        return False
+    pistas = ejercicio.get("pistas") or []
+    return len(pistas) >= 3 and all(str(p).strip() for p in pistas[:3])
+
+
+def listar_ejercicios(curso=None, ea=None, tipo=None, solo_evaluables=False):
+    """Filter the catalog. tipo is matched after aliasing."""
+    tipo_n = _alias_tipo(tipo) if tipo else None
+    curso_n = (curso or "").strip().upper() or None
+    ea_n = (ea or "").strip().upper() or None
+    out = []
+    for ej in cargar_ejercicios():
+        if solo_evaluables and not _es_ejercicio_evaluable(ej):
+            continue
+        if tipo_n and _alias_tipo(ej.get("tipo")) != tipo_n:
+            continue
+        if curso_n and (ej.get("curso") or "").upper() != curso_n:
+            continue
+        if ea_n and (ej.get("ea") or "").upper() != ea_n:
+            continue
+        out.append(ej)
+    return out
 
 
 def cargar_curso(codigo):
@@ -1085,6 +1289,7 @@ def guardar_progreso(progress):
 
 
 # ── Evaluación automática de actividades (#23) ──────────────
+# ── Evaluacion automatica (#23 API, usada por ejercicios #27) ──
 
 EVAL_SYSTEM_PROMPT = (
     "Eres un evaluador educativo en espanol. "
@@ -1129,6 +1334,8 @@ def nota_chilena(puntaje):
 
     60% maps to 4.0 (aprobacion). Linear below and above that threshold.
     """
+def nota_chilena(puntaje):
+    """Convert a 0-100 score to the Chilean 1.0-7.0 scale (60% = 4.0)."""
     try:
         p = float(puntaje)
     except (TypeError, ValueError):
@@ -1138,7 +1345,7 @@ def nota_chilena(puntaje):
     # Siempre redondea hacia abajo
     p = math.floor(p)
 
-    if p < 60:
+    if p < 60.0:
         nota = 1.0 + (p / 60.0) * 3.0
     else:
         nota = 4.0 + ((p - 60.0) / 40.0) * 3.0
@@ -1177,6 +1384,8 @@ def _contexto_sesion_activa():
 
 def _resultado_error(mensaje, criterios=None):
     """Evaluation result used when the LLM is unavailable. Does not count as an attempt."""
+def _resultado_error(mensaje, criterios=None):
+    """LLM-unavailable result. Must not consume an attempt."""
     return {
         "aprobado": False,
         "puntaje": 0,
@@ -1252,6 +1461,18 @@ def _evaluacion_fallback_texto(text, criterios):
         aprobado = False
     else:
         aprobado = bool(_RE_EVAL_POS.search(lower))
+    negativo = any(
+        p in lower
+        for p in (
+            "no aprobado", "incorrecto", "reprobado", "no cumple",
+            "desaprobado", "falla", "fallo", "insuficiente",
+        )
+    )
+    positivo = any(
+        p in lower
+        for p in ("aprobado", "correcto", "cumple", "bien hecho")
+    )
+    aprobado = positivo and not (negativo or bool(_RE_EVAL_NEG.search(lower)))
 
     m = re.search(r"\bpuntaje\D{0,8}(\d{1,3})\b", lower)
     if not m:
@@ -1261,6 +1482,11 @@ def _evaluacion_fallback_texto(text, criterios):
     else:
         puntaje = 70 if aprobado else 40
     puntaje = _reconciliar_aprobado_puntaje(aprobado, puntaje)
+
+    if aprobado and puntaje < PUNTAJE_APROBACION:
+        puntaje = PUNTAJE_APROBACION
+    if not aprobado and puntaje >= PUNTAJE_APROBACION:
+        puntaje = PUNTAJE_APROBACION - 10
 
     criterios = list(criterios or [])
     feedback = (text or "").strip()[:500] or "Sin feedback."
@@ -1282,6 +1508,7 @@ def parsear_json_evaluacion(raw, criterios=None):
     Accepts raw JSON, JSON wrapped in markdown fences, JSON mixed with
     prose, and trailing-comma objects. Never raises.
     """
+    """Parse evaluator LLM output. Never raises."""
     criterios = list(criterios or [])
     text = (raw or "").strip()
     if not text:
@@ -1327,6 +1554,13 @@ def _norm_txt(s):
     return re.sub(r"\s+", " ", (s or "").strip().lower())
 
 
+def _normalizar_respuesta(s):
+    """Lowercase, collapse spaces, strip combining accents (exact comparison)."""
+    text = unicodedata.normalize("NFD", s or "")
+    text = "".join(c for c in text if unicodedata.category(c) != "Mn")
+    return re.sub(r"\s+", " ", text.strip().lower())
+
+
 def _etiqueta_opcion(opt, idx):
     """Return (letter, text) for an option, generating A/B/C if unlabeled."""
     s = str(opt).strip()
@@ -1337,6 +1571,14 @@ def _etiqueta_opcion(opt, idx):
     if 0 <= idx < len(letters):
         return letters[idx], s
     return None, s
+
+
+def _formatear_opciones(opciones):
+    lines = []
+    for i, opt in enumerate(opciones or []):
+        let, txt = _etiqueta_opcion(opt, i)
+        lines.append(f"  {let}) {txt}")
+    return "\n".join(lines)
 
 
 def _respuestas_aceptadas_opcion(actividad):
@@ -1369,6 +1611,7 @@ def _respuestas_aceptadas_opcion(actividad):
                 accept.add(let.lower())
             accept.add(opt_n)
             accept.add(txt_n)
+            accept.add(str(i + 1))
     accept.discard("")
     return accept
 
@@ -1415,13 +1658,53 @@ def _evaluar_opcion_multiple(respuesta, actividad, criterios):
     }
 
 
+def _evaluar_exacta(ejercicio, respuesta):
+    """Exact/normalized comparison for completar and validacion=exacta."""
+    tipo = _alias_tipo(ejercicio.get("tipo"))
+    criterios = list(ejercicio.get("criterios") or [])
+    if tipo == "opcion_multiple":
+        actividad = {
+            "opciones": ejercicio.get("opciones") or [],
+            "respuesta_correcta": ejercicio.get("respuesta_correcta") or "",
+            "criterios_evaluacion": criterios,
+        }
+        return _evaluar_opcion_multiple(respuesta, actividad, criterios)
+
+    expected = ejercicio.get("solucion") or ""
+    parts = [p.strip() for p in expected.split("|") if p.strip()]
+    norm_resp = _normalizar_respuesta(respuesta)
+    if len(parts) > 1:
+        ok = all(_normalizar_respuesta(p) in norm_resp for p in parts)
+    else:
+        ok = _normalizar_respuesta(expected) == norm_resp
+
+    if ok:
+        return {
+            "aprobado": True,
+            "puntaje": 100,
+            "feedback": "Respuesta correcta.",
+            "criterios_cumplidos": list(criterios) if criterios else ["Coincidencia exacta"],
+            "criterios_fallidos": [],
+            "sugerencia": "",
+            "error": False,
+            "parseado": True,
+        }
+    return {
+        "aprobado": False,
+        "puntaje": 0,
+        "feedback": "Respuesta incorrecta.",
+        "criterios_cumplidos": [],
+        "criterios_fallidos": list(criterios) if criterios else ["Coincidencia exacta"],
+        "sugerencia": "Revisa el enunciado y vuelve a intentarlo.",
+        "error": False,
+        "parseado": True,
+    }
+
+
 def _prompt_evaluacion(respuesta, criterios, tipo, actividad, contexto):
     """Compact evaluator prompt. Kept short for the 2048-token context."""
     nombre = _truncar((actividad or {}).get("nombre", ""), 80)
-    descripcion = _truncar(
-        (actividad or {}).get("enunciado") or (actividad or {}).get("descripcion") or "",
-        400,
-    )
+    descripcion = _truncar((actividad or {}).get("enunciado") or (actividad or {}).get("descripcion") or "", 400)
     crit_lines = "\n".join(f"- {c}" for c in (criterios or [])[:8]) or "- (sin criterios)"
     extra = ""
     if tipo == "codigo_pseint":
@@ -1463,6 +1746,7 @@ def _llamar_llm_evaluacion(prompt):
     full_prompt = "".join(parts)
     cmd = [
         bin_path,
+        "llama-cli",
         "-m", MODEL_PATH,
         "-p", full_prompt,
         "-n", "320",
@@ -1501,6 +1785,10 @@ def _llamar_llm_evaluacion(prompt):
                     f"[WARN] Error limpiando proceso llama-cli tras timeout: {cleanup_err}",
                     file=sys.stderr,
                 )
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        return _clean_output(result)
+    except subprocess.TimeoutExpired:
         return "[WARN] Tiempo de espera agotado (120s)"
     except FileNotFoundError:
         return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
@@ -1549,6 +1837,173 @@ def evaluar_actividad(respuesta, criterios, tipo="respuesta_libre",
 
     ctx = contexto if contexto is not None else _contexto_sesion_activa()
     return _evaluar_con_llm(respuesta, criterios, tipo, actividad, ctx)
+
+
+# ── Ejercicios interactivos del catálogo (#27) ────────────
+
+def _max_intentos_ejercicio(ejercicio):
+    """Per-exercise attempt cap, falling back to YAP_MAX_INTENTOS (default 3)."""
+    try:
+        n = int((ejercicio or {}).get("max_intentos", MAX_INTENTOS_EJERCICIO))
+    except (TypeError, ValueError):
+        n = MAX_INTENTOS_EJERCICIO
+    return max(1, min(10, n))
+
+
+def evaluar_ejercicio(ejercicio, respuesta):
+    """Evaluate a catalog exercise against a student answer.
+
+    validacion='llm' routes to the LLM evaluator; otherwise exact/normalized
+    comparison is used. Returns dict: aprobado, puntaje, feedback,
+    criterios_cumplidos, criterios_fallidos, sugerencia, error. error=True when
+    the LLM could not be reached (that case must NOT consume an attempt).
+    """
+    ejercicio = ejercicio or {}
+    tipo = _alias_tipo(ejercicio.get("tipo"))
+    validacion = (ejercicio.get("validacion") or "exacta").strip().lower()
+    criterios = list(ejercicio.get("criterios") or [])
+    respuesta = (respuesta or "").strip()
+
+    if not respuesta:
+        return {
+            "aprobado": False,
+            "puntaje": 0,
+            "feedback": "No se recibio una respuesta.",
+            "criterios_cumplidos": [],
+            "criterios_fallidos": criterios,
+            "sugerencia": "Escribe una respuesta antes de enviar.",
+            "error": False,
+            "parseado": True,
+        }
+
+    if validacion == "llm":
+        actividad = {
+            "nombre": ejercicio.get("titulo", ""),
+            "enunciado": ejercicio.get("enunciado")
+                        or ejercicio.get("descripcion") or "",
+            "criterios_evaluacion": criterios,
+        }
+        return evaluar_actividad(
+            respuesta, criterios, tipo=tipo, actividad=actividad,
+        )
+
+    return _evaluar_exacta(ejercicio, respuesta)
+
+
+def pista_siguiente(ejercicio, pistas_usadas):
+    """Return (nivel, texto) for the next hint, or None when exhausted.
+
+    nivel is 1-based; pistas_usadas is the number of hints already shown.
+    """
+    pistas = list((ejercicio or {}).get("pistas") or [])
+    nivel = int(pistas_usadas or 0) + 1
+    if nivel < 1 or nivel > len(pistas):
+        return None
+    return (nivel, pistas[nivel - 1])
+
+
+def _registro_ejercicio(progress, eid):
+    """Return (creating if needed) the per-exercise progress record."""
+    ej_prog = progress.setdefault("ejercicios", {})
+    return ej_prog.setdefault(eid, {
+        "intentos": 0,
+        "pistas_usadas": 0,
+        "puntaje": None,
+        "aprobado": False,
+        "saltado": False,
+        "completado": False,
+    })
+
+
+def registrar_intento_ejercicio(progress, eid, resultado,
+                                pistas_usadas=0, origen="standalone",
+                                curso="", ea=""):
+    """Persist one exercise attempt. LLM errors do NOT increment intentos."""
+    rec = _registro_ejercicio(progress, eid)
+    if not resultado.get("error"):
+        rec["intentos"] = int(rec.get("intentos") or 0) + 1
+    rec["puntaje"] = resultado.get("puntaje", rec.get("puntaje"))
+    rec["aprobado"] = bool(resultado.get("aprobado"))
+    rec["pistas_usadas"] = int(pistas_usadas or 0)
+    if origen:
+        rec["origen"] = origen
+    if curso:
+        rec["curso"] = curso
+    if ea:
+        rec["ea"] = ea
+    if rec["aprobado"]:
+        rec["completado"] = True
+        rec["saltado"] = False
+        if not rec.get("fecha"):
+            rec["fecha"] = _now_iso()
+    return rec
+
+
+def saltar_ejercicio(progress, eid, origen="standalone", curso="", ea=""):
+    """Mark an exercise as skipped (not approved); keeps last score if any."""
+    rec = _registro_ejercicio(progress, eid)
+    rec["saltado"] = True
+    rec["aprobado"] = False
+    rec["completado"] = True
+    if rec.get("puntaje") is None:
+        rec["puntaje"] = 0
+    if origen:
+        rec["origen"] = origen
+    if curso:
+        rec["curso"] = curso
+    if ea:
+        rec["ea"] = ea
+    return rec
+
+
+def _mostrar_resultado_ejercicio(resultado, intentos, max_intentos):
+    """Render an exercise evaluation result (mirrors the activity renderer)."""
+    return _mostrar_resultado_evaluacion(resultado, intentos, max_intentos)
+
+
+def _ejercicio_pendiente(progress, eid):
+    """True if the exercise is not yet approved nor skipped."""
+    rec = (progress.get("ejercicios") or {}).get(eid) or {}
+    return not (rec.get("aprobado") or rec.get("saltado"))
+
+
+def resumen_ejercicios(progress=None):
+    """Aggregate exercise progress for summaries."""
+    progress = progress if progress is not None else cargar_progreso()
+    recs = (progress.get("ejercicios") or {}).values()
+    total = aprobados = saltados = completados = 0
+    primer_intento = pistas_usadas = 0
+    puntajes = []
+    for rec in recs:
+        if not isinstance(rec, dict):
+            continue
+        total += 1
+        if rec.get("aprobado"):
+            aprobados += 1
+        if rec.get("saltado"):
+            saltados += 1
+        if rec.get("completado"):
+            completados += 1
+        if int(rec.get("intentos") or 0):
+            primer_intento += 1
+        pistas_usadas += int(rec.get("pistas_usadas") or 0)
+        if rec.get("puntaje") is not None:
+            try:
+                puntajes.append(float(rec["puntaje"]))
+            except (TypeError, ValueError):
+                pass
+    promedio = round(sum(puntajes) / len(puntajes), 1) if puntajes else 0
+    nota = nota_chilena(promedio) if puntajes else None
+    return {
+        "total": total,
+        "aprobados": aprobados,
+        "saltados": saltados,
+        "completados": completados,
+        "primer_intento": primer_intento,
+        "pistas_usadas": pistas_usadas,
+        "promedio": promedio,
+        "nota": nota,
+    }
 
 
 def _registro_actividad(ea_prog, orden):
@@ -1714,6 +2169,229 @@ def _contexto_actividad(curso, ea, act, total):
     if extra:
         partes.append(extra)
     return "\n".join(partes)
+def _loop_ejercicio(ejercicio, origen="standalone", curso="", ea=""):
+    """Interactive practice loop for one catalog exercise.
+
+    Returns 'aprobado', 'saltado', or 'salir'.
+    """
+    eid = ejercicio["id"]
+    max_intentos = _max_intentos_ejercicio(ejercicio)
+    progress = cargar_progreso()
+    rec = _registro_ejercicio(progress, eid)
+    intentos = int(rec.get("intentos") or 0)
+    pistas_usadas = int(rec.get("pistas_usadas") or 0)
+    tipo = _alias_tipo(ejercicio.get("tipo"))
+
+    body = f"EJERCICIO: {ejercicio.get('titulo')}\n[{tipo}]\n\n{ejercicio.get('enunciado')}"
+    if tipo == "opcion_multiple":
+        body += "\n\n" + _formatear_opciones(ejercicio.get("opciones") or [])
+    body += f"\n\nIntentos {intentos}/{max_intentos}  |  Pistas {pistas_usadas}/3"
+    sys.stdout.write(display_box(body, color="CYAN") + "\n")
+
+    while True:
+        agotado = intentos >= max_intentos and not rec.get("aprobado")
+        if agotado:
+            prompt = f"  {C['GRAY']}[saltar] [salir]{C['RESET']}\n  {C['GREEN']}> {C['RESET']}"
+        else:
+            prompt = (
+                f"  {C['GRAY']}[respuesta] [pista] [saltar] [salir]{C['RESET']}\n"
+                f"  {C['GREEN']}> {C['RESET']}"
+            )
+        try:
+            resp = input(prompt).strip()
+        except (EOFError, KeyboardInterrupt):
+            sys.stdout.write("\n")
+            guardar_progreso(progress)
+            return "salir"
+
+        lower = resp.lower()
+        if lower == "salir":
+            guardar_progreso(progress)
+            sys.stdout.write(
+                f"\n  {C['YELLOW']}Progreso guardado. Retoma con 'yap ejercicios'.{C['RESET']}\n"
+            )
+            return "salir"
+
+        if lower == "saltar":
+            saltar_ejercicio(progress, eid, origen=origen, curso=curso, ea=ea)
+            guardar_progreso(progress)
+            sys.stdout.write(f"\n  {C['YELLOW']}Ejercicio saltado.{C['RESET']}\n")
+            return "saltado"
+
+        if lower == "pista":
+            nxt = pista_siguiente(ejercicio, pistas_usadas)
+            if nxt is None:
+                sys.stdout.write(
+                    f"  {C['YELLOW']}No hay mas pistas.{C['RESET']}\n"
+                )
+            else:
+                nivel, texto = nxt
+                pistas_usadas = nivel
+                rec["pistas_usadas"] = pistas_usadas
+                guardar_progreso(progress)
+                sys.stdout.write(
+                    display_box(f"Pista {nivel}/3\n\n{texto}", color="YELLOW") + "\n"
+                )
+            continue
+
+        if agotado:
+            sys.stdout.write(
+                f"  {C['YELLOW']}Se agotaron los intentos. Escribe saltar o salir.{C['RESET']}\n"
+            )
+            continue
+
+        if not resp:
+            sys.stdout.write(
+                f"  {C['YELLOW']}Escribe una respuesta, pista, saltar o salir.{C['RESET']}\n"
+            )
+            continue
+
+        resultado = evaluar_ejercicio(ejercicio, resp)
+        registrar_intento_ejercicio(
+            progress, eid, resultado, pistas_usadas=pistas_usadas,
+            origen=origen, curso=curso, ea=ea,
+        )
+        guardar_progreso(progress)
+        rec = _registro_ejercicio(progress, eid)
+        intentos = int(rec.get("intentos") or 0)
+
+        sys.stdout.write(
+            _mostrar_resultado_ejercicio(resultado, intentos, max_intentos) + "\n"
+        )
+
+        if resultado.get("error"):
+            continue
+
+        if resultado.get("aprobado"):
+            sys.stdout.write(
+                f"\n  {C['GREEN']}✓ ¡Bien hecho! Completaste '{ejercicio.get('titulo')}'.{C['RESET']}\n"
+            )
+            return "aprobado"
+
+        nxt = pista_siguiente(ejercicio, pistas_usadas)
+        if nxt is not None:
+            sys.stdout.write(
+                f"  {C['GRAY']}Escribe 'pista' para una pista "
+                f"(nivel {nxt[0]}/3).{C['RESET']}\n"
+            )
+        if intentos >= max_intentos:
+            sys.stdout.write(
+                f"  {C['YELLOW']}Se agotaron los intentos. Escribe saltar o salir.{C['RESET']}\n"
+            )
+
+
+def _texto_lista_ejercicios():
+    progress = cargar_progreso()
+    recs = progress.get("ejercicios") or {}
+    ejercicios = cargar_ejercicios()
+    if not ejercicios:
+        return display_box(
+            f"No hay ejercicios configurados en {PSEINT_EXERCISES}.",
+            color="YELLOW",
+        )
+    lines = [display_header("Ejercicios")]
+    for ej in ejercicios:
+        rec = recs.get(ej["id"]) or {}
+        if rec.get("aprobado"):
+            status = f"{C['GREEN']}✓{C['RESET']}"
+        elif rec.get("saltado"):
+            status = f"{C['RED']}✗{C['RESET']}"
+        elif rec.get("intentos"):
+            status = f"{C['YELLOW']}▶{C['RESET']}"
+        else:
+            status = f"{C['GRAY']}·{C['RESET']}"
+        evaluable = "evaluable" if _es_ejercicio_evaluable(ej) else "tutorial"
+        tipo = _alias_tipo(ej.get("tipo"))
+        lines.append(
+            f"  {status} {ej['id']:<22} {tipo:<18} {evaluable:<10} {ej.get('titulo')}"
+        )
+    lines.append(
+        f"\n  {C['GRAY']}yap ejercicios           — practicar pendientes{C['RESET']}"
+    )
+    lines.append(
+        f"  {C['GRAY']}yap ejercicios <id>      — un ejercicio{C['RESET']}"
+    )
+    return "\n".join(lines)
+
+
+def cmd_ejercicios(param=""):
+    """Standalone practice: lista | <id> | pending queue."""
+    param = (param or "").strip()
+    low = param.lower()
+
+    if low in ("lista", "listar", "--list", "-l", "list"):
+        return _texto_lista_ejercicios()
+
+    ejercicios = cargar_ejercicios()
+    if not ejercicios:
+        return f"[ERROR] No hay ejercicios configurados en {PSEINT_EXERCISES}"
+
+    if low in ("", "practicar", "practica", "práctica"):
+        evaluables = [e for e in ejercicios if _es_ejercicio_evaluable(e)]
+        if not evaluables:
+            return display_box(
+                "No hay ejercicios evaluables (formato v2 con 3 pistas).\n"
+                "El tutorial PSeInt sigue disponible: 'quiero aprender pseint'.",
+                color="YELLOW",
+            )
+        progress = cargar_progreso()
+        pendientes = [e for e in evaluables if _ejercicio_pendiente(progress, e["id"])]
+        if not pendientes:
+            r = resumen_ejercicios(progress)
+            sys.stdout.write(display_box(
+                f"Todos los ejercicios estan completados.\n\n"
+                f"Completados: {r['completados']}/{r['total']}   "
+                f"Aprobados: {r['aprobados']}   Saltados: {r['saltados']}\n"
+                f"Primer intento: {r['primer_intento']}   Pistas usadas: {r['pistas_usadas']}\n"
+                f"Promedio: {r['promedio']}/100"
+                + (f"   Nota: {r['nota']}" if r["nota"] is not None else "")
+                + "\n\nEscribe 'yap ejercicios <id>' para repetir uno.",
+                color="GREEN",
+            ) + "\n")
+            return ""
+
+        for ej in pendientes:
+            result = _loop_ejercicio(
+                ej,
+                origen="standalone",
+                curso=ej.get("curso") or "",
+                ea=ej.get("ea") or "",
+            )
+            if result == "salir":
+                return ""
+
+        r = resumen_ejercicios()
+        sys.stdout.write(display_box(
+            f"✓ Practica terminada\n\n"
+            f"Completados: {r['completados']}/{r['total']}   "
+            f"Aprobados: {r['aprobados']}   Saltados: {r['saltados']}\n"
+            f"Primer intento: {r['primer_intento']}   Pistas usadas: {r['pistas_usadas']}\n"
+            f"Promedio: {r['promedio']}/100"
+            + (f"   Nota: {r['nota']}" if r["nota"] is not None else ""),
+            color="GREEN",
+        ) + "\n")
+        return ""
+
+    ej = ejercicio_por_id(param)
+    if not ej:
+        return f"[ERROR] Ejercicio '{param}' no encontrado. Usa 'yap ejercicios lista'."
+    if not _es_ejercicio_evaluable(ej):
+        return (
+            f"[ERROR] '{ej['id']}' no es evaluable (falta formato v2 con 3 pistas). "
+            "Usa el tutorial: 'quiero aprender pseint'."
+        )
+    result = _loop_ejercicio(
+        ej,
+        origen="standalone",
+        curso=ej.get("curso") or "",
+        ea=ej.get("ea") or "",
+    )
+    if result != "salir":
+        r = resumen_ejercicios()
+        sys.stdout.write(
+            f"\n  {C['GRAY']}Avance: {r['aprobados']}/{r['total']} aprobados.{C['RESET']}\n"
+        )
+    return ""
 
 
 # ── Comandos de curso ───────────────────────────────────────
@@ -1828,6 +2506,32 @@ def iniciar_ea(curso_codigo, ea_id):
             sys.stdout.write(
                 f"\n  {C['GRAY']}Tool sugerida: {tool}  —  "
                 f"escribe 'abrir {tool_key}' para lanzarla{C['RESET']}\n"
+            )
+
+        ejercicio_id = act.get("ejercicio_id")
+        if ejercicio_id:
+            ej = ejercicio_por_id(ejercicio_id)
+            if ej and _es_ejercicio_evaluable(ej):
+                result = _loop_ejercicio(
+                    ej, origen=ea_id, curso=curso_codigo, ea=ea_id
+                )
+                progress = cargar_progreso()
+                curso_prog = progress.setdefault("cursos", {}).setdefault(curso_codigo, {})
+                ea_prog = curso_prog.setdefault(
+                    ea_id, {"completada": False, "actividad_actual": 0}
+                )
+                if result == "salir":
+                    guardar_progreso(progress)
+                    return ""
+                current += 1
+                ea_prog["actividad_actual"] = current
+                if current >= t:
+                    ea_prog["completada"] = True
+                guardar_progreso(progress)
+                continue
+            sys.stdout.write(
+                f"  {C['YELLOW']}Ejercicio '{ejercicio_id}' no disponible. "
+                f"Marca la actividad con Enter.{C['RESET']}\n"
             )
 
         activity_done = False
@@ -1966,6 +2670,9 @@ def cmd_guia():
         ("Tutorial PSeInt interactivo",
          "Escribe 'quiero aprender pseint' para iniciar el tutorial completo.\n"
          "Abre PSeInt, guia PDF, y presenta ejercicios con asistencia IA en tiempo real."),
+        ("Ejercicios con validacion",
+         "Escribe 'ejercicios lista' para ver el catalogo.\n"
+         "Escribe 'ejercicios' para practicar: Yap evalua tu respuesta y ofrece pistas."),
         ("Sistema de Cursos",
          "Escribe 'curso FPY1101' para ver el plan de Fundamentos de Programacion.\n"
          "Escribe 'iniciar EA1' para empezar la primera experiencia de aprendizaje.\n"
@@ -1976,6 +2683,7 @@ def cmd_guia():
          "  guia         — tutorial interactivo (este)\n"
          "  curso CODIGO — ver plan de un curso\n"
          "  iniciar EA1  — empezar sesion guiada\n"
+         "  ejercicios   — practica con validacion automatica\n"
          "  mi progreso  — ver avance, puntajes y notas\n"
          "  salir / Ctrl+C — terminar"),
     ]
@@ -2067,10 +2775,12 @@ def cmd_mostrar_progreso():
     """Display student progress: % complete, average score, failed activities, grades."""
     progress = cargar_progreso()
     cursos_prog = progress.get("cursos", {})
+    ej_prog = progress.get("ejercicios", {})
 
-    if not cursos_prog:
+    if not cursos_prog and not ej_prog:
         return display_box(
-            "No hay progreso registrado. Inicia un curso con 'yap curso FPY1101'.",
+            "No hay progreso registrado. Inicia un curso con 'yap curso FPY1101' "
+            "o practica con 'yap ejercicios'.",
             color="YELLOW",
         )
 
@@ -2089,6 +2799,20 @@ def cmd_mostrar_progreso():
             w = sum(pesos) or 1.0
             nota_curso = round(sum(n * p for n, p in zip(notas, pesos)) / w, 1)
             lines.append(f"    {C['CYAN']}Nota curso: {nota_curso}{C['RESET']}")
+
+    if ej_prog:
+        r = resumen_ejercicios(progress)
+        lines.append("")
+        lines.append(f"  {C['BOLD']}Ejercicios{C['RESET']}")
+        lines.append(
+            f"    Total: {r['total']}   aprobados: {r['aprobados']}   "
+            f"Saltados: {r['saltados']}"
+        )
+        lines.append(
+            f"    Promedio: {r['promedio']}/100"
+            + (f"   Nota: {r['nota']}" if r["nota"] is not None else "")
+        )
+
     lines.append(f"\n  {C['GRAY']}Progreso guardado en ~/.config/yap/progress.json{C['RESET']}")
     return "\n".join(lines)
 
@@ -2396,7 +3120,10 @@ def cmd_intro_pseint():
 
     idx = 0
     while 0 <= idx < total:
-        titulo, desc, solucion = ejercicios[idx]
+        ej = ejercicios[idx]
+        titulo = ej.get("titulo", "")
+        desc = ej.get("enunciado", "")
+        solucion = ej.get("solucion") or ""
         print(f"\n┌── EJERCICIO {idx + 1}/{total}: {titulo}")
         print(f"│   {desc}")
         print(f"└{'─' * 50}")
@@ -2424,7 +3151,10 @@ def cmd_intro_pseint():
             continue
 
         # Mostrar guia de resolucion paso a paso
-        pasos_guia = [p.strip() for p in solucion.split(";") if p.strip()]
+        if ";" in solucion:
+            pasos_guia = [p.strip() for p in solucion.split(";") if p.strip()]
+        else:
+            pasos_guia = [p.strip() for p in solucion.splitlines() if p.strip()]
         paso_actual = 0
         while paso_actual < len(pasos_guia):
             paso = pasos_guia[paso_actual]
@@ -2493,6 +3223,7 @@ def classify_intent(user_input):
         "ACCION: open_app (abrir app), search (buscar en Wikipedia),\n"
         "webfetch (obtener URL), pseint (tutor PSeInt/programacion),\n"
         "introduccion_pseint (tutorial interactivo con ejercicios),\n"
+        "ejercicios (practica evaluada: lista o un id),\n"
         "curso (ver o iniciar curso), guia (tutorial interactivo),\n"
         "progreso (ver avance), help (mostrar ayuda/opciones),\n"
         "query (preguntar al AI).\n"
@@ -2503,7 +3234,9 @@ def classify_intent(user_input):
         "Ejemplo: 'como hago un ciclo mientras' -> pseint|como hago un ciclo mientras\n"
         "Ejemplo: 'explica los arreglos en pseint' -> pseint|explica los arreglos en pseint\n"
         "Ejemplo: 'quiero aprender pseint' -> introduccion_pseint|inicio\n"
-        "Ejemplo: 'ejercicios pseint' -> introduccion_pseint|inicio\n"
+        "Ejemplo: 'ejercicios' -> ejercicios|\n"
+        "Ejemplo: 'ejercicios lista' -> ejercicios|lista\n"
+        "Ejemplo: 'lista de ejercicios' -> ejercicios|lista\n"
         "Ejemplo: 'ayuda' -> help|ayuda\n"
         "Ejemplo: 'como usar yap' -> help|como usar yap\n"
         "Ejemplo: 'que es debian?' -> query|que es debian?\n"
@@ -2540,10 +3273,7 @@ def classify_intent(user_input):
             action, param = out.split("|", 1)
             action = action.strip().lower()
             param = param.strip()
-            # ponytail: 'sesion' se acepta como accion valida, pero no se
-            # documenta en el prompt: interpret() la enruta por palabra clave
-            # antes del LLM, y alargar este prompt degrada al modelo 1B.
-            if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "curso", "guia", "progreso", "sesion", "help", "query"):
+            if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "ejercicios", "sesion", "curso", "guia", "progreso", "help", "query"):
                 return action, param
     except subprocess.TimeoutExpired:
         pass
@@ -2592,6 +3322,13 @@ def interpret(user_input):
         if param and param.startswith("EA"):
             return "curso", f"FPY1101:{param}"  # ponytail: assumes active course
 
+    if stripped in ("ejercicios", "ejercicio"):
+        return "ejercicios", ""
+    if stripped.startswith("ejercicios "):
+        return "ejercicios", user_input.strip().split(None, 1)[1]
+    if stripped in ("lista de ejercicios", "listar ejercicios"):
+        return "ejercicios", "lista"
+
     return classify_intent(user_input)
 
 
@@ -2621,6 +3358,7 @@ def main():
             "Abre [app] — abrir aplicacion permitida",
             "Busca [tema] — buscar en Wikipedia",
             "Tutor PSeInt — preguntas de programacion",
+            "Ejercicios — practica con validacion automatica",
             "Curso FPY1101 — plan de estudio",
             "Historial — ver sesiones anteriores",
             "Historial --ultimo — retomar ultima sesion",
@@ -2721,6 +3459,11 @@ def handle_action(action, param, original_input):
     elif action == "introduccion_pseint":
         cmd_intro_pseint()
 
+    elif action == "ejercicios":
+        out = cmd_ejercicios(param)
+        if out:
+            print(out)
+
     elif action == "curso":
         parts = [p.strip() for p in param.split(":", 1)]
         codigo = parts[0].upper()
@@ -2759,6 +3502,7 @@ def handle_action(action, param, original_input):
         print("  Wikipedia:     'Busca [tema]' (resumen desde Wikipedia)")
         print("  Tutor PSeInt:  Preguntas sobre programacion con PSeInt")
         print("  Introduccion:  'Quiero aprender PSeInt' — tutorial interactivo")
+        print("  Ejercicios:    'ejercicios' / 'ejercicios lista' — practica evaluada")
         print("  Curso:         'curso FPY1101' — acceder al plan de estudio")
         print("  Iniciar EA:    'iniciar EA1' — comenzar experiencia de aprendizaje")
         print("  Progreso:      'progreso' — % completado, puntajes y nota (1.0-7.0)")

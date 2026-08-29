@@ -58,7 +58,7 @@
       "actividades": [
         {
           "orden": 1,
-          "nombre": "Algoritmos y su relacion con la vida diaria",
+          "nombre": "Algoritmos y su relacion con la vida diaria", "ejercicio_id": "que_es_algoritmo",
           "descripcion": "Que es un algoritmo, componentes, relacion con hardware. Actividad: receta para un robot. Reflexion sobre que es y para que sirve un algoritmo.",
           "tipo": "respuesta_libre",
           "enunciado": "Explica con tus palabras que es un algoritmo, nombra sus componentes y da un ejemplo de la vida diaria (por ejemplo, una receta).",
@@ -70,7 +70,7 @@
         },
         {
           "orden": 2,
-          "nombre": "Expresiones y estructuras de entrada y salida",
+          "nombre": "Expresiones y estructuras de entrada y salida", "ejercicio_id": "suma_dos_numeros",
           "descripcion": "Entrada, proceso y salida. Diagramas de flujo con FreeDFD. Pseudocodigo con PSeInt. Variables, expresiones aritmeticas.",
           "tipo": "codigo_pseint",
           "enunciado": "Escribe un pseudocodigo PSeInt que lea dos numeros y muestre su suma.",
@@ -83,7 +83,7 @@
         },
         {
           "orden": 3,
-          "nombre": "Tomando decisiones",
+          "nombre": "Tomando decisiones", "ejercicio_id": "par_o_impar",
           "descripcion": "Estructuras de decision en pseudocodigo (Si-Entonces-Sino). Operadores logicos y relacionales. Sentencias de repeticion (Mientras, Repetir, Para). Actividad: carrera de obstaculos.",
           "tipo": "codigo_pseint",
           "enunciado": "Escribe un Si-Entonces-Sino en PSeInt que clasifique un numero como positivo, negativo o cero.",
@@ -95,7 +95,7 @@
         },
         {
           "orden": 4,
-          "nombre": "Consolidando aprendizajes",
+          "nombre": "Consolidando aprendizajes", "ejercicio_id": "partes_algoritmo",
           "descripcion": "Resumen integrador de la EA1. Ejercicios de todos los contenidos. Desafio final: resolver un problema completo con pseudocodigo.",
           "tipo": "completar",
           "enunciado": "Completa: las tres partes de un algoritmo son ____, ____ y ____.",

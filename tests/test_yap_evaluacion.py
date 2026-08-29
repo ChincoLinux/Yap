@@ -15,7 +15,7 @@ import json
 import os
 import tempfile
 from contextlib import contextmanager
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -58,7 +58,8 @@ def _eval_fail(**overrides):
 def _llm_proc(payload):
     if isinstance(payload, dict):
         payload = json.dumps(payload, ensure_ascii=False)
-    proc = Mock()
+    proc = MagicMock()
+    proc.__enter__.return_value = proc
     proc.communicate.return_value = (payload, "")
     proc.returncode = 0
     return proc
@@ -70,7 +71,8 @@ def _mock_llama(payload=None, timeout=False, missing=False):
     with patch("shutil.which", return_value=which_val) as mock_which:
         with patch("subprocess.Popen") as mock_popen:
             if timeout:
-                proc = Mock()
+                proc = MagicMock()
+                proc.__enter__.return_value = proc
                 from subprocess import TimeoutExpired
                 proc.communicate.side_effect = TimeoutExpired(LLAMA_BIN, 120)
                 mock_popen.return_value = proc
