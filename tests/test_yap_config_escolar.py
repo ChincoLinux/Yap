@@ -12,6 +12,7 @@ Ejecucion: python3 -m pytest tests/test_yap_config_escolar.py -v
 
 import sys
 import os
+import re
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import yap
@@ -148,3 +149,50 @@ class TestAppArmorEnforce:
 
     def test_setup_no_usa_aa_complain(self):
         assert "aa-complain" not in leer(SETUP_SH)
+
+
+# ============================================================
+# 4. DESCARGA DEL MODELO GGUF (setup.sh)
+# ============================================================
+
+class TestSetupDescargaModelo:
+    """El instalador debe obtener el mismo GGUF Q4_K_M sin caer en el 401 de wget."""
+
+    GGUF_RE = r"Llama-3\.2-[0-9]+B-Instruct-Q4_K_M\.gguf"
+
+    def test_yap_py_declara_un_gguf_q4_k_m(self):
+        matches = re.findall(self.GGUF_RE, leer(os.path.join(RAIZ, "yap.py")))
+        assert matches, "yap.py debe declarar un GGUF Llama-3.2 Q4_K_M"
+        assert not matches[0].endswith(")")
+
+    def test_setup_extrae_el_gguf_con_regex_no_sed(self):
+        """B1: sed sobre os.environ.get(...) dejaba un ')' en el nombre."""
+        contenido = leer(SETUP_SH)
+        assert "grep -oE" in contenido
+        assert r"Llama-3\.2-" in contenido
+        assert "s|.*/||" not in contenido
+
+    def test_setup_descarga_con_curl_y_download_true(self):
+        contenido = leer(SETUP_SH)
+        assert "curl -fL" in contenido
+        assert "?download=true" in contenido
+        assert "huggingface.co/bartowski/" in contenido
+
+    def test_setup_tiene_espejos_si_huggingface_da_401(self):
+        contenido = leer(SETUP_SH)
+        assert "hf-mirror.com" in contenido
+        assert "unsloth/Llama-3.2-" in contenido
+
+    def test_setup_rechaza_html_de_error_como_modelo(self):
+        contenido = leer(SETUP_SH)
+        assert '== "GGUF"' in contenido or "== 'GGUF'" in contenido
+        assert "MIN_BYTES_1B" in contenido
+        assert "es_gguf_valido" in contenido
+
+    def test_setup_no_usa_sudo_wget_contra_huggingface(self):
+        """wget + Xet de Hugging Face responde 401 (Username/Password Authentication Failed)."""
+        for linea in leer(SETUP_SH).splitlines():
+            if "huggingface.co" in linea and "wget" in linea:
+                raise AssertionError(
+                    f"setup.sh no debe descargar el modelo con wget: {linea.strip()}"
+                )
