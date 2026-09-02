@@ -61,6 +61,16 @@ jobs:
           echo "═══════════════════════════════════════════════"
           python -m pytest tests/test_yap_evaluacion.py -v --tb=short
 
+      - name: Ejecutar pruebas i18n
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "  PRUEBAS I18N (#36)"
+          echo "═══════════════════════════════════════════════"
+          python -m pytest tests/test_yap_i18n.py -v --tb=short
+          test -f i18n/es.json && echo "✓ i18n/es.json existe"
+          test -f i18n/en.json && echo "✓ i18n/en.json existe"
+          test -f i18n/arn.json && echo "✓ i18n/arn.json existe"
+
       - name: Verificar ausencia de vulnerabilidades
         run: |
           echo "═══════════════════════════════════════════════"

@@ -226,6 +226,13 @@ sudo cp "$SCRIPT_DIR/whitelist/pseint/guia_ejercicios.pdf" "$PSEINT_DIR/"
 sudo mkdir -p "$CONFIG_DIR/cursos"
 sudo cp "$SCRIPT_DIR/cursos/"*.json "$CONFIG_DIR/cursos/" 2>/dev/null || true
 echo "  OK: cursos instalados en $CONFIG_DIR/cursos/"
+# ── i18n (#36) ─────────────────────────────────────────────
+sudo mkdir -p "$CONFIG_DIR/i18n" "$YAP_DIR/i18n"
+if [ -d "$SCRIPT_DIR/i18n" ]; then
+  sudo cp "$SCRIPT_DIR/i18n/"*.json "$CONFIG_DIR/i18n/" 2>/dev/null || true
+  sudo cp "$SCRIPT_DIR/i18n/"*.json "$YAP_DIR/i18n/" 2>/dev/null || true
+  echo "  OK: traducciones instaladas en $CONFIG_DIR/i18n/"
+fi
 # ── Agente opencode ──────────────────────────────────────────
 sudo mkdir -p "$CONFIG_DIR/agent"
 if [ -f "$SCRIPT_DIR/yap-agent.md" ]; then

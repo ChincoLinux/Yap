@@ -25,6 +25,8 @@ Ver requisitos detallados en [README.md](README.md#61-requisitos-del-sistema).
 | `yap sesion retomar 3` | Retomar una sesion pausada. |
 
 | `yap telemetria` | Resumen local de tu uso de Yap. |
+| `yap perfil` | Ver idioma de la interfaz (es/en/arn). |
+| `yap perfil idioma en` | Cambiar idioma a inglés. También: `es`, `arn` (mapudungun). |
 | `yap curso FPY1101` | Plan de estudio del curso. |
 | `yap iniciar EA1` | Comenzar una experiencia de aprendizaje. |
 | `yap <pregunta>` | Consulta directa al AI. |
@@ -43,6 +45,7 @@ Chinco > abre firefox         → Abre Firefox
 Chinco > busca variable       → Wikipedia + resumen AI
 Chinco > como hago un ciclo   → Tutor PSeInt
 Chinco > ayuda                → Lista de comandos
+Chinco > perfil idioma en     → Interfaz y LLM en inglés (es/en/arn)
 Chinco > salir                → Salir
 Chinco > que es un algoritmo  → Consulta directa al AI
 ```

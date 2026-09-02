@@ -214,6 +214,22 @@ def main():
         for e in errors:
             print(f"     {e}")
 
+    # --- Pruebas i18n (#36) ---
+    print_header("PRUEBAS I18N")
+    i18n_file = os.path.join(os.path.dirname(__file__), "test_yap_i18n.py")
+    result = run_pytest(i18n_file)
+    passed, failed, errors = parse_pytest_output(result.stdout)
+    total_passed += passed
+    total_failed += failed
+
+    all_results.append(("i18n", passed, failed, errors))
+    if failed == 0:
+        print(f"  ✓ [{passed}/{passed + failed}] pruebas i18n pasadas")
+    else:
+        print(f"  ✗ [{passed}/{passed + failed}] pruebas pasadas, {failed} fallaron")
+        for e in errors:
+            print(f"     {e}")
+
     # --- Verificaciones de Infraestructura ---
     print_header("VERIFICACIONES DE INFRAESTRUCTURA")
 

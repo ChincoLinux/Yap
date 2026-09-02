@@ -51,7 +51,7 @@ Construir un sistema Debian estable ultraligero con un agente IA local (**CPU-on
 | **RAM minima** | ~3.5 GB (main), ~3.1 GB (lowmem), ~1.8 GB (ultra-lowmem) |
 | **Contexto** | 4096 tokens (main) / 2048 tokens (lowmem, ultra-lowmem) |
 | **Latencia estimada** | 5-10 s primeras tokens en CPU (2 nucleos), ~40 tok/s |
-| **Idioma** | Espanol |
+| **Idioma** | Español (default), English, Mapudungun (`yap perfil idioma`) |
 | **SO destino** | Debian 13 (64-bit) |
 
 ---
@@ -486,7 +486,7 @@ git checkout lowmem
 - **Sin persistencia**: cada sesion interactiva es independiente; no hay memoria entre ejecuciones.
 - **Latencia**: timeout de 120 s por consulta. En CPU con 2 nucleos, la primera respuesta puede tardar hasta 60 s.
 - **Alucinaciones**: el modelo Llama 3.2 3B puede generar informacion incorrecta. Se prefiere `webfetch` para datos factuales.
-- **Idioma**: optimizado para espanol; otros idiomas pueden dar resultados inconsistentes.
+- **Idioma**: interfaz y LLM siguen el perfil (`yap perfil idioma es|en|arn`); el clasificador interno sigue en español.
 - **Hardware**: sin soporte GPU ni aceleracion hardware.
 
 ---

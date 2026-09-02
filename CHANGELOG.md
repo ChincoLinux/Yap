@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- i18n multi-idioma (#36): catálogos JSON `es`/`en`/`arn`, `yap perfil idioma`,
+  LLM responde en el idioma del perfil; mapudungun con traducción comunitaria parcial
 - Control de sesiones dentro del agente (#21): crear, pausar, retomar, cerrar y
   listar sesiones, con límite de 3 abiertas, prompt marcado con la sesión activa
   y archivado en el historial al cerrar

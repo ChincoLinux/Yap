@@ -49,7 +49,7 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 
 | # | Issue | Prioridad | Estado |
 |---|-------|-----------|--------|
-| 36 | i18n — soporte multi-idioma (español, inglés, mapudungun) | P2 | Planeado |
+| 36 | i18n — soporte multi-idioma (español, inglés, mapudungun) | P2 | En revisión |
 | 37 | Accesibilidad — lector de pantalla, alto contraste, fuentes grandes | P2 | Planeado |
 | 38 | Telemetría local anónima — métricas de uso para mejorar el agente | P3 | Parcial (1) |
 | 39 | Modo offline total — sin dependencia de red en ningún flujo | P1 | Planeado |

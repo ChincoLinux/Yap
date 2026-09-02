@@ -7,6 +7,7 @@ tests/
 ├── test_yap_security.py     # 25 pruebas de seguridad y configuracion
 ├── test_yap_functional.py   # 32 pruebas funcionales
 ├── test_yap_evaluacion.py   # Evaluacion automatica de actividades (#23)
+├── test_yap_i18n.py         # Multi-idioma es/en/arn (#36)
 ├── run_tests.py             # Ejecutor con reporte integrado
 ├── report/                  # Reportes generados (--report)
 └── README.md                # Este archivo

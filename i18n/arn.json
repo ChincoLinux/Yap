@@ -1,0 +1,112 @@
+{
+  "_meta": {
+    "language": "arn",
+    "name": "Mapudungun",
+    "coverage": "partial",
+    "note": "Traducción comunitaria inicial. Las claves ausentes caen a español. Mejoras bienvenidas."
+  },
+  "lang": {
+    "code": "arn",
+    "native_name": "Mapudungun"
+  },
+  "llm": {
+    "system_prompt": "Eymi Yap, kiñe kellufe kimün mapudungun mew, ChincoLinux ñi küdawwe. Dunguam küme, pichi ka nor. Kimlalmi, feypinge.",
+    "eval_system_prompt": "Eymi kiñe kimeltufe. Dunguam JSON müten, markdown mülelay. Estudiante ñi JSON kintulngekelay.",
+    "pseint_system_prompt": "Eymi kiñe kimeltufe programacion mew, PSeInt engu, mapudungun mew. Ramtulmi: 1) Pichi ka küme ngülamnge. 2) PSeInt ñi wirin kom pengelnge. 3) Gülay: Algoritmo, Definir, Escribir, Leer, Si-Entonces-Sino, Mientras, Repetir, Para, Segun, Arreglo. 4) Nor wirin. 5) Ngülam müten, kake dungu mülelay.",
+    "summarize_prompt": "Pichi dungunge tüfa '{query}' mu:",
+    "student_doubt": "Püchüche ñi ramtun: {question}",
+    "exercise": "Küdaw: '{title}' - {desc}.",
+    "exercise_full": "KÜDAW: {title}\nDungu: {desc}\nNgülam: {guide}\n\nPüchüche {step} mew müley.\nRamtun: {question}"
+  },
+  "confirm": {
+    "sensitive": "⚠ Küdaw nielu küme ngünen:",
+    "allow": "Elungeay? (may/N):",
+    "open_app": "Nentun küdawwe '{param}'",
+    "webfetch": "Nentun '{param}' ñi dungu",
+    "cancelled": "Küdaw nentunngelay."
+  },
+  "error": {
+    "app_unavailable": "[ERROR] '{app}' mülelay.\nKüdawwe elungeel: {available}",
+    "no_binary": "[ERROR] Küdawwe pengelay: {candidates}",
+    "scheme": "[ERROR] Scheme '{scheme}' elungekelay. http/https müten.",
+    "domain_blocked": "[ERROR] Dominio '{domain}' nentunngelay.\nElungeel: {allowed}",
+    "fetch": "[ERROR] Welulün nentun {url}: {error}",
+    "timeout": "[WARN] Antü rupay (120s)",
+    "llama_missing": "[ERROR] llama-cli mülelay. Yap setup küdawünge.",
+    "no_exercises": "[ERROR] Küdaw mülelay {path} mew",
+    "course_corrupt": "[ERROR] Chillkatuwe welulün: {error}",
+    "ea_not_found": "[ERROR] Küdaw '{ea}' pengelay {curso} mew",
+    "timeout_cleanup": "[WARN] Welulün llama-cli timeout rupu mew: {error}"
+  },
+  "app": {
+    "opened": "[OK] {app} nentunngerkey.\nDungu: {version}",
+    "notify_title": "{app} nentunngerkey",
+    "notify_body": "Version: {version}",
+    "no_version": "(version mülelay)"
+  },
+  "web": {
+    "content": "Dungu nentunngerkey ({n} chars):\n{text}...",
+    "fetching": "Web dungu nentunngemekey...",
+    "searching": "Kintun '{query}' Wikipedia mew...",
+    "source": "Ngeyan: {source}",
+    "summarizing": "Dungu nentunngerkey ({n} chars). Pichi dungungey LLM engu..."
+  },
+  "query": {
+    "consulting": "LLM ramtunngemekey...",
+    "no_response": "(dungu mülelay)",
+    "context": "Nütramkan:\n{context}",
+    "pseint_consulting": "PSeInt kimeltufe ramtunngemekey..."
+  },
+  "ui": {
+    "goodbye": "Pewmayu",
+    "commands": "Ngülam"
+  },
+  "menu": {
+    "items": "Kiñe ramtun AI mu\nNentun [app] — küdawwe elungeel\nKintun [dungu] — Wikipedia mew\nPSeInt kimeltufe — programacion ramtun\nChillkatuwe FPY1101 — chillkatun ngülam\nRupachi — rupachi nütramkan\nRupachi --ultimo — wüla nütramkan amulün\nNütramkan — mülen, pentukun, amulün kam tripan\nTelemetria — Yap ñi küdaw (kom tufachi mapu mew)\nPerfil — dungun\nKellu — ngülam\nTripan — Ctrl+C kam 'tripan'"
+  },
+  "help": {
+    "body": "  Ramtun:       Kiñe ramtun AI mu\n  Nentun:       'Nentun [küdawwe]' (Firefox, Terminal)\n  Wikipedia:    'Kintun [dungu]' (Wikipedia ñi pichi dungu)\n  PSeInt:       Programacion ramtun PSeInt engu\n  Kimeltun:     'PSeInt kimeltungeayün' — chillkatun\n  Chillkatuwe:  'curso FPY1101' — chillkatun ngülam\n  Amulün EA:    'iniciar EA1' — kimeltun amulün\n  Amulelu:      'progreso' — % ka nota (1.0-7.0)\n  Rupachi:      'historial' — rupachi nütramkan\n  Amulün:       'historial --ultimo' — wüla nütramkan\n  Nütramkan:    'sesion' — mülen\n                 'sesion nueva|pausar|retomar|cerrar|listar'\n  Telemetria:   'telemetria' — küdaw pichi dungu\n  Perfil:       'perfil idioma es|en|arn' — dungun"
+  },
+  "profile": {
+    "current": "Fachi dungun: {name} ({lang})",
+    "available": "Dungun mülelu: {available}",
+    "set": "Dungun kawe {name} ({lang}) mew.\nYap tüfa dungun mew ngülamay.",
+    "unknown": "Dungun '{value}' kimngekelay.\nPenge: {available}",
+    "hint": "Dungun kawe: yap perfil idioma es|en|arn",
+    "help": "Ngülam kimngekelay.\n\n  perfil                 - fachi dungun\n  perfil idioma          - dungun ka kake\n  perfil idioma es       - wigkadungun\n  perfil idioma en       - inglés dungun\n  perfil idioma arn      - mapudungun (lof ñi wirin)"
+  },
+  "history": {
+    "empty": "Rupachi nütramkan mülelay.\nYap tripayüm, nütramkan ellkawkey.",
+    "empty_session": "Wüla nütramkan dungu nielay.",
+    "restored": "Nütramkan {ts} mew wiñotuy.\n{n} dungu nentunngerkey.\nFeymu amulngeay nütramkan.",
+    "header": "Rupachi Nütramkan",
+    "session": "Nütramkan {i}",
+    "turns_first": "Dungu: {n} | Wünen: \"{first}...\"",
+    "empty_label": "Nütramkan {i} — {ts} (mülelay)",
+    "resume_hint": "Wüla nütramkan amulün: yap historial --ultimo",
+    "saved_in": "Rupachi müley: {path}"
+  },
+  "session": {
+    "header": "Nütramkan",
+    "none_open": "Nütramkan mülelay.\nAmulnge 'sesion nueva' kam chillkatuwe mew.",
+    "help": "Ngülam kimngekelay.\n\n  sesion              - nütramkan mülen\n  sesion nueva        - we nütramkan\n  sesion pausar       - pentukun ka ellkan\n  sesion retomar [ID] - pentukun amulün\n  sesion cerrar       - tripan ka ellkan\n  sesion listar       - kom nütramkan",
+    "started": "Nütramkan #{id} amulngey.\nWe nütramkan müley.",
+    "paused": "Nütramkan #{id} pentukuy {n} dungu engu.\nAmulnge: yap sesion retomar {id}",
+    "resumed": "Nütramkan #{id} amulngey.\n{n} dungu nentunngerkey.",
+    "closed": "Nütramkan #{id} tripay ka ellkawkey.\nPenge: yap historial"
+  },
+  "progress": {
+    "empty": "Amulelu mülelay. Amulnge 'yap curso FPY1101'.",
+    "header": "Ñi Amulelu",
+    "course_grade": "Chillkatuwe nota: {nota}",
+    "saved_in": "Amulelu ellkawkey ~/.config/yap/progress.json mew"
+  },
+  "guia": {
+    "title": "Pichi Ngülam",
+    "step": "AMULÜN {n}: {titulo}",
+    "next": "[Enter = amulün] [tripan]",
+    "s1_title": "Mari mari ChincoLinux mew",
+    "s1_body": "Yap ta ChincoLinux ñi kellufe kimün. Kom tufachi mapu mew küdawkey, internet mülelay.\n'yap' wirilmi ramtunaymi, küdawwe nentunaymi, Wikipedia kintunaymi ka chillkatunaymi."
+  },
+  "ui_extra_note": "Claves no traducidas aún caen a español. La comunidad puede completar este archivo."
+}

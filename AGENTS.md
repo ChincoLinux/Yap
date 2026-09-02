@@ -150,6 +150,7 @@ Yap/
 ├── yap.py                 # Agente principal (~1253 líneas)
 ├── setup.sh               # Instalador (compila llama.cpp, descarga modelo)
 ├── deploy-yap.sh          # Despliegue masivo por SSH
+├── i18n/                  # Traducciones JSON (es, en, arn)
 ├── whitelist/             # Apps y dominios permitidos
 │   ├── apps.conf
 │   └── web.conf
