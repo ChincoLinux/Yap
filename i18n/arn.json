@@ -62,17 +62,30 @@
     "commands": "Ngülam"
   },
   "menu": {
-    "items": "Kiñe ramtun AI mu\nNentun [app] — küdawwe elungeel\nKintun [dungu] — Wikipedia mew\nPSeInt kimeltufe — programacion ramtun\nChillkatuwe FPY1101 — chillkatun ngülam\nRupachi — rupachi nütramkan\nRupachi --ultimo — wüla nütramkan amulün\nNütramkan — mülen, pentukun, amulün kam tripan\nTelemetria — Yap ñi küdaw (kom tufachi mapu mew)\nPerfil — dungun\nKellu — ngülam\nTripan — Ctrl+C kam 'tripan'"
+    "query": "Kiñe ramtun AI mu",
+    "open_app": "Nentun [app] — küdawwe elungeel",
+    "search": "Kintun [dungu] — Wikipedia mew",
+    "pseint": "PSeInt kimeltufe — programacion ramtun",
+    "curso": "Chillkatuwe FPY1101 — chillkatun ngülam",
+    "historial": "Rupachi — rupachi nütramkan",
+    "historial_last": "Rupachi --ultimo — wüla nütramkan amulün",
+    "sesion": "Nütramkan — mülen, pentukun, amulün kam tripan",
+    "telemetria": "Telemetria — Yap ñi küdaw (kom tufachi mapu mew)",
+    "idioma": "Dungun",
+    "help": "Kellu — ngülam",
+    "salir": "Tripan — Ctrl+C kam 'tripan'"
   },
   "help": {
-    "body": "  Ramtun:       Kiñe ramtun AI mu\n  Nentun:       'Nentun [küdawwe]' (Firefox, Terminal)\n  Wikipedia:    'Kintun [dungu]' (Wikipedia ñi pichi dungu)\n  PSeInt:       Programacion ramtun PSeInt engu\n  Kimeltun:     'PSeInt kimeltungeayün' — chillkatun\n  Chillkatuwe:  'curso FPY1101' — chillkatun ngülam\n  Amulün EA:    'iniciar EA1' — kimeltun amulün\n  Amulelu:      'progreso' — % ka nota (1.0-7.0)\n  Rupachi:      'historial' — rupachi nütramkan\n  Amulün:       'historial --ultimo' — wüla nütramkan\n  Nütramkan:    'sesion' — mülen\n                 'sesion nueva|pausar|retomar|cerrar|listar'\n  Telemetria:   'telemetria' — küdaw pichi dungu\n  Perfil:       'perfil idioma es|en|arn' — dungun"
+    "body": "  Ramtun:       Kiñe ramtun AI mu\n  Nentun:       'Nentun [küdawwe]' (Firefox, Terminal)\n  Wikipedia:    'Kintun [dungu]' (Wikipedia ñi pichi dungu)\n  PSeInt:       Programacion ramtun PSeInt engu\n  Kimeltun:     'PSeInt kimeltungeayün' — chillkatun\n  Chillkatuwe:  'curso FPY1101' — chillkatun ngülam\n  Amulün EA:    'iniciar EA1' — kimeltun amulün\n  Amulelu:      'progreso' — % ka nota (1.0-7.0)\n  Rupachi:      'historial' — rupachi nütramkan\n  Amulün:       'historial --ultimo' — wüla nütramkan\n  Nütramkan:    'sesion' — mülen\n                 'sesion nueva|pausar|retomar|cerrar|listar'\n  Telemetria:   'telemetria' — küdaw pichi dungu\n  Dungun:       'idioma' — dungun kawe (es|en|arn)"
   },
   "profile": {
     "current": "Fachi dungun: {name} ({lang})",
     "available": "Dungun mülelu: {available}",
     "set": "Dungun kawe {name} ({lang}) mew.\nYap tüfa dungun mew ngülamay.",
     "unknown": "Dungun '{value}' kimngekelay.\nPenge: {available}",
-    "hint": "Dungun kawe: yap perfil idioma es|en|arn",
+    "menu_title": "Dungun",
+    "choose": "Nyen kiñe rakin kam dungun (es, en, arn). Kimeltun: 2",
+    "hint": "Dungun kawe: idioma",
     "help": "Ngülam kimngekelay.\n\n  perfil                 - fachi dungun\n  perfil idioma          - dungun ka kake\n  perfil idioma es       - wigkadungun\n  perfil idioma en       - inglés dungun\n  perfil idioma arn      - mapudungun (lof ñi wirin)"
   },
   "history": {

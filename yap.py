@@ -114,12 +114,14 @@ LANG_ALIASES = {
 
 _I18N_CACHE = {}
 _CURRENT_LANG = None
+_IDIOMA_MENU_ACTIVO = False
 
 
 def reset_i18n():
     """Clear language and catalog cache. Used by tests."""
-    global _CURRENT_LANG
+    global _CURRENT_LANG, _IDIOMA_MENU_ACTIVO
     _CURRENT_LANG = None
+    _IDIOMA_MENU_ACTIVO = False
     _I18N_CACHE.clear()
 
 
@@ -314,6 +316,68 @@ def cmd_perfil(sub="", param=""):
         )
 
     return display_box(t("profile.help"), color="YELLOW")
+
+
+def menu_entries():
+    """Interactive menu: (label, action, param). action=None → hint only."""
+    return (
+        (t("menu.query"), None, "menu.needs_query"),
+        (t("menu.open_app"), None, "menu.needs_param"),
+        (t("menu.search"), None, "menu.needs_param"),
+        (t("menu.pseint"), None, "menu.needs_param"),
+        (t("menu.curso"), "curso", "FPY1101"),
+        (t("menu.historial"), "historial", "historial"),
+        (t("menu.historial_last"), "historial", "--ultimo"),
+        (t("menu.sesion"), "sesion", ""),
+        (t("menu.telemetria"), "telemetria", ""),
+        (t("menu.idioma"), "idioma", ""),
+        (t("menu.help"), "help", "ayuda"),
+        (t("menu.salir"), "salir", ""),
+    )
+
+
+def _opciones_idioma():
+    """[(code, label), ...] for the language picker."""
+    opts = []
+    for code in SUPPORTED_LANGS:
+        name = _dig(_load_catalog(code), "lang.native_name") or code
+        opts.append((code, f"{name} ({code})"))
+    return opts
+
+
+def _menu_idioma_texto():
+    opts = _opciones_idioma()
+    lines = [display_menu(t("profile.menu_title"), [label for _, label in opts])]
+    lines.append("  " + t("profile.current", lang=get_lang(), name=t("lang.native_name")))
+    lines.append("  " + t("profile.choose"))
+    return "\n".join(lines) + "\n"
+
+
+def _aplicar_idioma(param):
+    """Set language from a menu number (1-based) or a language name/code."""
+    param = (param or "").strip()
+    if param.isdigit():
+        idx = int(param) - 1
+        codes = [code for code, _ in _opciones_idioma()]
+        if 0 <= idx < len(codes):
+            param = codes[idx]
+        else:
+            return display_box(
+                t("profile.unknown", value=param, available=_idiomas_disponibles()),
+                color="YELLOW",
+            )
+    return cmd_perfil("idioma", param)
+
+
+def cmd_idioma(param=""):
+    """Change UI/LLM language. Empty param shows the numbered picker."""
+    global _IDIOMA_MENU_ACTIVO
+    param = (param or "").strip()
+    if param:
+        _IDIOMA_MENU_ACTIVO = False
+        return _aplicar_idioma(param)
+    _IDIOMA_MENU_ACTIVO = True
+    return _menu_idioma_texto()
 
 
 # ── Confirmación humana para acciones sensibles (#12) ────────
@@ -1046,7 +1110,7 @@ TELEMETRY_VERSION = 1
 ACCIONES_CONOCIDAS = (
     "open_app", "search", "webfetch", "pseint", "introduccion_pseint",
     "curso", "guia", "progreso", "historial", "apparmor_status",
-    "telemetria", "help", "query", "sesion", "perfil",
+    "telemetria", "help", "query", "sesion", "perfil", "idioma",
 )
 
 # Nombres legibles para el resumen (español; t() los traduce en pantalla)
@@ -1066,6 +1130,7 @@ ACCIONES_NOMBRES = {
     "query": "Consulta directa al AI",
     "sesion": "Control de sesiones",
     "perfil": "Perfil e idioma",
+    "idioma": "Idioma",
 }
 
 
@@ -2654,7 +2719,7 @@ def classify_intent(user_input):
             # ponytail: 'sesion' se acepta como accion valida, pero no se
             # documenta en el prompt: interpret() la enruta por palabra clave
             # antes del LLM, y alargar este prompt degrada al modelo 1B.
-            if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "curso", "guia", "progreso", "sesion", "help", "query", "perfil"):
+            if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "curso", "guia", "progreso", "sesion", "help", "query", "perfil", "idioma"):
                 return action, param
     except subprocess.TimeoutExpired:
         pass
@@ -2663,7 +2728,15 @@ def classify_intent(user_input):
 
 def interpret(user_input):
     """Keyword router before LLM classifier for known commands."""
+    global _IDIOMA_MENU_ACTIVO
     stripped = user_input.strip().lower()
+
+    # After 'idioma' / menu Idioma, a number or language name picks the language.
+    if _IDIOMA_MENU_ACTIVO:
+        if stripped.isdigit() or normalize_lang(stripped):
+            _IDIOMA_MENU_ACTIVO = False
+            return "idioma", stripped
+        _IDIOMA_MENU_ACTIVO = False
 
     # Exact/prefix keyword routing (bypasses LLM for speed & reliability)
     if stripped in ("guia", "guia rapida", "tutorial", "como usar",
@@ -2695,6 +2768,27 @@ def interpret(user_input):
     if stripped in ("perfil", "profile") or stripped.startswith(("perfil ", "profile ")):
         partes = stripped.split(" ", 1)
         return "perfil", partes[1].strip() if len(partes) > 1 else ""
+
+    # idioma | language en | cambiar idioma
+    if stripped in ("idioma", "language", "lang", "dungun",
+                    "cambiar idioma", "change language"):
+        return "idioma", ""
+    if stripped.startswith(("idioma ", "language ", "lang ")):
+        partes = stripped.split(" ", 1)
+        return "idioma", partes[1].strip() if len(partes) > 1 else ""
+
+    # Numbered options menu: [1] [2] … maps to menu_entries()
+    if stripped.isdigit():
+        idx = int(stripped) - 1
+        entries = menu_entries()
+        if 0 <= idx < len(entries):
+            _label, action, param = entries[idx]
+            if action == "salir":
+                sys.exit(0)
+            if action is None:
+                return "menu_hint", param
+            return action, param
+        return "menu_hint", "menu.unknown_option"
 
     if stripped in ("ayuda", "help", "--help", "-h", "comandos", "ayuda yap", "kellu"):
         return "help", "ayuda"
@@ -2747,7 +2841,7 @@ def main():
 
         sys.stdout.write(render_art(CHINCO_ART, C['CYAN']) + "\n")
         sys.stdout.write(f"  {C['GRAY']}{'─' * 50}{C['RESET']}\n")
-        sys.stdout.write(display_menu(t("ui.commands"), t("menu.items").split("\n")))
+        sys.stdout.write(display_menu(t("ui.commands"), [e[0] for e in menu_entries()]))
         banner = session_banner()
         if banner:
             sys.stdout.write(f"  {C['CYAN']}{banner}{C['RESET']}\n")
@@ -2872,6 +2966,12 @@ def handle_action(action, param, original_input):
         sub_cmd = partes[0] if partes else ""
         arg = partes[1] if len(partes) > 1 else ""
         print(cmd_perfil(sub_cmd, arg))
+
+    elif action == "idioma":
+        print(cmd_idioma(param))
+
+    elif action == "menu_hint":
+        print(display_box(t(param), color="CYAN"))
 
     elif action == "apparmor_status":
         print(cmd_apparmor_status())

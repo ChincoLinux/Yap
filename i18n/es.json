@@ -61,17 +61,33 @@
     "commands": "Comandos"
   },
   "menu": {
-    "items": "Cualquier consulta directa al AI\nAbre [app] — abrir aplicacion permitida\nBusca [tema] — buscar en Wikipedia\nTutor PSeInt — preguntas de programacion\nCurso FPY1101 — plan de estudio\nHistorial — ver sesiones anteriores\nHistorial --ultimo — retomar ultima sesion\nSesion — estado, pausar, retomar o cerrar sesion\nTelemetria — ver tu uso de Yap (100% local)\nPerfil — idioma de la interfaz\nAyuda — lista de comandos\nSalir — Ctrl+C o 'salir'"
+    "query": "Cualquier consulta directa al AI",
+    "open_app": "Abre [app] — abrir aplicacion permitida",
+    "search": "Busca [tema] — buscar en Wikipedia",
+    "pseint": "Tutor PSeInt — preguntas de programacion",
+    "curso": "Curso FPY1101 — plan de estudio",
+    "historial": "Historial — ver sesiones anteriores",
+    "historial_last": "Historial --ultimo — retomar ultima sesion",
+    "sesion": "Sesion — estado, pausar, retomar o cerrar sesion",
+    "telemetria": "Telemetria — ver tu uso de Yap (100% local)",
+    "idioma": "Idioma",
+    "help": "Ayuda — lista de comandos",
+    "salir": "Salir — Ctrl+C o 'salir'",
+    "needs_query": "Escribe tu pregunta y pulsa Enter.",
+    "needs_param": "Esa opción necesita más datos. Escribe el comando completo, por ejemplo: abre firefox",
+    "unknown_option": "Opción no válida. Elige un número del menú."
   },
   "help": {
-    "body": "  Preguntar:     Cualquier pregunta directa al AI\n  Abrir app:     'Abre [aplicacion]' (Firefox, Terminal, etc.)\n  Wikipedia:     'Busca [tema]' (resumen desde Wikipedia)\n  Tutor PSeInt:  Preguntas sobre programacion con PSeInt\n  Introduccion:  'Quiero aprender PSeInt' — tutorial interactivo\n  Curso:         'curso FPY1101' — acceder al plan de estudio\n  Iniciar EA:    'iniciar EA1' — comenzar experiencia de aprendizaje\n  Progreso:      'progreso' — % completado, puntajes y nota (1.0-7.0)\n  Historial:     'historial' — ver sesiones anteriores\n  Retomar:       'historial --ultimo' — continuar última sesión\n  Sesion:        'sesion' — estado de la sesion activa\n                 'sesion nueva|pausar|retomar|cerrar|listar'\n  Telemetria:    'telemetria' — resumen local de tu uso\n  Perfil:        'perfil idioma es|en|arn' — idioma de la interfaz"
+    "body": "  Preguntar:     Cualquier pregunta directa al AI\n  Abrir app:     'Abre [aplicacion]' (Firefox, Terminal, etc.)\n  Wikipedia:     'Busca [tema]' (resumen desde Wikipedia)\n  Tutor PSeInt:  Preguntas sobre programacion con PSeInt\n  Introduccion:  'Quiero aprender PSeInt' — tutorial interactivo\n  Curso:         'curso FPY1101' — acceder al plan de estudio\n  Iniciar EA:    'iniciar EA1' — comenzar experiencia de aprendizaje\n  Progreso:      'progreso' — % completado, puntajes y nota (1.0-7.0)\n  Historial:     'historial' — ver sesiones anteriores\n  Retomar:       'historial --ultimo' — continuar última sesión\n  Sesion:        'sesion' — estado de la sesion activa\n                 'sesion nueva|pausar|retomar|cerrar|listar'\n  Telemetria:    'telemetria' — resumen local de tu uso\n  Idioma:        'idioma' — cambiar idioma de la interfaz (es|en|arn)"
   },
   "profile": {
     "current": "Idioma actual: {name} ({lang})",
     "available": "Idiomas disponibles: {available}",
     "set": "Idioma cambiado a {name} ({lang}).\nEl asistente responderá en este idioma.",
     "unknown": "Idioma '{value}' no reconocido.\nUsa: {available}",
-    "hint": "Cambia el idioma con: yap perfil idioma es|en|arn",
+    "menu_title": "Idioma",
+    "choose": "Elige un número o el código (es, en, arn). Ejemplo: 2",
+    "hint": "Cambia el idioma con: idioma",
     "help": "Subcomando no reconocido.\n\n  perfil                 - ver idioma actual\n  perfil idioma          - ver idioma actual y opciones\n  perfil idioma es       - español (predeterminado)\n  perfil idioma en       - inglés\n  perfil idioma arn      - mapudungun (traducción comunitaria)"
   },
   "history": {
@@ -145,7 +161,8 @@
       "help": "Ayuda",
       "query": "Consulta directa al AI",
       "sesion": "Control de sesiones",
-      "perfil": "Perfil e idioma"
+      "perfil": "Perfil e idioma",
+      "idioma": "Idioma"
     }
   },
   "eval": {
@@ -230,7 +247,7 @@
     "s6_title": "Sistema de Cursos",
     "s6_body": "Escribe 'curso FPY1101' para ver el plan de Fundamentos de Programacion.\nEscribe 'iniciar EA1' para empezar la primera experiencia de aprendizaje.\nLas actividades se evaluan automaticamente. Tienes hasta 3 intentos.\nProgreso se guarda automaticamente. Retoma donde quedaste.",
     "s7_title": "Comandos esenciales",
-    "s7_body": "  ayuda        — esta lista de comandos\n  guia         — tutorial interactivo (este)\n  curso CODIGO — ver plan de un curso\n  iniciar EA1  — empezar sesion guiada\n  mi progreso  — ver avance, puntajes y notas\n  perfil idioma — cambiar idioma de la interfaz\n  salir / Ctrl+C — terminar"
+    "s7_body": "  ayuda        — esta lista de comandos\n  guia         — tutorial interactivo (este)\n  curso CODIGO — ver plan de un curso\n  iniciar EA1  — empezar sesion guiada\n  mi progreso  — ver avance, puntajes y notas\n  idioma       — cambiar idioma de la interfaz\n  salir / Ctrl+C — terminar"
   },
   "progress": {
     "empty": "No hay progreso registrado. Inicia un curso con 'yap curso FPY1101'.",

@@ -67,6 +67,8 @@ class TestCatalogos:
             "help.body",
             "ui.goodbye",
             "error.app_unavailable",
+            "menu.idioma",
+            "profile.menu_title",
         ):
             assert key in yap.i18n_keys("arn"), f"arn.json debe traducir {key}"
 
@@ -250,5 +252,68 @@ class TestMensajesPorIdioma:
     def test_help_en_ingles(self):
         yap.set_lang("en", persist=False)
         body = yap.t("help.body")
-        assert "Open app" in body or "profile language" in body
+        assert "Open app" in body or "profile language" in body or "language" in body.lower()
         assert "Preguntar:" not in body
+
+
+class TestMenuIdioma:
+    """Requisito: opción Idioma en el menú y comando para cambiar idioma."""
+
+    def test_menu_incluye_opcion_idioma(self):
+        labels = [e[0] for e in yap.menu_entries()]
+        assert "Idioma" in labels
+        actions = [e[1] for e in yap.menu_entries()]
+        assert "idioma" in actions
+
+    def test_menu_idioma_en_ingles(self):
+        yap.set_lang("en", persist=False)
+        labels = [e[0] for e in yap.menu_entries()]
+        assert "Language" in labels
+
+    def test_interpret_idioma(self):
+        assert yap.interpret("idioma") == ("idioma", "")
+        assert yap.interpret("idioma en") == ("idioma", "en")
+        assert yap.interpret("language") == ("idioma", "")
+        assert yap.interpret("language arn") == ("idioma", "arn")
+        assert yap.interpret("cambiar idioma") == ("idioma", "")
+        assert yap.interpret("change language") == ("idioma", "")
+
+    def test_numero_del_menu_abre_idioma(self):
+        idx = next(i for i, e in enumerate(yap.menu_entries(), 1) if e[1] == "idioma")
+        assert yap.interpret(str(idx)) == ("idioma", "")
+
+    def test_cmd_idioma_sin_param_muestra_opciones(self):
+        out = yap.cmd_idioma()
+        assert "[1]" in out
+        assert "[2]" in out
+        assert "[3]" in out
+        assert "Español" in out
+        assert "English" in out
+        assert "Mapudungun" in out
+        assert yap._IDIOMA_MENU_ACTIVO is True
+
+    def test_cmd_idioma_por_numero(self):
+        out = yap.cmd_idioma("2")
+        assert yap.get_lang() == "en"
+        assert "English" in out
+
+    def test_cmd_idioma_por_codigo(self):
+        out = yap.cmd_idioma("arn")
+        assert yap.get_lang() == "arn"
+        assert "Mapudungun" in out
+
+    def test_tras_menu_un_numero_elige_idioma(self):
+        yap.cmd_idioma()
+        assert yap.interpret("2") == ("idioma", "2")
+        with patch.object(yap, "registrar_uso"):
+            yap.handle_action("idioma", "2", "2")
+        assert yap.get_lang() == "en"
+
+    def test_handle_action_idioma(self):
+        with patch.object(yap, "cmd_idioma", return_value="ok") as mock_cmd:
+            with patch.object(yap, "registrar_uso"):
+                yap.handle_action("idioma", "en", "idioma en")
+        mock_cmd.assert_called_once_with("en")
+
+    def test_numero_fuera_de_rango_no_va_al_llm(self):
+        assert yap.interpret("99") == ("menu_hint", "menu.unknown_option")

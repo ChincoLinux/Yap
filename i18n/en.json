@@ -61,17 +61,33 @@
     "commands": "Commands"
   },
   "menu": {
-    "items": "Any direct question to the AI\nOpen [app] — launch an allowed application\nSearch [topic] — search Wikipedia\nPSeInt tutor — programming questions\nCourse FPY1101 — study plan\nHistory — view previous sessions\nHistory --last — resume last session\nSession — status, pause, resume or close session\nTelemetry — view your Yap usage (100% local)\nProfile — interface language\nHelp — command list\nQuit — Ctrl+C or 'quit'"
+    "query": "Any direct question to the AI",
+    "open_app": "Open [app] — launch an allowed application",
+    "search": "Search [topic] — search Wikipedia",
+    "pseint": "PSeInt tutor — programming questions",
+    "curso": "Course FPY1101 — study plan",
+    "historial": "History — view previous sessions",
+    "historial_last": "History --last — resume last session",
+    "sesion": "Session — status, pause, resume or close session",
+    "telemetria": "Telemetry — view your Yap usage (100% local)",
+    "idioma": "Language",
+    "help": "Help — command list",
+    "salir": "Quit — Ctrl+C or 'quit'",
+    "needs_query": "Type your question and press Enter.",
+    "needs_param": "That option needs more details. Type the full command, for example: open firefox",
+    "unknown_option": "Invalid option. Choose a number from the menu."
   },
   "help": {
-    "body": "  Ask:           Any direct question to the AI\n  Open app:      'Open [app]' (Firefox, Terminal, etc.)\n  Wikipedia:     'Search [topic]' (summary from Wikipedia)\n  PSeInt tutor:  Programming questions with PSeInt\n  Intro:         'I want to learn PSeInt' — interactive tutorial\n  Course:        'course FPY1101' — open the study plan\n  Start EA:      'start EA1' — begin a learning experience\n  Progress:      'progress' — % complete, scores and grade (1.0-7.0)\n  History:       'history' — view previous sessions\n  Resume:        'history --last' — continue the last session\n  Session:       'session' — active session status\n                 'session new|pause|resume|close|list'\n  Telemetry:     'telemetry' — local usage summary\n  Profile:       'profile language es|en|arn' — interface language"
+    "body": "  Ask:           Any direct question to the AI\n  Open app:      'Open [app]' (Firefox, Terminal, etc.)\n  Wikipedia:     'Search [topic]' (summary from Wikipedia)\n  PSeInt tutor:  Programming questions with PSeInt\n  Intro:         'I want to learn PSeInt' — interactive tutorial\n  Course:        'course FPY1101' — open the study plan\n  Start EA:      'start EA1' — begin a learning experience\n  Progress:      'progress' — % complete, scores and grade (1.0-7.0)\n  History:       'history' — view previous sessions\n  Resume:        'history --last' — continue the last session\n  Session:       'session' — active session status\n                 'session new|pause|resume|close|list'\n  Telemetry:     'telemetry' — local usage summary\n  Language:      'language' — change interface language (es|en|arn)"
   },
   "profile": {
     "current": "Current language: {name} ({lang})",
     "available": "Available languages: {available}",
     "set": "Language changed to {name} ({lang}).\nThe assistant will reply in this language.",
     "unknown": "Language '{value}' is not recognized.\nUse: {available}",
-    "hint": "Change language with: yap profile language es|en|arn",
+    "menu_title": "Language",
+    "choose": "Choose a number or code (es, en, arn). Example: 2",
+    "hint": "Change language with: language",
     "help": "Unrecognized subcommand.\n\n  profile                    - show current language\n  profile language           - show current language and options\n  profile language es        - Spanish (default)\n  profile language en        - English\n  profile language arn       - Mapudungun (community translation)"
   },
   "history": {
@@ -145,7 +161,8 @@
       "help": "Help",
       "query": "Direct AI query",
       "sesion": "Session control",
-      "perfil": "Profile and language"
+      "perfil": "Profile and language",
+      "idioma": "Language"
     }
   },
   "eval": {
@@ -230,7 +247,7 @@
     "s6_title": "Course system",
     "s6_body": "Type 'course FPY1101' to see the Programming Fundamentals plan.\nType 'start EA1' to begin the first learning experience.\nActivities are graded automatically. You have up to 3 attempts.\nProgress is saved automatically. Resume where you left off.",
     "s7_title": "Essential commands",
-    "s7_body": "  help         — this command list\n  guide        — interactive tutorial (this)\n  course CODE  — view a course plan\n  start EA1    — start a guided session\n  progress     — view progress, scores and grades\n  profile language — change the interface language\n  quit / Ctrl+C — exit"
+    "s7_body": "  help         — this command list\n  guide        — interactive tutorial (this)\n  course CODE  — view a course plan\n  start EA1    — start a guided session\n  progress     — view progress, scores and grades\n  language     — change the interface language\n  quit / Ctrl+C — exit"
   },
   "progress": {
     "empty": "No progress recorded. Start a course with 'yap course FPY1101'.",
