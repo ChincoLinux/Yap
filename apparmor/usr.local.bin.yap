@@ -3,7 +3,8 @@
 #   - Read: /etc/yap/ (whitelists, cursos, pseint)
 #   - Write: ~/.config/yap/ (progress, history, confirmations)
 #   - Execute: llama-cli, xdg-open, notify-send (via subprocess)
-#   - Network: required for webfetch (Wikipedia API) and llama-cli
+#   - Network: required for webfetch (Wikipedia API), llama-cli, and
+#     optional Agent Platform delegation (private 10.40.0.0/16:443)
 #
 # Install: sudo cp usr.local.bin.yap /etc/apparmor.d/
 #          sudo apparmor_parser -r /etc/apparmor.d/usr.local.bin.yap

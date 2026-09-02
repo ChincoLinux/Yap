@@ -52,7 +52,9 @@ PROGRESS_FILE = ~/.config/yap/progress.json
 
 ### Intenciones soportadas
 
-`open_app` (abrir app whitelist) · `search` (Wikipedia API) · `webfetch` (URL directa) · `query` (LLM directo) · `pseint` (tutor PSeInt).
+`open_app` (abrir app whitelist) · `search` (Wikipedia API) · `webfetch` (URL directa) · `query` (LLM directo) · `cloud_query` (Gemini 3.7 Flash en Agent Platform, opt-in) · `pseint` (tutor PSeInt).
+
+La nube está **apagada por defecto**. Quienes clonan el repo despliegan `agent-platform/yap_nube/` (modelo `gemini-3.7-flash`) y activan `YAP_CLOUD_ENABLED=1` en la imagen del laboratorio. El alumno no usa GCP. Si el POST privado falla, Yap cae al LLM local. Ver `docs/CLOUD.md`.
 
 ---
 

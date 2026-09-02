@@ -1,0 +1,3 @@
+# Dependencias SOLO del runtime en Agent Platform (no van al PC del alumno).
+google-adk>=1.0.0
+google-cloud-aiplatform>=1.70.0

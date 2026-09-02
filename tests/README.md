@@ -7,6 +7,7 @@ tests/
 ├── test_yap_security.py     # 25 pruebas de seguridad y configuracion
 ├── test_yap_functional.py   # 32 pruebas funcionales
 ├── test_yap_evaluacion.py   # Evaluacion automatica de actividades (#23)
+├── test_yap_cloud.py        # Delegacion a Gemini 3.7 Flash (Agent Platform)
 ├── run_tests.py             # Ejecutor con reporte integrado
 ├── report/                  # Reportes generados (--report)
 └── README.md                # Este archivo

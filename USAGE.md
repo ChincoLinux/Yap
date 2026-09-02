@@ -25,6 +25,8 @@ Ver requisitos detallados en [README.md](README.md#61-requisitos-del-sistema).
 | `yap sesion retomar 3` | Retomar una sesion pausada. |
 
 | `yap telemetria` | Resumen local de tu uso de Yap. |
+| `yap nube` | Estado del agente en la nube (LOCAL / NUBE / DEGRADADO). |
+| `yap nube <pregunta>` | Forzar consulta a Gemini 3.7 Flash; si falla, usa el LLM local. |
 | `yap curso FPY1101` | Plan de estudio del curso. |
 | `yap iniciar EA1` | Comenzar una experiencia de aprendizaje. |
 | `yap <pregunta>` | Consulta directa al AI. |
@@ -45,6 +47,8 @@ Chinco > como hago un ciclo   → Tutor PSeInt
 Chinco > ayuda                → Lista de comandos
 Chinco > salir                → Salir
 Chinco > que es un algoritmo  → Consulta directa al AI
+Chinco > nube                 → Estado LOCAL / NUBE / DEGRADADO
+Chinco > nube explica while   → Gemini 3.7 Flash (si el lab lo habilitó)
 ```
 
 ## Sistema de cursos

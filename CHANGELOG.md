@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Delegación opt-in a Gemini 3.7 Flash en Gemini Enterprise Agent Platform:
+  consultas complejas salen por HTTPS privado (`10.40.0.0/16`) y caen al LLM
+  local si no hay red, token o host permitido. Comandos `nube` y
+  `nube <pregunta>`. Agente ADK en `agent-platform/yap_nube/`
 - Control de sesiones dentro del agente (#21): crear, pausar, retomar, cerrar y
   listar sesiones, con límite de 3 abiertas, prompt marcado con la sesión activa
   y archivado en el historial al cerrar

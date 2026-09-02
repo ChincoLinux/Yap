@@ -10,8 +10,12 @@ import json
 import glob
 import urllib.request
 import urllib.parse
+import urllib.error
 import re
 import atexit
+import ssl
+import time
+import ipaddress
 
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
@@ -95,6 +99,27 @@ SYSTEM_PROMPT = (
 )
 
 HISTORY = []
+
+# ── Delegación a Gemini Enterprise Agent Platform ───────────
+# Camino feliz: LLM local. La nube (Gemini 3.7 Flash) es opt-in
+# del despliegue escolar, nunca un requisito del alumno.
+CLOUD_MODEL = "gemini-3.7-flash"
+CLOUD_TIMEOUT = 8
+CLOUD_HISTORY_MAX = 4
+CLOUD_PROMPT_MAX = 2000
+CLOUD_RESPUESTA_MAX = 8000
+CLOUD_DEFAULT_CIDR = "10.40.0.0/16"
+CLOUD_DEFAULT_ENDPOINT = "https://10.40.0.10/v1/query"
+CLOUD_TOKEN_FILE = f"{CONFIG_DIR}/cloud-token"
+CLOUD_HINTS = (
+    "explica", "explique", "genera", "generar", "rubrica", "rúbrica",
+    "cuestionario", "evalua", "evalúa", "por que", "por qué",
+    "compara", "diferencia", "disena", "diseña", "justifica",
+    "analiza", "detallad", "paso a paso", "como funciona",
+    "cómo funciona",
+)
+
+_NUBE_ESTADO = "local"  # local | nube | degradado
 
 # ── Confirmación humana para acciones sensibles (#12) ────────
 # Acciones sensibles requieren confirmación del usuario antes de ejecutarse.
@@ -682,6 +707,7 @@ def session_banner():
         partes.append(f"Curso: {activa['curso']}")
     if activa.get("ea"):
         partes.append(f"EA: {activa['ea']}")
+    partes.append(f"Motor: {etiqueta_motor()}")
     return " | ".join(partes)
 
 
@@ -859,7 +885,7 @@ TELEMETRY_VERSION = 1
 ACCIONES_CONOCIDAS = (
     "open_app", "search", "webfetch", "pseint", "introduccion_pseint",
     "curso", "guia", "progreso", "historial", "apparmor_status",
-    "telemetria", "help", "query",
+    "telemetria", "help", "query", "cloud_query", "nube",
 )
 
 # Nombres legibles para el resumen
@@ -877,6 +903,8 @@ ACCIONES_NOMBRES = {
     "telemetria": "Telemetria",
     "help": "Ayuda",
     "query": "Consulta directa al AI",
+    "cloud_query": "Consulta al agente en la nube",
+    "nube": "Estado del agente en la nube",
 }
 
 
@@ -2272,6 +2300,270 @@ def cmd_webfetch(url, feed_to_llm=False):
     return f"Contenido obtenido ({len(text)} chars):\n{text[:1000]}..."
 
 
+def _nube_habilitada():
+    """Whether the school deployment turned on Agent Platform delegation."""
+    return os.environ.get("YAP_CLOUD_ENABLED", "").strip().lower() in (
+        "1", "true", "si", "sí", "yes", "on",
+    )
+
+
+def _nube_endpoint():
+    return os.environ.get("YAP_CLOUD_ENDPOINT", CLOUD_DEFAULT_ENDPOINT).strip()
+
+
+def _nube_modelo():
+    return os.environ.get("YAP_CLOUD_MODEL", CLOUD_MODEL).strip() or CLOUD_MODEL
+
+
+def _nube_timeout():
+    try:
+        valor = int(os.environ.get("YAP_CLOUD_TIMEOUT", str(CLOUD_TIMEOUT)))
+        return max(1, min(valor, 30))
+    except (TypeError, ValueError):
+        return CLOUD_TIMEOUT
+
+
+def _nube_token():
+    token = os.environ.get("YAP_CLOUD_TOKEN", "").strip()
+    if token:
+        return token
+    path = os.environ.get("YAP_CLOUD_TOKEN_FILE", CLOUD_TOKEN_FILE)
+    try:
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                return f.readline().strip()
+    except OSError:
+        return ""
+    return ""
+
+
+def _host_nube_permitido(url):
+    """Fail closed: only the lab private CIDR or an explicit host allowlist."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+    cidrs = os.environ.get("YAP_CLOUD_CIDR", CLOUD_DEFAULT_CIDR)
+    redes = []
+    for raw in cidrs.split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            redes.append(ipaddress.ip_network(raw, strict=False))
+        except ValueError:
+            continue
+    try:
+        ip = ipaddress.ip_address(host)
+        return any(ip in red for red in redes)
+    except ValueError:
+        permitidos = [
+            h.strip().lower()
+            for h in os.environ.get("YAP_CLOUD_HOSTS", "").split(",")
+            if h.strip()
+        ]
+        return host in permitidos
+
+
+def consulta_compleja(texto):
+    """Heuristic: long or high-reasoning prompts are worth the cloud model."""
+    t = (texto or "").strip().lower()
+    if len(t) >= 80:
+        return True
+    return any(h in t for h in CLOUD_HINTS)
+
+
+def _sanitizar_texto_nube(texto, limite=CLOUD_PROMPT_MAX):
+    """Strip home paths and emails before leaving the classroom PC."""
+    t = texto or ""
+    t = re.sub(r"(?i)(/home/|/Users/)[^\s/]+", "~", t)
+    t = re.sub(r"(?i)C:\\Users\\[^\s\\]+", "~", t)
+    t = re.sub(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b", "[correo]", t)
+    return t[:limite]
+
+
+def _payload_nube(prompt, context=None):
+    """Minimal JSON contract from the hybrid GCP architecture."""
+    curso = ""
+    ea = ""
+    try:
+        activa = _sesion_activa(_load_sessions())
+    except Exception:
+        activa = None
+    if activa:
+        curso = activa.get("curso") or ""
+        ea = activa.get("ea") or ""
+    historial = []
+    for user_msg, assistant_msg in HISTORY[-CLOUD_HISTORY_MAX:]:
+        historial.append({"rol": "user", "texto": _sanitizar_texto_nube(user_msg, 500)})
+        historial.append({"rol": "assistant", "texto": _sanitizar_texto_nube(assistant_msg, 500)})
+    mensaje = _sanitizar_texto_nube(prompt)
+    if context:
+        mensaje = _sanitizar_texto_nube(f"Contexto:\n{context}\n\n{prompt}")
+    return {
+        "intent": "query",
+        "model": _nube_modelo(),
+        "prompt": mensaje,
+        "message": mensaje,
+        "curso": curso,
+        "ea": ea,
+        "historial": historial,
+        "request_id": f"yap-{int(time.time() * 1000)}",
+    }
+
+
+def _texto_respuesta_nube(data):
+    """Accept the Yap contract and common Agent Platform / Gemini shapes."""
+    if isinstance(data, list):
+        textos = [_texto_respuesta_nube(item) for item in data]
+        textos = [t for t in textos if t]
+        return textos[-1] if textos else None
+    if not isinstance(data, dict):
+        return None
+    for key in ("texto", "text", "output", "respuesta"):
+        val = data.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+        if isinstance(val, dict):
+            inner = _texto_respuesta_nube(val)
+            if inner:
+                return inner
+    content = data.get("content")
+    if isinstance(content, dict):
+        parts = content.get("parts") or []
+        texts = [
+            p.get("text") for p in parts
+            if isinstance(p, dict) and isinstance(p.get("text"), str) and p.get("text").strip()
+        ]
+        if texts:
+            return "\n".join(texts).strip()
+    if isinstance(content, str) and content.strip():
+        return content.strip()
+    cands = data.get("candidates")
+    if isinstance(cands, list) and cands:
+        return _texto_respuesta_nube(cands[0])
+    return None
+
+
+def _actualizar_estado_nube(ok):
+    global _NUBE_ESTADO
+    if not _nube_habilitada():
+        _NUBE_ESTADO = "local"
+    elif ok:
+        _NUBE_ESTADO = "nube"
+    else:
+        _NUBE_ESTADO = "degradado"
+
+
+def etiqueta_motor():
+    """LOCAL / NUBE / DEGRADADO for the TUI. Never probes the network."""
+    if not _nube_habilitada():
+        return "LOCAL"
+    if _NUBE_ESTADO == "degradado":
+        return "DEGRADADO"
+    if _nube_token() and _host_nube_permitido(_nube_endpoint()):
+        return "NUBE"
+    return "DEGRADADO"
+
+
+def nube_configurada():
+    """Token + private (or allowlisted) endpoint present."""
+    return bool(_nube_token()) and _host_nube_permitido(_nube_endpoint())
+
+
+def debe_delegar_nube(texto):
+    """Local classifier stays in charge; cloud is only for hard queries."""
+    return _nube_habilitada() and nube_configurada() and consulta_compleja(texto)
+
+
+def _ssl_nube():
+    ctx = ssl.create_default_context()
+    if os.environ.get("YAP_CLOUD_TLS_INSECURE", "").strip().lower() in (
+        "1", "true", "si", "sí", "yes",
+    ):
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
+def _post_nube(payload):
+    """POST the Yap contract. Returns (data_dict_or_none, error_or_none)."""
+    url = _nube_endpoint()
+    if not _host_nube_permitido(url):
+        return None, "endpoint fuera de la red privada del laboratorio"
+    token = _nube_token()
+    if not token:
+        return None, "sin token de flota"
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": "Bearer " + token,
+        "User-Agent": "Yap-ChincoLinux/1.0",
+        "X-Request-Id": payload.get("request_id", ""),
+    }
+    req = urllib.request.Request(url, data=body, method="POST", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=_nube_timeout(), context=_ssl_nube()) as resp:
+            raw = resp.read(CLOUD_RESPUESTA_MAX + 1024)
+    except urllib.error.HTTPError as err:
+        return None, f"HTTP {err.code}"
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as err:
+        return None, str(err) or err.__class__.__name__
+    try:
+        data = json.loads(raw.decode("utf-8", errors="replace"))
+    except json.JSONDecodeError:
+        return None, "respuesta no JSON"
+    return data, None
+
+
+def cmd_nube_status():
+    """Operator/student-visible cloud status. No secrets."""
+    habilitada = _nube_habilitada()
+    host_ok = _host_nube_permitido(_nube_endpoint()) if habilitada else False
+    token_ok = bool(_nube_token()) if habilitada else False
+    motor = etiqueta_motor()
+    parsed = urllib.parse.urlparse(_nube_endpoint())
+    host = parsed.hostname or "(sin host)"
+    lines = [
+        f"Motor: {motor}",
+        f"Habilitada: {'si' if habilitada else 'no'} (YAP_CLOUD_ENABLED)",
+        f"Modelo: {_nube_modelo()}",
+        f"Host: {host}",
+        f"Host permitido: {'si' if host_ok else 'no'}",
+        f"Token de flota: {'presente' if token_ok else 'ausente'}",
+        "El alumno no administra GCP; el fallback local sigue activo.",
+    ]
+    color = "GREEN" if motor == "NUBE" else ("YELLOW" if motor == "DEGRADADO" else "CYAN")
+    return display_box("\n".join(lines), color=color)
+
+
+def cmd_query_cloud(prompt, context=None, store_history=True):
+    """Delegate a query to Gemini 3.7 Flash on Agent Platform; fall back local."""
+    if not _nube_habilitada() or not nube_configurada():
+        _actualizar_estado_nube(False)
+        return cmd_query(prompt, context=context, store_history=store_history)
+
+    payload = _payload_nube(prompt, context=context)
+    data, err = _post_nube(payload)
+    texto = _texto_respuesta_nube(data) if data is not None else None
+    if err or not texto:
+        _actualizar_estado_nube(False)
+        aviso = "[WARN] Nube no disponible, usando LLM local."
+        local = cmd_query(prompt, context=context, store_history=store_history)
+        return f"{aviso}\n{local}"
+
+    _actualizar_estado_nube(True)
+    out = texto[:CLOUD_RESPUESTA_MAX]
+    if store_history and out:
+        HISTORY.append((prompt, out))
+        if len(HISTORY) > MAX_HISTORY:
+            HISTORY.pop(0)
+    return out
+
+
 def _clean_output(result):
     """Strip BOS/EOT/header tokens from llama-cli stdout. Falls back to stderr."""
     out = result.stdout.strip()
@@ -2575,6 +2867,12 @@ def interpret(user_input):
         return "telemetria", partes[1].strip() if len(partes) > 1 else ""
     if stripped in ("ayuda", "help", "--help", "-h", "comandos", "ayuda yap"):
         return "help", "ayuda"
+    if stripped in ("nube", "estado nube", "modo nube"):
+        return "nube", ""
+    if stripped.startswith("nube "):
+        pregunta = user_input.split(" ", 1)[1].strip()
+        if pregunta:
+            return "cloud_query", pregunta
     if stripped in ("--apparmor-status", "apparmor-status", "apparmor status"):
         return "apparmor_status", "status"
     if stripped in ("salir", "exit", "quit", "q"):
@@ -2592,7 +2890,10 @@ def interpret(user_input):
         if param and param.startswith("EA"):
             return "curso", f"FPY1101:{param}"  # ponytail: assumes active course
 
-    return classify_intent(user_input)
+    action, param = classify_intent(user_input)
+    if action == "query" and debe_delegar_nube(user_input):
+        return "cloud_query", param or user_input
+    return action, param
 
 
 def main():
@@ -2628,9 +2929,13 @@ def main():
             "Sesion — estado, pausar, retomar o cerrar sesion",
 
             "Telemetria — ver tu uso de Yap (100% local)",
+            "Nube — estado del agente Gemini 3.7 Flash",
             "Ayuda — lista de comandos",
             "Salir — Ctrl+C o 'salir'",
         ]))
+        motor = etiqueta_motor()
+        color_motor = "GREEN" if motor == "NUBE" else ("YELLOW" if motor == "DEGRADADO" else "GRAY")
+        sys.stdout.write(f"  {C[color_motor]}Motor: {motor}{C['RESET']}\n")
         banner = session_banner()
         if banner:
             sys.stdout.write(f"  {C['CYAN']}{banner}{C['RESET']}\n")
@@ -2749,6 +3054,13 @@ def handle_action(action, param, original_input):
     elif action == "telemetria":
         print(cmd_telemetria(param))
 
+    elif action == "nube":
+        print(cmd_nube_status())
+
+    elif action == "cloud_query":
+        print("Consultando agente en la nube (Gemini 3.7 Flash)...")
+        print(cmd_query_cloud(param or original_input))
+
     elif action == "apparmor_status":
         print(cmd_apparmor_status())
 
@@ -2769,6 +3081,8 @@ def handle_action(action, param, original_input):
         print("                 'sesion nueva|pausar|retomar|cerrar|listar'")
 
         print("  Telemetria:    'telemetria' — resumen local de tu uso")
+        print("  Nube:          'nube' — estado del agente Gemini 3.7 Flash")
+        print("                 'nube <pregunta>' — forzar consulta en Agent Platform")
         print()
 
     else:

@@ -2,6 +2,8 @@
 *.bin
 __pycache__/
 *.pyc
+.env
+agent-platform/.env
 build/
 .adev/
 .slim/
