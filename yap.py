@@ -110,7 +110,13 @@ CLOUD_PROMPT_MAX = 2000
 CLOUD_RESPUESTA_MAX = 8000
 CLOUD_DEFAULT_CIDR = "10.40.0.0/16"
 CLOUD_DEFAULT_ENDPOINT = "https://10.40.0.10/v1/query"
+CLOUD_DEFAULT_LOCATION = "southamerica-west1"
 CLOUD_TOKEN_FILE = f"{CONFIG_DIR}/cloud-token"
+# contract = JSON Yap a PSC 10.40.0.10
+# agent_platform = reasoningEngines:query (Linux -> Agent Runtime)
+# generate = generateContent directo a Gemini 3.7 Flash
+CLOUD_BACKENDS_AGENT = ("agent_platform", "agent", "adk")
+CLOUD_BACKENDS_GENERATE = ("generate", "gemini")
 CLOUD_HINTS = (
     "explica", "explique", "genera", "generar", "rubrica", "rúbrica",
     "cuestionario", "evalua", "evalúa", "por que", "por qué",
@@ -2307,8 +2313,21 @@ def _nube_habilitada():
     )
 
 
-def _nube_endpoint():
-    return os.environ.get("YAP_CLOUD_ENDPOINT", CLOUD_DEFAULT_ENDPOINT).strip()
+def _nube_backend():
+    raw = os.environ.get("YAP_CLOUD_BACKEND", "contract").strip().lower()
+    return raw or "contract"
+
+
+def _nube_proyecto():
+    return os.environ.get("YAP_CLOUD_PROJECT", "").strip()
+
+
+def _nube_location():
+    return os.environ.get("YAP_CLOUD_LOCATION", CLOUD_DEFAULT_LOCATION).strip() or CLOUD_DEFAULT_LOCATION
+
+
+def _nube_engine():
+    return os.environ.get("YAP_CLOUD_ENGINE_ID", "").strip()
 
 
 def _nube_modelo():
@@ -2316,11 +2335,42 @@ def _nube_modelo():
 
 
 def _nube_timeout():
-    try:
-        valor = int(os.environ.get("YAP_CLOUD_TIMEOUT", str(CLOUD_TIMEOUT)))
-        return max(1, min(valor, 30))
-    except (TypeError, ValueError):
-        return CLOUD_TIMEOUT
+    raw = os.environ.get("YAP_CLOUD_TIMEOUT", "").strip()
+    if raw:
+        try:
+            return max(1, min(int(raw), 60))
+        except (TypeError, ValueError):
+            pass
+    if _nube_backend() in CLOUD_BACKENDS_AGENT + CLOUD_BACKENDS_GENERATE:
+        return 20
+    return CLOUD_TIMEOUT
+
+
+def _nube_endpoint():
+    explicit = os.environ.get("YAP_CLOUD_ENDPOINT", "").strip()
+    if explicit:
+        return explicit
+    backend = _nube_backend()
+    loc = _nube_location()
+    project = _nube_proyecto()
+    if backend in CLOUD_BACKENDS_AGENT and project and _nube_engine():
+        engine = _nube_engine()
+        if engine.startswith("projects/"):
+            resource = engine
+        else:
+            resource = (
+                f"projects/{project}/locations/{loc}/reasoningEngines/{engine}"
+            )
+        return (
+            f"https://{loc}-aiplatform.googleapis.com/v1/{resource}:query"
+        )
+    if backend in CLOUD_BACKENDS_GENERATE and project:
+        model = _nube_modelo()
+        return (
+            f"https://{loc}-aiplatform.googleapis.com/v1/projects/{project}"
+            f"/locations/{loc}/publishers/google/models/{model}:generateContent"
+        )
+    return CLOUD_DEFAULT_ENDPOINT
 
 
 def _nube_token():
@@ -2337,8 +2387,22 @@ def _nube_token():
     return ""
 
 
+def _hosts_nube_extra():
+    permitidos = [
+        h.strip().lower()
+        for h in os.environ.get("YAP_CLOUD_HOSTS", "").split(",")
+        if h.strip()
+    ]
+    backend = _nube_backend()
+    if backend in CLOUD_BACKENDS_AGENT + CLOUD_BACKENDS_GENERATE:
+        loc = _nube_location()
+        permitidos.append(f"{loc}-aiplatform.googleapis.com")
+        permitidos.append("aiplatform.googleapis.com")
+    return permitidos
+
+
 def _host_nube_permitido(url):
-    """Fail closed: only the lab private CIDR or an explicit host allowlist."""
+    """Fail closed: lab CIDR, explicit hosts, or Agent Platform when opted in."""
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme not in ("http", "https"):
         return False
@@ -2359,12 +2423,10 @@ def _host_nube_permitido(url):
         ip = ipaddress.ip_address(host)
         return any(ip in red for red in redes)
     except ValueError:
-        permitidos = [
-            h.strip().lower()
-            for h in os.environ.get("YAP_CLOUD_HOSTS", "").split(",")
-            if h.strip()
-        ]
-        return host in permitidos
+        extra = _hosts_nube_extra()
+        if host in extra:
+            return True
+        return any(host.endswith("." + h) for h in extra if "." in h)
 
 
 def consulta_compleja(texto):
@@ -2412,6 +2474,55 @@ def _payload_nube(prompt, context=None):
         "historial": historial,
         "request_id": f"yap-{int(time.time() * 1000)}",
     }
+
+
+def _cuerpo_nube(prompt, context=None):
+    """HTTP body: Yap contract, Agent Runtime, or generateContent."""
+    contrato = _payload_nube(prompt, context)
+    backend = _nube_backend()
+    if backend in CLOUD_BACKENDS_AGENT:
+        return {
+            "class_method": "async_stream_query",
+            "classMethod": "async_stream_query",
+            "input": {
+                "user_id": "yap-linux",
+                "message": contrato["prompt"],
+            },
+            "request_id": contrato["request_id"],
+        }
+    if backend in CLOUD_BACKENDS_GENERATE:
+        return {
+            "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+            "contents": [{"role": "user", "parts": [{"text": contrato["prompt"]}]}],
+            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 2048},
+            "request_id": contrato["request_id"],
+        }
+    return contrato
+
+
+def _parse_cuerpo_nube(raw):
+    """JSON object, JSON array, or SSE data: lines from streamQuery."""
+    text = raw.decode("utf-8", errors="replace") if isinstance(raw, (bytes, bytearray)) else raw
+    text = (text or "").strip()
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    eventos = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.startswith("data:"):
+            continue
+        chunk = line[5:].strip()
+        if not chunk or chunk == "[DONE]":
+            continue
+        try:
+            eventos.append(json.loads(chunk))
+        except json.JSONDecodeError:
+            continue
+    return eventos or None
 
 
 def _texto_respuesta_nube(data):
@@ -2469,8 +2580,15 @@ def etiqueta_motor():
 
 
 def nube_configurada():
-    """Token + private (or allowlisted) endpoint present."""
-    return bool(_nube_token()) and _host_nube_permitido(_nube_endpoint())
+    """Token + reachable Agent Platform or private endpoint."""
+    if not _nube_token():
+        return False
+    backend = _nube_backend()
+    if backend in CLOUD_BACKENDS_AGENT and not (_nube_proyecto() and _nube_engine()):
+        return False
+    if backend in CLOUD_BACKENDS_GENERATE and not _nube_proyecto():
+        return False
+    return _host_nube_permitido(_nube_endpoint())
 
 
 def debe_delegar_nube(texto):
@@ -2488,9 +2606,7 @@ def _ssl_nube():
     return ctx
 
 
-def _post_nube(payload):
-    """POST the Yap contract. Returns (data_dict_or_none, error_or_none)."""
-    url = _nube_endpoint()
+def _post_url_nube(url, payload):
     if not _host_nube_permitido(url):
         return None, "endpoint fuera de la red privada del laboratorio"
     token = _nube_token()
@@ -2502,7 +2618,7 @@ def _post_nube(payload):
         "Accept": "application/json",
         "Authorization": "Bearer " + token,
         "User-Agent": "Yap-ChincoLinux/1.0",
-        "X-Request-Id": payload.get("request_id", ""),
+        "X-Request-Id": str(payload.get("request_id") or ""),
     }
     req = urllib.request.Request(url, data=body, method="POST", headers=headers)
     try:
@@ -2512,11 +2628,22 @@ def _post_nube(payload):
         return None, f"HTTP {err.code}"
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as err:
         return None, str(err) or err.__class__.__name__
-    try:
-        data = json.loads(raw.decode("utf-8", errors="replace"))
-    except json.JSONDecodeError:
+    data = _parse_cuerpo_nube(raw)
+    if data is None:
         return None, "respuesta no JSON"
     return data, None
+
+
+def _post_nube(payload):
+    """POST to PSC contract, Agent Runtime :query, or generateContent."""
+    url = _nube_endpoint()
+    data, err = _post_url_nube(url, payload)
+    if err and _nube_backend() in CLOUD_BACKENDS_AGENT and url.endswith(":query"):
+        alt = url[:-6] + ":streamQuery"
+        data2, err2 = _post_url_nube(alt, payload)
+        if not err2:
+            return data2, None
+    return data, err
 
 
 def cmd_nube_status():
@@ -2530,12 +2657,16 @@ def cmd_nube_status():
     lines = [
         f"Motor: {motor}",
         f"Habilitada: {'si' if habilitada else 'no'} (YAP_CLOUD_ENABLED)",
+        f"Backend: {_nube_backend()}",
         f"Modelo: {_nube_modelo()}",
         f"Host: {host}",
         f"Host permitido: {'si' if host_ok else 'no'}",
         f"Token de flota: {'presente' if token_ok else 'ausente'}",
         "El alumno no administra GCP; el fallback local sigue activo.",
     ]
+    if _nube_backend() in CLOUD_BACKENDS_AGENT:
+        lines.insert(5, f"Engine: {_nube_engine() or '(falta YAP_CLOUD_ENGINE_ID)'}")
+        lines.insert(5, f"Proyecto: {_nube_proyecto() or '(falta YAP_CLOUD_PROJECT)'}")
     color = "GREEN" if motor == "NUBE" else ("YELLOW" if motor == "DEGRADADO" else "CYAN")
     return display_box("\n".join(lines), color=color)
 
@@ -2546,7 +2677,7 @@ def cmd_query_cloud(prompt, context=None, store_history=True):
         _actualizar_estado_nube(False)
         return cmd_query(prompt, context=context, store_history=store_history)
 
-    payload = _payload_nube(prompt, context=context)
+    payload = _cuerpo_nube(prompt, context=context)
     data, err = _post_nube(payload)
     texto = _texto_respuesta_nube(data) if data is not None else None
     if err or not texto:

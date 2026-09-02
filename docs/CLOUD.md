@@ -1,5 +1,10 @@
 # Yap — Delegación a Gemini 3.7 Flash (Agent Platform)
 
+**¿Quieres conectarlo desde Linux a Agent Platform?** sigue
+[CONECTAR-GCP.md](CONECTAR-GCP.md) (bash, paso a paso).
+
+El resto de este archivo es el contrato técnico.
+
 El aula no depende de la nube. El LLM local (Llama 3.2 + llama.cpp) es el
 camino por defecto. Gemini 3.7 Flash en Gemini Enterprise Agent Platform
 es un acelerador opt-in que despliegan quienes clonan este repositorio.
@@ -41,13 +46,17 @@ local y muestra `[WARN] Nube no disponible, usando LLM local.`
 | Variable | Default | Rol |
 |---|---|---|
 | `YAP_CLOUD_ENABLED` | off | `1` / `true` / `si` para activar |
-| `YAP_CLOUD_ENDPOINT` | `https://10.40.0.10/v1/query` | PSC del Agent Platform |
+| `YAP_CLOUD_BACKEND` | `contract` | `agent_platform` (Linux → Agent Runtime), `generate` (Gemini directo), `contract` (PSC `10.40.0.10`) |
+| `YAP_CLOUD_PROJECT` | (vacío) | Proyecto GCP |
+| `YAP_CLOUD_LOCATION` | `southamerica-west1` | Región |
+| `YAP_CLOUD_ENGINE_ID` | (vacío) | ID del reasoningEngine (Fase B) |
+| `YAP_CLOUD_ENDPOINT` | (auto) | Si se omite, `agent_platform` arma la URL de `*:query` |
 | `YAP_CLOUD_MODEL` | `gemini-3.7-flash` | Modelo invocado |
-| `YAP_CLOUD_TOKEN` | (vacío) | Bearer de la cuenta de servicio de flota |
+| `YAP_CLOUD_TOKEN` | (vacío) | Bearer (`gcloud auth print-access-token`) |
 | `YAP_CLOUD_TOKEN_FILE` | `/etc/yap/cloud-token` | Alternativa a la env |
-| `YAP_CLOUD_CIDR` | `10.40.0.0/16` | Red privada permitida |
-| `YAP_CLOUD_HOSTS` | (vacío) | Hostnames extra, separados por coma |
-| `YAP_CLOUD_TIMEOUT` | `8` | Segundos (1–30) |
+| `YAP_CLOUD_CIDR` | `10.40.0.0/16` | Red privada permitida (modo `contract`) |
+| `YAP_CLOUD_HOSTS` | (vacío) | Extra. Con `agent_platform` se permite `*-aiplatform.googleapis.com` |
+| `YAP_CLOUD_TIMEOUT` | `8` / `20` | 20 s en backends de GCP |
 | `YAP_CLOUD_TLS_INSECURE` | off | Solo laboratorio con cert interno |
 
 Sin `YAP_CLOUD_ENABLED=1` el comportamiento es 100 % local.

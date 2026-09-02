@@ -17,4 +17,7 @@ Despliegue (operadores que clonan el repo):
    (`/etc/yap/cloud-token` o `YAP_CLOUD_TOKEN`).
 4. En el laboratorio: `YAP_CLOUD_ENABLED=1`.
 
+Paso a paso para conectarlo a GCP desde tu PC:
+[docs/CONECTAR-GCP.md](../docs/CONECTAR-GCP.md)
+
 Contrato HTTP y variables: [docs/CLOUD.md](../docs/CLOUD.md).
