@@ -16,7 +16,7 @@ El alumno no necesita cuenta de Google Cloud.
 `yap.py` clasifica la intención **en local**. Solo las consultas complejas
 (`cloud_query`) se reenvían, si el despliegue lo habilitó.
 
-POST JSON (HTTPS, timeout 8 s) al endpoint privado del laboratorio:
+POST JSON (HTTPS, sin timeout) al endpoint privado del laboratorio:
 
 ```json
 {
@@ -34,7 +34,7 @@ POST JSON (HTTPS, timeout 8 s) al endpoint privado del laboratorio:
 Respuesta esperada:
 
 ```json
-{"texto": "...", "modelo": "gemini-3.7-flash"}
+{"texto": "...", "modelo": "gemini-3.7-flash", "uso": {"prompt": 10, "respuesta": 20, "total": 30}}
 ```
 
 También se aceptan formas de Agent Platform / Gemini (`content.parts`,
@@ -56,7 +56,6 @@ local y muestra `[WARN] Nube no disponible, usando LLM local.`
 | `YAP_CLOUD_TOKEN_FILE` | `/etc/yap/cloud-token` | Alternativa a la env |
 | `YAP_CLOUD_CIDR` | `10.40.0.0/16` | Red privada permitida (modo `contract`) |
 | `YAP_CLOUD_HOSTS` | (vacío) | Extra. Con `agent_platform` se permite `*-aiplatform.googleapis.com` |
-| `YAP_CLOUD_TIMEOUT` | `8` / `20` | 20 s en backends de GCP |
 | `YAP_CLOUD_TLS_INSECURE` | off | Solo laboratorio con cert interno |
 
 Sin `YAP_CLOUD_ENABLED=1` el comportamiento es 100 % local.

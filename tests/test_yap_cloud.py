@@ -6,6 +6,7 @@ Sin Internet, sin LLM, sin GCP. Todo mockeado.
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 from unittest.mock import MagicMock, patch
@@ -18,6 +19,12 @@ class CloudTestBase:
     def setup_method(self):
         yap.HISTORY.clear()
         yap._NUBE_ESTADO = "local"
+        yap._ULTIMO_CONSUMO = None
+        yap._CONSUMO_SESION = {"prompt": 0, "respuesta": 0, "total": 0}
+        self._consumo_dir = tempfile.mkdtemp()
+        self._consumo_file = os.path.join(self._consumo_dir, "consumo.json")
+        self._consumo_patch = patch.object(yap, "CONSUMO_FILE", self._consumo_file)
+        self._consumo_patch.start()
         self._env_backup = {
             k: os.environ.get(k)
             for k in list(os.environ)
@@ -28,6 +35,8 @@ class CloudTestBase:
                 del os.environ[k]
 
     def teardown_method(self):
+        self._consumo_patch.stop()
+        shutil.rmtree(self._consumo_dir, ignore_errors=True)
         for k in list(os.environ):
             if k.startswith("YAP_CLOUD"):
                 del os.environ[k]
@@ -38,6 +47,8 @@ class CloudTestBase:
                 os.environ[k] = v
         yap.HISTORY.clear()
         yap._NUBE_ESTADO = "local"
+        yap._ULTIMO_CONSUMO = None
+        yap._CONSUMO_SESION = {"prompt": 0, "respuesta": 0, "total": 0}
 
     def habilitar(self, token="token-flota", endpoint=None):
         os.environ["YAP_CLOUD_ENABLED"] = "1"
@@ -202,6 +213,14 @@ class TestCmdQueryCloud(CloudTestBase):
         mock_local.assert_called_once()
         assert yap.etiqueta_motor() == "DEGRADADO"
 
+    @patch("urllib.request.urlopen")
+    def test_peticion_sin_timeout(self, mock_urlopen):
+        self.habilitar()
+        mock_urlopen.return_value = _urlopen_json({"texto": "ok"})
+        yap.cmd_query_cloud("explica listas", store_history=False)
+        _args, kwargs = mock_urlopen.call_args
+        assert kwargs.get("timeout") is None
+
     @patch("yap.cmd_query", return_value="fallback-local")
     def test_token_desde_archivo(self, mock_local):
         fd, path = tempfile.mkstemp()
@@ -291,6 +310,68 @@ class TestAgentPlatformArtifact:
             assert agent.MODEL == "gemini-3.7-flash"
         finally:
             sys.path.pop(0)
+
+
+class TestConsumoTokens(CloudTestBase):
+    def test_usage_metadata_gemini_se_registra(self):
+        self.habilitar()
+        with patch("urllib.request.urlopen") as red:
+            red.return_value = _urlopen_json({
+                "candidates": [{"content": {"parts": [{"text": "ok gemini"}]}}],
+                "usageMetadata": {
+                    "promptTokenCount": 10,
+                    "candidatesTokenCount": 20,
+                    "totalTokenCount": 30,
+                },
+            })
+            out = yap.cmd_query_cloud("explica", store_history=False)
+        assert out == "ok gemini"
+        assert yap._ULTIMO_CONSUMO == {"prompt": 10, "respuesta": 20, "total": 30}
+        assert yap._load_consumo()["total"] == 30
+
+    def test_contrato_uso_se_registra(self):
+        self.habilitar()
+        with patch("urllib.request.urlopen") as red:
+            red.return_value = _urlopen_json({
+                "texto": "While itera con condicion.",
+                "uso": {"prompt": 8, "respuesta": 12, "total": 20},
+            })
+            out = yap.cmd_query_cloud("explica while", store_history=False)
+        assert "While itera" in out
+        assert yap._ULTIMO_CONSUMO["total"] == 20
+
+    def test_banner_muestra_tokens_acumulados(self):
+        yap._write_consumo_file({"prompt": 10, "respuesta": 20, "total": 42})
+        linea = yap._linea_consumo_total()
+        assert "42" in linea
+        assert "Tokens gastados" in linea
+
+    def test_banner_cero_si_no_hay_datos(self):
+        linea = yap._linea_consumo_total()
+        assert "Tokens gastados: 0" in linea
+
+    def test_llama_stderr_se_parsea(self):
+        stderr = (
+            "llama_perf_context_print: prompt eval time =   12.00 ms /    15 tokens\n"
+            "llama_perf_context_print:        eval time =  120.00 ms /    40 tokens\n"
+        )
+        uso = yap._uso_tokens_llama(stderr)
+        assert uso == {"prompt": 15, "respuesta": 40, "total": 55}
+
+    def test_imprime_consumo_al_final_de_la_consulta(self):
+        self.habilitar()
+        with patch("urllib.request.urlopen") as red:
+            red.return_value = _urlopen_json({
+                "texto": "respuesta",
+                "uso": {"prompt": 3, "respuesta": 7, "total": 10},
+            })
+            with patch("builtins.print") as mock_print:
+                yap.handle_action("cloud_query", "explica", "nube explica")
+        printed = "\n".join(str(c.args[0]) for c in mock_print.call_args_list if c.args)
+        assert "respuesta" in printed
+        assert "Tokens de esta consulta: 10" in printed
+        assert "entrada 3" in printed
+        assert "salida 7" in printed
 
 
 class TestNoImportsPeligrososCloud:

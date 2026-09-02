@@ -51,6 +51,9 @@ Chinco > nube                 → Estado LOCAL / NUBE / DEGRADADO
 Chinco > nube explica while   → Gemini 3.7 Flash (si el lab lo habilitó)
 ```
 
+Al abrir Yap, el pie del banner muestra `Tokens gastados` (acumulado local).
+Al final de cada consulta aparece el consumo de esa respuesta.
+
 ## Sistema de cursos
 
 ### Ver plan de estudio

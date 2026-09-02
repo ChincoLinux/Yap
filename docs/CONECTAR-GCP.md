@@ -181,7 +181,6 @@ export YAP_CLOUD_LOCATION="$LOCATION"
 export YAP_CLOUD_ENGINE_ID="$ENGINE_ID"
 export YAP_CLOUD_MODEL=gemini-3.7-flash
 export YAP_CLOUD_TOKEN="$(gcloud auth print-access-token)"
-export YAP_CLOUD_TIMEOUT=20
 
 python3 yap.py nube
 ```

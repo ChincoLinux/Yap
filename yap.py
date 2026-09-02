@@ -104,7 +104,6 @@ HISTORY = []
 # Camino feliz: LLM local. La nube (Gemini 3.7 Flash) es opt-in
 # del despliegue escolar, nunca un requisito del alumno.
 CLOUD_MODEL = "gemini-3.7-flash"
-CLOUD_TIMEOUT = 8
 CLOUD_HISTORY_MAX = 4
 CLOUD_PROMPT_MAX = 2000
 CLOUD_RESPUESTA_MAX = 8000
@@ -126,6 +125,8 @@ CLOUD_HINTS = (
 )
 
 _NUBE_ESTADO = "local"  # local | nube | degradado
+_ULTIMO_CONSUMO = None  # ultima consulta: {prompt, respuesta, total}
+_CONSUMO_SESION = {"prompt": 0, "respuesta": 0, "total": 0}
 
 # ── Confirmación humana para acciones sensibles (#12) ────────
 # Acciones sensibles requieren confirmación del usuario antes de ejecutarse.
@@ -885,6 +886,7 @@ def _sesion_al_salir():
 TELEMETRY_FILE = os.path.expanduser("~/.config/yap/telemetry.json")
 TELEMETRY_EXPORT = os.path.expanduser("~/.config/yap/telemetry-export.json")
 TELEMETRY_VERSION = 1
+CONSUMO_FILE = os.path.expanduser("~/.config/yap/consumo.json")
 
 # Acciones que el agente sabe despachar. Sirve para detectar cuáles
 # no se han usado nunca.
@@ -2334,18 +2336,6 @@ def _nube_modelo():
     return os.environ.get("YAP_CLOUD_MODEL", CLOUD_MODEL).strip() or CLOUD_MODEL
 
 
-def _nube_timeout():
-    raw = os.environ.get("YAP_CLOUD_TIMEOUT", "").strip()
-    if raw:
-        try:
-            return max(1, min(int(raw), 60))
-        except (TypeError, ValueError):
-            pass
-    if _nube_backend() in CLOUD_BACKENDS_AGENT + CLOUD_BACKENDS_GENERATE:
-        return 20
-    return CLOUD_TIMEOUT
-
-
 def _nube_endpoint():
     explicit = os.environ.get("YAP_CLOUD_ENDPOINT", "").strip()
     if explicit:
@@ -2558,6 +2548,160 @@ def _texto_respuesta_nube(data):
     return None
 
 
+def _entero_consumo(val):
+    try:
+        n = int(val)
+    except (TypeError, ValueError):
+        return 0
+    return n if n > 0 else 0
+
+
+def _uso_desde_mapa(meta):
+    """Normalize Gemini / OpenAI / Yap token maps into {prompt, respuesta, total}."""
+    if not isinstance(meta, dict):
+        return None
+    prompt = _entero_consumo(
+        meta.get("prompt")
+        or meta.get("promptTokenCount")
+        or meta.get("prompt_tokens")
+        or meta.get("input_tokens")
+    )
+    resp = _entero_consumo(
+        meta.get("respuesta")
+        or meta.get("candidatesTokenCount")
+        or meta.get("completion_tokens")
+        or meta.get("output_tokens")
+        or meta.get("completionTokenCount")
+    )
+    thoughts = _entero_consumo(meta.get("thoughtsTokenCount") or meta.get("thoughts"))
+    total = _entero_consumo(
+        meta.get("total")
+        or meta.get("totalTokenCount")
+        or meta.get("total_tokens")
+    )
+    if not resp and thoughts:
+        resp = thoughts
+    if not total:
+        total = prompt + resp
+    if not (prompt or resp or total):
+        return None
+    return {"prompt": prompt, "respuesta": resp, "total": total}
+
+
+def _uso_tokens_nube(data):
+    """Extract token usage from Yap contract, Gemini generateContent, or Agent Runtime."""
+    if isinstance(data, list):
+        for item in reversed(data):
+            uso = _uso_tokens_nube(item)
+            if uso:
+                return uso
+        return None
+    if not isinstance(data, dict):
+        return None
+    for key in ("uso", "tokens", "usage", "usageMetadata", "usage_metadata"):
+        uso = _uso_desde_mapa(data.get(key))
+        if uso:
+            return uso
+    for key in ("metadata", "response", "result"):
+        nested = data.get(key)
+        if isinstance(nested, dict):
+            uso = _uso_tokens_nube(nested)
+            if uso:
+                return uso
+    return None
+
+
+def _uso_tokens_llama(stderr):
+    """Parse llama-cli perf lines: 'prompt eval time = .. / N tokens'."""
+    if not stderr:
+        return None
+    prompt = 0
+    resp = 0
+    m_prompt = re.search(r"prompt eval time.*?/\s+(\d+)\s+tokens", stderr)
+    m_eval = re.search(r"(?<!prompt )eval time.*?/\s+(\d+)\s+tokens", stderr)
+    if m_prompt:
+        prompt = _entero_consumo(m_prompt.group(1))
+    if m_eval:
+        resp = _entero_consumo(m_eval.group(1))
+    if not (prompt or resp):
+        return None
+    return {"prompt": prompt, "respuesta": resp, "total": prompt + resp}
+
+
+def _consumo_vacio():
+    return {"prompt": 0, "respuesta": 0, "total": 0}
+
+
+def _load_consumo():
+    if not os.path.exists(CONSUMO_FILE):
+        return _consumo_vacio()
+    try:
+        with open(CONSUMO_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return _consumo_vacio()
+        return {
+            "prompt": _entero_consumo(data.get("prompt")),
+            "respuesta": _entero_consumo(data.get("respuesta")),
+            "total": _entero_consumo(data.get("total")),
+        }
+    except (json.JSONDecodeError, OSError):
+        return _consumo_vacio()
+
+
+def _write_consumo_file(datos):
+    os.makedirs(os.path.dirname(CONSUMO_FILE), exist_ok=True)
+    tmp = CONSUMO_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(datos, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, CONSUMO_FILE)
+
+
+def _registrar_consumo(uso):
+    """Remember last-query usage, accumulate session + persisted totals."""
+    global _ULTIMO_CONSUMO
+    if not uso:
+        return
+    prompt = _entero_consumo(uso.get("prompt"))
+    resp = _entero_consumo(uso.get("respuesta"))
+    total = _entero_consumo(uso.get("total")) or (prompt + resp)
+    actual = {"prompt": prompt, "respuesta": resp, "total": total}
+    _ULTIMO_CONSUMO = actual
+    _CONSUMO_SESION["prompt"] += prompt
+    _CONSUMO_SESION["respuesta"] += resp
+    _CONSUMO_SESION["total"] += total
+    datos = _load_consumo()
+    datos["prompt"] += prompt
+    datos["respuesta"] += resp
+    datos["total"] += total
+    try:
+        _write_consumo_file(datos)
+    except OSError:
+        pass  # ponytail: el contador de tokens nunca debe romper el flujo
+
+
+def _linea_consumo_total():
+    """Startup footer: cumulative tokens spent (persisted)."""
+    total = _load_consumo().get("total", 0)
+    return f"  {C['GRAY']}Tokens gastados: {total}{C['RESET']}"
+
+
+def _imprimir_consumo_consulta():
+    """Print last-query token usage at the end of the turn."""
+    global _ULTIMO_CONSUMO
+    uso = _ULTIMO_CONSUMO
+    _ULTIMO_CONSUMO = None
+    if not uso:
+        return
+    total = uso.get("total") or 0
+    prompt = uso.get("prompt") or 0
+    resp = uso.get("respuesta") or 0
+    print(
+        f"{C['GRAY']}Tokens de esta consulta: {total} "
+        f"(entrada {prompt}, salida {resp}){C['RESET']}"
+    )
+
+
 def _actualizar_estado_nube(ok):
     global _NUBE_ESTADO
     if not _nube_habilitada():
@@ -2622,7 +2766,8 @@ def _post_url_nube(url, payload):
     }
     req = urllib.request.Request(url, data=body, method="POST", headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=_nube_timeout(), context=_ssl_nube()) as resp:
+        # Sin timeout: Gemini 3.7 puede tardar mas que el limite anterior (8-20 s).
+        with urllib.request.urlopen(req, timeout=None, context=_ssl_nube()) as resp:
             raw = resp.read(CLOUD_RESPUESTA_MAX + 1024)
     except urllib.error.HTTPError as err:
         return None, f"HTTP {err.code}"
@@ -2687,6 +2832,7 @@ def cmd_query_cloud(prompt, context=None, store_history=True):
         return f"{aviso}\n{local}"
 
     _actualizar_estado_nube(True)
+    _registrar_consumo(_uso_tokens_nube(data))
     out = texto[:CLOUD_RESPUESTA_MAX]
     if store_history and out:
         HISTORY.append((prompt, out))
@@ -2737,6 +2883,7 @@ def cmd_query(prompt, context=None, store_history=True):
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         out = _clean_output(result)
+        _registrar_consumo(_uso_tokens_llama(result.stderr))
         if store_history and out not in ("(sin respuesta)", ""):
             HISTORY.append((prompt, out))
             if len(HISTORY) > MAX_HISTORY:
@@ -2782,7 +2929,9 @@ def cmd_pseint(query):
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        return _clean_output(result)
+        out = _clean_output(result)
+        _registrar_consumo(_uso_tokens_llama(result.stderr))
+        return out
     except subprocess.TimeoutExpired:
         return "[WARN] Tiempo de espera agotado (120s)"
     except FileNotFoundError:
@@ -3070,6 +3219,7 @@ def main():
         banner = session_banner()
         if banner:
             sys.stdout.write(f"  {C['CYAN']}{banner}{C['RESET']}\n")
+        sys.stdout.write(_linea_consumo_total() + "\n")
         print()
         while True:
             try:
@@ -3092,6 +3242,8 @@ def main():
 
 
 def handle_action(action, param, original_input):
+    global _ULTIMO_CONSUMO
+    _ULTIMO_CONSUMO = None
     registrar_uso(action)
 
     if action == "open_app":
@@ -3219,6 +3371,8 @@ def handle_action(action, param, original_input):
     else:
         print("Consultando LLM...")
         print(cmd_query(original_input))
+
+    _imprimir_consumo_consulta()
 
 
 if __name__ == "__main__":

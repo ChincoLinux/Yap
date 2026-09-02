@@ -64,7 +64,7 @@ def _post_gcp(url, payload):
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=60, context=ssl.create_default_context()) as resp:
+    with urllib.request.urlopen(req, timeout=None, context=ssl.create_default_context()) as resp:
         return json.loads(resp.read().decode("utf-8", errors="replace"))
 
 
@@ -84,6 +84,25 @@ def _texto_de_gemini(data):
     return ""
 
 
+def _uso_de_gemini(data):
+    if not isinstance(data, dict):
+        return None
+    meta = data.get("usageMetadata") or data.get("uso") or data.get("usage")
+    if not isinstance(meta, dict):
+        return None
+    try:
+        prompt = int(meta.get("promptTokenCount") or meta.get("prompt") or 0)
+        resp = int(meta.get("candidatesTokenCount") or meta.get("respuesta") or 0)
+        total = int(meta.get("totalTokenCount") or meta.get("total") or 0)
+    except (TypeError, ValueError):
+        return None
+    if not total:
+        total = prompt + resp
+    if not (prompt or resp or total):
+        return None
+    return {"prompt": prompt, "respuesta": resp, "total": total}
+
+
 def _llamar_generate(prompt):
     if not PROJECT:
         raise RuntimeError("Falta PROJECT_ID. Ejemplo: set PROJECT_ID=mi-proyecto")
@@ -100,7 +119,7 @@ def _llamar_generate(prompt):
     texto = _texto_de_gemini(data)
     if not texto:
         raise RuntimeError("Gemini no devolvio texto. Respuesta: " + json.dumps(data)[:500])
-    return texto
+    return texto, _uso_de_gemini(data)
 
 
 def _llamar_agente(prompt, user_id="yap-local"):
@@ -123,7 +142,7 @@ def _llamar_agente(prompt, user_id="yap-local"):
     texto = _texto_de_gemini(data)
     if not texto and isinstance(data, dict):
         texto = json.dumps(data, ensure_ascii=False)[:2000]
-    return texto or "(sin texto del agente)"
+    return texto or "(sin texto del agente)", _uso_de_gemini(data)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -151,9 +170,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             if MODE == "agent":
-                texto = _llamar_agente(prompt)
+                texto, uso = _llamar_agente(prompt)
             else:
-                texto = _llamar_generate(prompt)
+                texto, uso = _llamar_generate(prompt)
         except urllib.error.HTTPError as err:
             detalle = err.read().decode("utf-8", errors="replace")[:800]
             self._send(502, {"texto": "", "error": f"GCP HTTP {err.code}: {detalle}"})
@@ -161,7 +180,10 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as err:
             self._send(502, {"texto": "", "error": str(err)})
             return
-        self._send(200, {"texto": texto, "modelo": MODEL})
+        payload = {"texto": texto, "modelo": MODEL}
+        if uso:
+            payload["uso"] = uso
+        self._send(200, payload)
 
     def do_GET(self):
         self._send(200, {
