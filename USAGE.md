@@ -308,6 +308,57 @@ yap telemetria desactivar
 Los contadores dejan de incrementarse de inmediato. Los datos previos se
 conservan hasta que ejecutes `yap telemetria borrar`.
 
+## Feedback pedagogico
+
+Al resolver las actividades de una experiencia de aprendizaje, Yap distingue
+dos momentos.
+
+### Durante la EA — feedback formativo
+
+Acompana el aprendizaje y no penaliza. El evaluador reconoce primero lo que
+esta bien, explica que falla y como corregirlo, e invita a reintentar:
+
+```
+REPROBADO — 45/100  (intento 1/3)
+
+Cumplidos: variables
+Fallidos: ciclos
+```
+
+Si vuelves a intentarlo, se muestra ademas el avance:
+
+```
+APROBADO — 85/100  (intento 2/3)
+
+Cumplidos: variables; ciclos
+
+Avance: 45 -> 85 (+40 respecto al intento anterior)
+```
+
+### Al terminar la EA — feedback sumativo
+
+Cierra la experiencia con la nota y un balance:
+
+```
+Experiencia completada: EA1: Fundamentos de Algoritmos
+
+Nota final: 4.5/7.0   (67.5/100)
+
+Fortalezas:
+  + variables
+  + ciclos
+
+A mejorar:
+  - arreglos
+
+Actividades no aprobadas: 2
+```
+
+Las fortalezas y las areas por mejorar se calculan a partir de los criterios
+registrados durante la EA, sin consultar al modelo. Un criterio solo cuenta
+como fortaleza si no se fallo en ninguna actividad: aprobarlo una vez no
+cancela un fallo posterior.
+
 ## Ramas de configuracion
 
 | Rama | RAM | Modelo | Uso |

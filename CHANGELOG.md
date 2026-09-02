@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Feedback pedagógico estructurado (#29): distinción entre feedback formativo
+  y sumativo, con pautas diferenciadas en el prompt del evaluador. Al cerrar
+  una experiencia se muestra la nota junto a fortalezas y áreas por mejorar,
+  compuestas a partir de los criterios ya registrados y sin llamada adicional
+  al modelo. El resultado de cada intento indica el avance respecto al anterior
 - Control de sesiones dentro del agente (#21): crear, pausar, retomar, cerrar y
   listar sesiones, con límite de 3 abiertas, prompt marcado con la sesión activa
   y archivado en el historial al cerrar

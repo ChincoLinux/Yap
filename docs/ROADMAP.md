@@ -30,7 +30,7 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 | 26 | Cursos adicionales — MAT1101, INF1101, TEL1101 | P1 | Planeado |
 | 27 | Sistema de ejercicios interactivos con validación automática | P1 | Planeado |
 | 28 | Adaptación de dificultad según progreso del estudiante | P2 | Planeado |
-| 29 | Feedback pedagógico estructurado (formativo vs sumativo) | P2 | Planeado |
+| 29 | Feedback pedagógico estructurado (formativo vs sumativo) | P2 | En revisión |
 | 30 | Exportación de progreso a PDF/CSV para el docente | P2 | Planeado |
 
 ### Fase 3 — Empaquetado para ChincoLinux OS (v1.3)
