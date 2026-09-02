@@ -13,6 +13,7 @@ Ejecucion: python3 -m pytest tests/test_yap_config_escolar.py -v
 import sys
 import os
 import re
+from urllib.parse import urlparse
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import yap
@@ -179,9 +180,13 @@ class TestSetupDescargaModelo:
         assert "huggingface.co/bartowski/" in contenido
 
     def test_setup_tiene_espejos_si_huggingface_da_401(self):
-        contenido = leer(SETUP_SH)
-        assert "hf-mirror.com" in contenido
-        assert "unsloth/Llama-3.2-" in contenido
+        """Los espejos deben tener host exacto hf-mirror.com, no un substring."""
+        urls = re.findall(r'https://[^\s"\']+', leer(SETUP_SH))
+        assert any(
+            urlparse(u).scheme == "https" and urlparse(u).hostname == "hf-mirror.com"
+            for u in urls
+        )
+        assert any("/unsloth/Llama-3.2-" in u for u in urls)
 
     def test_setup_rechaza_html_de_error_como_modelo(self):
         contenido = leer(SETUP_SH)
