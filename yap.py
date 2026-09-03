@@ -858,7 +858,8 @@ TELEMETRY_VERSION = 1
 # no se han usado nunca.
 ACCIONES_CONOCIDAS = (
     "open_app", "search", "webfetch", "pseint", "introduccion_pseint",
-    "curso", "guia", "progreso", "historial", "apparmor_status",
+    "curso", "guia", "progreso", "historial", "sesion", "apparmor_status",
+    "menu_pista",
     "telemetria", "help", "query",
 )
 
@@ -873,6 +874,8 @@ ACCIONES_NOMBRES = {
     "guia": "Guia rapida",
     "progreso": "Ver progreso",
     "historial": "Historial de sesiones",
+    "sesion": "Control de sesiones",
+    "menu_pista": "Opcion del menu por numero",
     "apparmor_status": "Estado de AppArmor",
     "telemetria": "Telemetria",
     "help": "Ayuda",
@@ -2550,11 +2553,78 @@ def classify_intent(user_input):
 
     return "query", user_input.strip()
 
+# ── Menu numerado y rutas de teclado (#59) ──────────────────
+# El menu es la fuente unica: display_menu() lo dibuja y interpret() lo
+# enruta, de modo que la numeracion mostrada y la enrutada no pueden
+# divergir al anadir o reordenar opciones.
+#
+# Cada entrada es (etiqueta, accion, parametro, pista):
+#   - parametro is None  -> la opcion necesita que el usuario escriba algo,
+#                           asi que el numero muestra la pista de uso.
+#   - parametro is str   -> se ejecuta directamente con ese parametro.
+
+MENU_INTERACTIVO = (
+    ("Cualquier consulta directa al AI", None, None,
+     "Escribe tu pregunta tal cual y Yap te respondera."),
+    ("Abre [app] — abrir aplicacion permitida", "open_app", None,
+     "Escribe 'abre' y el nombre. Por ejemplo: abre firefox"),
+    ("Busca [tema] — buscar en Wikipedia", "search", None,
+     "Escribe 'busca' y el tema. Por ejemplo: busca que es un algoritmo"),
+    ("Tutor PSeInt — preguntas de programacion", "pseint", None,
+     "Escribe 'pseint' y tu duda. Por ejemplo: pseint como hago un ciclo"),
+    ("Curso FPY1101 — plan de estudio", "curso", "FPY1101", ""),
+    ("Historial — ver sesiones anteriores", "historial", "historial", ""),
+    ("Historial --ultimo — retomar ultima sesion", "historial", "--ultimo", ""),
+    ("Sesion — estado, pausar, retomar o cerrar sesion", "sesion", "", ""),
+    ("Telemetria — ver tu uso de Yap (100% local)", "telemetria", "", ""),
+    ("Ayuda — lista de comandos", "help", "ayuda", ""),
+    ("Salir — Ctrl+C o 'salir'", "salir", "", ""),
+)
+
+
+def _etiquetas_menu():
+    """Labels for display_menu(), in the same order used for routing."""
+    return [entrada[0] for entrada in MENU_INTERACTIVO]
+
+
+def _opcion_menu(numero):
+    """Return the menu entry for a 1-based number, or None if out of range."""
+    if not isinstance(numero, int) or numero < 1 or numero > len(MENU_INTERACTIVO):
+        return None
+    return MENU_INTERACTIVO[numero - 1]
+
+
+def _ruta_por_numero(texto):
+    """Resolve a bare menu number typed by the user.
+
+    Returns (accion, parametro) or None when the text is not a number in
+    range, so the caller can keep treating it as an ordinary query.
+    """
+    if not texto.isdigit():
+        return None
+    entrada = _opcion_menu(int(texto))
+    if entrada is None:
+        # ponytail: un numero fuera de rango puede ser parte de una pregunta
+        # ("cuanto es 7 por 8" -> 56), asi que sigue su curso como consulta
+        return None
+    _, accion, parametro, pista = entrada
+    if parametro is None:
+        return "menu_pista", pista
+    return accion, parametro
+
+
 def interpret(user_input):
     """Keyword router before LLM classifier for known commands."""
     stripped = user_input.strip().lower()
 
     # Exact/prefix keyword routing (bypasses LLM for speed & reliability)
+    # El numero de una opcion del menu se resuelve antes que nada
+    por_numero = _ruta_por_numero(stripped)
+    if por_numero is not None:
+        if por_numero[0] == "salir":
+            sys.exit(0)
+        return por_numero
+
     if stripped in ("guia", "guia rapida", "tutorial", "como usar"):
         return "guia", "guia"
     if stripped in ("progreso", "avance", "mi progreso", "mi avance", "avance curso"):
@@ -2582,6 +2652,30 @@ def interpret(user_input):
 
     # curso FPY1101 → ("curso", "FPY1101")
     # iniciar EA1   → ("curso", "FPY1101:EA1")  — needs context, hands to LLM
+    # Rutas de teclado para las acciones que hasta ahora dependian del
+    # clasificador, poco fiable con el modelo 1B
+    for prefijo in ("abre ", "abrir "):
+        if stripped.startswith(prefijo):
+            param = user_input.strip()[len(prefijo):].strip()
+            if param:
+                return "open_app", param
+
+    for prefijo in ("busca ", "buscar "):
+        if stripped.startswith(prefijo):
+            param = user_input.strip()[len(prefijo):].strip()
+            if param:
+                return "search", param
+
+    if stripped in ("aprender pseint", "quiero aprender pseint",
+                    "ejercicios pseint", "tutorial pseint"):
+        return "introduccion_pseint", "inicio"
+
+    for prefijo in ("pseint ", "tutor pseint "):
+        if stripped.startswith(prefijo):
+            param = user_input.strip()[len(prefijo):].strip()
+            if param:
+                return "pseint", param
+
     if stripped.startswith("curso "):
         param = user_input[6:].strip().upper()
         if param:
@@ -2616,21 +2710,11 @@ def main():
 
         sys.stdout.write(render_art(CHINCO_ART, C['CYAN']) + "\n")
         sys.stdout.write(f"  {C['GRAY']}{'─' * 50}{C['RESET']}\n")
-        sys.stdout.write(display_menu("Comandos", [
-            "Cualquier consulta directa al AI",
-            "Abre [app] — abrir aplicacion permitida",
-            "Busca [tema] — buscar en Wikipedia",
-            "Tutor PSeInt — preguntas de programacion",
-            "Curso FPY1101 — plan de estudio",
-            "Historial — ver sesiones anteriores",
-            "Historial --ultimo — retomar ultima sesion",
-
-            "Sesion — estado, pausar, retomar o cerrar sesion",
-
-            "Telemetria — ver tu uso de Yap (100% local)",
-            "Ayuda — lista de comandos",
-            "Salir — Ctrl+C o 'salir'",
-        ]))
+        sys.stdout.write(display_menu("Comandos", _etiquetas_menu()))
+        sys.stdout.write(
+            f"  {C['GRAY']}Escribe el numero de una opcion o el comando "
+            f"completo.{C['RESET']}\n"
+        )
         banner = session_banner()
         if banner:
             sys.stdout.write(f"  {C['CYAN']}{banner}{C['RESET']}\n")
@@ -2748,6 +2832,9 @@ def handle_action(action, param, original_input):
 
     elif action == "telemetria":
         print(cmd_telemetria(param))
+
+    elif action == "menu_pista":
+        print(display_box(param or "Escribe el comando completo.", color="CYAN"))
 
     elif action == "apparmor_status":
         print(cmd_apparmor_status())
