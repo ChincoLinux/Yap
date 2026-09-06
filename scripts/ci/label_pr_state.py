@@ -187,8 +187,8 @@ def main():
     repository = os.environ.get("REPOSITORY")
     pr_number = os.environ.get("PR_NUMBER")
 
-    if not all([github_token, repository, pr_number]):
-        print("ERROR: Missing required environment variables", file=sys.stderr)
+    if not all([github_token, repository]):
+        print("ERROR: Missing required environment variables (GITHUB_TOKEN, REPOSITORY)", file=sys.stderr)
         sys.exit(1)
 
     github = Github(auth=Auth.Token(github_token))
