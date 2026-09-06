@@ -705,8 +705,11 @@ class TestCursoCommand:
         self.tmpdir = tempfile.mkdtemp()
         self.cpat = patch("yap.CURSOS_DIR", self.tmpdir)
         self.ppat = patch("yap.PROGRESS_FILE", os.path.join(self.tmpdir, "progress.json"))
+        # #21: cmd_curso/iniciar_ea abren sesion — aislar para no tocar ~/.config/yap
+        self.spat = patch("yap.SESSIONS_FILE", os.path.join(self.tmpdir, "sessions.json"))
         self.cpat.start()
         self.ppat.start()
+        self.spat.start()
         path = os.path.join(self.tmpdir, "TEST101.json")
         with open(path, "w") as f:
             json.dump(self.VALID_COURSE, f)
@@ -714,6 +717,7 @@ class TestCursoCommand:
     def teardown_method(self):
         self.cpat.stop()
         self.ppat.stop()
+        self.spat.stop()
         import shutil
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 

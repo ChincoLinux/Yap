@@ -19,6 +19,12 @@ Ver requisitos detallados en [README.md](README.md#61-requisitos-del-sistema).
 | `yap guia` | Tutorial interactivo de 7 pasos. |
 | `yap ayuda` | Lista de comandos disponibles. |
 | `yap progreso` | Progreso de cursos. |
+
+| `yap sesion` | Estado de la sesion activa. |
+| `yap sesion pausar` | Pausar la sesion y guardar el contexto. |
+| `yap sesion retomar 3` | Retomar una sesion pausada. |
+
+| `yap telemetria` | Resumen local de tu uso de Yap. |
 | `yap curso FPY1101` | Plan de estudio del curso. |
 | `yap iniciar EA1` | Comenzar una experiencia de aprendizaje. |
 | `yap <pregunta>` | Consulta directa al AI. |
@@ -59,13 +65,15 @@ yap iniciar EA1
 
 Flujo de la sesion:
 
-1. **Vista general** — descripcion de la EA, actividades listadas.
-2. **Por cada actividad** — descripcion, herramienta sugerida.
-   - `Enter` = marcar como completada y avanzar.
-   - `salir` = guardar progreso y salir.
-   - `pregunta` = consultar al AI con contexto del curso.
+1. **Vista general** — descripcion de la EA, actividades listadas (con tipo de evaluacion si aplica).
+2. **Por cada actividad** — descripcion, consigna, herramienta sugerida.
+   - Si la actividad tiene `tipo` de evaluacion: escribe tu respuesta. El LLM (o comparacion exacta en opcion multiple) devuelve puntaje y feedback.
+   - Hasta 3 intentos por actividad (configurable con `YAP_MAX_INTENTOS` o `max_intentos` en el JSON). Si repruebas, puedes `saltar`.
+   - `pregunta ...` = consultar al tutor con contexto del curso y de la sesion activa.
    - `abrir pseint` = lanzar herramienta sugerida.
-3. **Al completar todas** — mensaje de cierre con enlace a evaluaciones.
+   - `salir` = guardar progreso y salir.
+   - Actividades sin `tipo` siguen el flujo anterior: `Enter` = marcar como hecha.
+3. **Al completar todas** — promedio 0-100 y nota final en escala chilena (1.0-7.0, 60% = 4.0).
 
 El progreso se guarda automaticamente al completar cada actividad (archivo atomico en `~/.config/yap/progress.json`).
 
@@ -101,8 +109,24 @@ Crea un archivo JSON en `/etc/yap/cursos/MAT1101.json`:
       "descripcion": "Resolucion de sistemas...",
       "herramientas": ["Python 3"],
       "actividades": [
-        {"orden": 1, "nombre": "Sistemas 2x2", "descripcion": "Resuelve sistemas...", "tool_hint": "Python 3"},
-        {"orden": 2, "nombre": "Sistemas 3x3", "descripcion": "...", "tool_hint": "Python 3"}
+        {
+          "orden": 1,
+          "nombre": "Sistemas 2x2",
+          "descripcion": "Resuelve sistemas...",
+          "tool_hint": "Python 3",
+          "tipo": "respuesta_libre",
+          "criterios_evaluacion": ["Plantea el sistema", "Obtiene la solucion correcta"]
+        },
+        {
+          "orden": 2,
+          "nombre": "Sistemas 3x3",
+          "descripcion": "...",
+          "tool_hint": "Python 3",
+          "tipo": "opcion_multiple",
+          "opciones": ["Una solucion", "Infinitas", "Ninguna"],
+          "respuesta_correcta": "Una solucion",
+          "criterios_evaluacion": ["Identifica el caso"]
+        }
       ],
       "evaluaciones": [
         {"nombre": "Eva Parcial", "descripcion": "Evaluacion parcial...", "tipo": "individual", "ponderacion": 20}
@@ -164,9 +188,176 @@ versiones de Debian: `Firefox:firefox-esr,firefox`.
 yap progreso
 ```
 
-Muestra el avance por curso y EA: actividades completadas y estado (en curso ✓, pendiente ▶).
+Muestra el avance por curso y EA: porcentaje completado, puntaje promedio, actividades reprobadas o saltadas, y nota (1.0-7.0).
 
-El archivo de progreso esta en `~/.config/yap/progress.json`. Se guarda atomicamente (sin riesgo de corruption por corte de energia).
+El archivo de progreso esta en `~/.config/yap/progress.json`. Se guarda atomicamente (sin riesgo de corruption por corte de energia). Cada actividad evaluada guarda `puntaje`, `intentos` y `fecha_aprobacion`.
+
+### Tipos de evaluacion en actividades
+
+Cada actividad de una EA puede declarar:
+
+| `tipo` | Como se evalua |
+|--------|----------------|
+| `respuesta_libre` | El LLM verifica los `criterios_evaluacion` |
+| `codigo_pseint` | El LLM valida sintaxis PSeInt y la logica |
+| `opcion_multiple` | Comparacion exacta con `respuesta_correcta` (sin LLM) |
+| `completar` | El LLM valida si la respuesta completa lo pedido |
+
+Campos: `criterios_evaluacion` (lista), `enunciado` (opcional), `opciones` y `respuesta_correcta` (requeridos en opcion multiple), `max_intentos` (opcional, default 3).
+
+El evaluador responde JSON `{aprobado, puntaje, feedback, criterios_cumplidos, criterios_fallidos, sugerencia}`. Si el LLM devuelve texto plano, Yap lo interpreta igual.
+
+## Sesiones
+
+Una **sesion** agrupa el contexto de trabajo: el curso y la EA en curso, junto con los
+turnos de conversacion con el tutor. Puede pausarse y reanudarse posteriormente
+conservando dicho contexto.
+
+### Comandos
+
+| Comando | Descripcion |
+|---------|-------------|
+| `yap sesion` | Estado de la sesion activa y resumen de las pausadas. |
+| `yap sesion nueva` | Inicia una sesion limpia (pausa la anterior si la hay). |
+| `yap sesion pausar` | Pausa la sesion y guarda el contexto de conversacion. |
+| `yap sesion retomar [ID]` | Retoma una sesion pausada. Sin ID, retoma la ultima. |
+| `yap sesion cerrar` | Cierra la sesion y la archiva en el historial. |
+| `yap sesion listar` | Lista todas las sesiones, incluidas las cerradas. |
+
+El identificador se muestra en el prompt del modo interactivo:
+
+```
+Chinco [S1] > que es un ciclo mientras
+```
+
+### Flujo tipico
+
+```bash
+yap curso FPY1101        # abre una sesion asociada al curso automaticamente
+yap iniciar EA1          # asocia la EA a la sesion activa
+yap sesion pausar        # interrupcion: guarda el contexto y libera la sesion
+yap sesion retomar       # reanudacion: restaura la conversacion previa
+yap sesion cerrar        # cierre de la unidad: archiva en el historial
+```
+
+Al salir del modo interactivo con una sesion activa, Yap solicita confirmacion para
+pausarla o cerrarla (`p/C`, cierra por defecto).
+
+### Limites y almacenamiento
+
+- Maximo **3 sesiones abiertas** simultaneamente (activas o pausadas). Configurable
+  mediante la variable de entorno `YAP_MAX_SESSIONS`.
+- Solo puede existir **una sesion activa**: abrir o retomar otra pausa la anterior.
+- Las sesiones se almacenan en `~/.config/yap/sessions.json`, con escritura atomica.
+- Al **cerrar** una sesion, su conversacion se traslada a `~/.config/yap/history.json`
+  y queda disponible mediante `yap historial` y `yap historial --ultimo`. Las sesiones
+  **pausadas no** se archivan hasta su cierre.
+
+## Telemetria local
+
+Yap lleva un registro de **cuantas veces** se usa cada funcion, para saber que
+partes resultan utiles y cuales pasan desapercibidas.
+
+### Que se registra, y que no
+
+| Se registra | No se registra |
+|-------------|----------------|
+| Contadores por accion (`query: 7`, `curso: 3`) | El texto de tus consultas |
+| Fecha del primer y ultimo uso | Los parametros de los comandos |
+| Que funciones no has usado nunca | Nombres, rutas o cualquier dato personal |
+
+**Nada se transmite.** El archivo vive en `~/.config/yap/telemetry.json` y no
+existe ningun envio automatico. Compartirlo requiere una accion explicita tuya.
+
+### Comandos
+
+| Comando | Descripcion |
+|---------|-------------|
+| `yap telemetria` | Resumen de uso: mas usadas, nunca usadas y total. |
+| `yap telemetria exportar` | Crea una copia anonima que puedes compartir. |
+| `yap telemetria desactivar` | Deja de registrar uso. |
+| `yap telemetria activar` | Vuelve a registrar. |
+| `yap telemetria borrar` | Elimina los datos acumulados. |
+
+### Exportacion
+
+```bash
+yap telemetria exportar
+```
+
+Genera `~/.config/yap/telemetry-export.json` con unicamente los contadores:
+
+```json
+{
+  "version": 1,
+  "comandos": { "curso": 3, "open_app": 1, "query": 7 },
+  "total": 11,
+  "sin_usar": ["search", "webfetch", "pseint"]
+}
+```
+
+Sin fechas, sin rutas y sin identificadores. El archivo queda en tu equipo; si
+decides enviarlo a los desarrolladores, lo haces tu manualmente.
+
+### Desactivar la recoleccion
+
+```bash
+yap telemetria desactivar
+```
+
+Los contadores dejan de incrementarse de inmediato. Los datos previos se
+conservan hasta que ejecutes `yap telemetria borrar`.
+
+## Feedback pedagogico
+
+Al resolver las actividades de una experiencia de aprendizaje, Yap distingue
+dos momentos.
+
+### Durante la EA — feedback formativo
+
+Acompana el aprendizaje y no penaliza. El evaluador reconoce primero lo que
+esta bien, explica que falla y como corregirlo, e invita a reintentar:
+
+```
+REPROBADO — 45/100  (intento 1/3)
+
+Cumplidos: variables
+Fallidos: ciclos
+```
+
+Si vuelves a intentarlo, se muestra ademas el avance:
+
+```
+APROBADO — 85/100  (intento 2/3)
+
+Cumplidos: variables; ciclos
+
+Avance: 45 -> 85 (+40 respecto al intento anterior)
+```
+
+### Al terminar la EA — feedback sumativo
+
+Cierra la experiencia con la nota y un balance:
+
+```
+Experiencia completada: EA1: Fundamentos de Algoritmos
+
+Nota final: 4.5/7.0   (67.5/100)
+
+Fortalezas:
+  + variables
+  + ciclos
+
+A mejorar:
+  - arreglos
+
+Actividades no aprobadas: 2
+```
+
+Las fortalezas y las areas por mejorar se calculan a partir de los criterios
+registrados durante la EA, sin consultar al modelo. Un criterio solo cuenta
+como fortaleza si no se fallo en ninguna actividad: aprobarlo una vez no
+cancela un fallo posterior.
 
 ## Ramas de configuracion
 

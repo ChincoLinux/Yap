@@ -2,7 +2,7 @@
 
 Este documento define el modelo de gobernanza de **ChincoLinux**. Toda la operatoria técnica sigue la doctrina **[A-Dev](ADEV.md)**.
 
-> **Overlay local de este repositorio**: Yap declara **trunk-based development** como flujo de trabajo (ver [docs/TRUNK-BASED.md](docs/TRUNK-BASED.md)). En la copia de la organización, `main` exige **cambios vía PR** (los admins pueden hacer bypass); en la copia personal `VECTORG99/Yap` el push directo de cambios pequeños y verificados está disponible.
+> **Overlay local de este repositorio**: Yap declara **trunk-based development** como flujo de trabajo (ver [docs/TRUNK-BASED.md](docs/TRUNK-BASED.md) y [AGENTS.md](AGENTS.md)). **Todo cambio entra a `main` mediante un PR aprobado — sin excepciones.** El bypass de admin está prohibido por doctrina del repositorio, aunque GitHub lo permita técnicamente. El bot `yap-reviewer` publica análisis como comentario; la aprobación es siempre humana (`core-devs`).
 
 ## Roles
 
@@ -15,7 +15,7 @@ Este documento define el modelo de gobernanza de **ChincoLinux**. Toda la operat
 
 ## Flujo de decisiones / Decision flow
 
-1. **Cambios de código**: PR revisado y aprobado por `core-devs` antes de merge para cambios con impacto. **Overlay trunk-based**: los cambios pequeños y verificados pueden ir directo a `main` (ver [docs/TRUNK-BASED.md](docs/TRUNK-BASED.md)).
+1. **Cambios de código**: PR revisado y aprobado por `core-devs` antes de merge. **Todo cambio** —sin importar tamaño— pasa por PR. Sin bypass de admin (ver [AGENTS.md](AGENTS.md)).
 2. **Cambios de doctrina/política**: propuesta como issue + PR en el repositorio `.github` de la org; decisión por consenso de `core-devs`.
 3. **Decisiones registradas**: las decisiones relevantes se registran en `DECISION-LOG.md` de cada repositorio cuando aplique.
 
@@ -40,7 +40,7 @@ La nominación la hace un mantenedor existente y se aprueba por mayoría simple 
 - Permiso por defecto para miembros: **lectura**.
 - La creación de repositorios está restringida a admins.
 - Todo repositorio de la org adopta este modelaje de equipo, plantillas y flujo de PR.
-- En la copia de la org, `main` está cubierto por una política que exige **cambios vía Pull Request** (los admins pueden hacer bypass). **Overlay trunk-based de Yap** ([docs/TRUNK-BASED.md](docs/TRUNK-BASED.md)): ramas cortas e integración frecuente; en la copia personal (`VECTORG99/Yap`) el push directo de cambios pequeños y verificados está permitido; en la copia de la org (`ChincoLinux/Yap`) los cambios entran vía PR o bypass de admin.
+- `main` está cubierto por branch protection que exige **PR + CI verde**. **Sin bypass de admin** (`enforce_admins: true`). **Overlay trunk-based de Yap** ([docs/TRUNK-BASED.md](docs/TRUNK-BASED.md), [AGENTS.md](AGENTS.md)): ramas cortas e integración frecuente; todo cambio entra vía PR aprobado, sin importar el tamaño o el rol del autor.
 
 ## Seguridad de la cuenta / Account security
 

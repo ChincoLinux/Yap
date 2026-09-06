@@ -36,6 +36,7 @@ REQUISITOS = {
     "FUN-06": "Historial de conversacion (max 6 turnos)",
     "FUN-07": "Notificaciones graficas via notify-send",
     "FUN-08": "Modo interactivo (loop while True) y modo comando directo",
+    "FUN-11": "Evaluacion automatica de actividades con feedback del LLM",
     "CFG-01": "Archivos de configuracion existen y son validos",
     "CFG-02": "Symlink /usr/local/bin/yap apunta al repositorio",
     "CFG-03": "llama-cli compilado con enlace estatico",
@@ -197,6 +198,22 @@ def main():
         for e in errors:
             print(f"     {e}")
 
+    # --- Pruebas de evaluacion automatica (#23) ---
+    print_header("PRUEBAS DE EVALUACION")
+    eval_file = os.path.join(os.path.dirname(__file__), "test_yap_evaluacion.py")
+    result = run_pytest(eval_file)
+    passed, failed, errors = parse_pytest_output(result.stdout)
+    total_passed += passed
+    total_failed += failed
+
+    all_results.append(("Evaluacion", passed, failed, errors))
+    if failed == 0:
+        print(f"  ✓ [{passed}/{passed + failed}] pruebas de evaluacion pasadas")
+    else:
+        print(f"  ✗ [{passed}/{passed + failed}] pruebas pasadas, {failed} fallaron")
+        for e in errors:
+            print(f"     {e}")
+
     # --- Verificaciones de Infraestructura ---
     print_header("VERIFICACIONES DE INFRAESTRUCTURA")
 
@@ -290,6 +307,7 @@ def main():
         "FUN-06": ("Historial de conversacion", True),
         "FUN-07": ("Notificaciones notify-send", True),
         "FUN-08": ("Modo interactivo y comando", True),
+        "FUN-11": ("Evaluacion automatica de actividades", True),
         "CFG-01": ("Archivos de configuracion validos", all(ok for _, ok, _ in wl_results)),
         "CFG-02": ("Symlink al repositorio", symlink_ok),
         "CFG-03": ("llama-cli instalado", llama_ok),

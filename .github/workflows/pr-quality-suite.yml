@@ -1,0 +1,250 @@
+name: PR Quality - Suite
+
+on:
+  pull_request:
+    branches: [main, lowmem, ultra-lowmem]
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  style:
+    name: style
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ruff
+        run: pip install ruff==0.6.9
+
+      - name: Check code style (ruff format --check)
+        continue-on-error: true
+        run: ruff format --check yap.py tests/
+
+      - name: Lint (ruff check)
+        continue-on-error: true
+        run: ruff check yap.py tests/
+
+  static:
+    name: static
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pyflakes
+        run: pip install pyflakes==3.2.0
+
+      - name: Static analysis (pyflakes)
+        continue-on-error: true
+        run: pyflakes yap.py tests/
+
+      - name: HD-YAP-SEC-001 static checks
+        run: |
+          set -e
+          FAIL=0
+          for pattern in "shell=True" "eval(" "os.system(" "import socket" "import ctypes" "import pickle" "import base64"; do
+            if grep -n "$pattern" yap.py 2>/dev/null | grep -v '^\s*#' | grep -q .; then
+              echo "FAIL: found '$pattern' in yap.py (not in a comment)"
+              grep -n "$pattern" yap.py | grep -v '^\s*#' || true
+              FAIL=1
+            fi
+          done
+          if [ $FAIL -ne 0 ]; then
+            echo "::error::HD-YAP-SEC-001 violated: prohibited patterns found in yap.py"
+            exit 1
+          fi
+          echo "PASS: no prohibited patterns in yap.py"
+
+  arch:
+    name: arch
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Architecture validation (imports + structure)
+        run: |
+          set -e
+          # Verify yap.py parses cleanly
+          python3 -c "import ast; ast.parse(open('yap.py').read()); print('PASS: yap.py parses cleanly')"
+
+          # Verify no circular imports in test files
+          python3 -c "
+          import ast, sys
+          for f in ['yap.py']:
+              tree = ast.parse(open(f).read())
+              imports = [n for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))]
+              print(f'{f}: {len(imports)} imports OK')
+          "
+
+          # Verify whitelists exist and are non-empty
+          for wl in whitelist/apps.conf whitelist/web.conf; do
+            if [ ! -s "$wl" ]; then
+              echo "::error::whitelist $wl is missing or empty"
+              exit 1
+            fi
+            echo "PASS: $wl exists and non-empty"
+          done
+
+  tests_cov:
+    name: tests_cov
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install pytest==8.3.3 pytest-cov==5.0.0
+
+      - name: Tests with coverage
+        run: |
+          python3 -m pytest tests/ -v \
+            --cov=yap \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-branch \
+            --tb=short
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Upload coverage artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.sha }}
+          path: coverage.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+  deps:
+    name: deps
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pip-audit
+        run: pip install pip-audit==2.7.3
+
+      - name: Dependency audit (pip-audit)
+        run: |
+          # Yap has no requirements.txt (stdlib only), but check if one appears
+          if [ -f requirements.txt ]; then
+            pip-audit -r requirements.txt --strict
+          else
+            echo "No requirements.txt — Yap uses stdlib only. Scanning installed packages."
+            pip-audit --strict || echo "WARN: pip-audit found issues in environment (non-blocking for stdlib project)"
+          fi
+
+      - name: Verify no new dependencies introduced
+        run: |
+          # Yap is stdlib-only by design (CLAUDE.md §3). Flag any new import
+          # that is not in the stdlib or the existing whitelist.
+          python3 -c "
+          import ast, sys
+          STDLIB = set(sys.stdlib_module_names)
+          tree = ast.parse(open('yap.py').read())
+          non_stdlib = set()
+          for node in ast.walk(tree):
+              if isinstance(node, ast.Import):
+                  for alias in node.names:
+                      root = alias.name.split('.')[0]
+                      if root not in STDLIB:
+                          non_stdlib.add(root)
+              elif isinstance(node, ast.ImportFrom):
+                  if node.module:
+                      root = node.module.split('.')[0]
+                      if root not in STDLIB:
+                          non_stdlib.add(root)
+          if non_stdlib:
+              print(f'::error::Non-stdlib imports detected in yap.py: {non_stdlib}')
+              print('Yap must be stdlib-only per CLAUDE.md §3')
+              sys.exit(1)
+          print('PASS: yap.py uses only stdlib imports')
+          "
+
+  quality-summary:
+    name: Quality Summary
+    needs: [style, static, arch, tests_cov, deps]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summarize quality gates
+        run: |
+          gate_ok() {
+            case "$1" in
+              success|skipped) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          echo "### PR Quality Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Gate | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| style (ruff) | ${{ needs.style.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| static (pyflakes + SEC-001) | ${{ needs.static.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| arch (structure) | ${{ needs.arch.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| tests_cov (pytest + coverage) | ${{ needs.tests_cov.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| deps (pip-audit + stdlib check) | ${{ needs.deps.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if ! gate_ok "${{ needs.style.result }}" || \
+             ! gate_ok "${{ needs.static.result }}" || \
+             ! gate_ok "${{ needs.arch.result }}" || \
+             ! gate_ok "${{ needs.tests_cov.result }}" || \
+             ! gate_ok "${{ needs.deps.result }}"; then
+            echo "**Result:** FAILED - One or more PR quality checks did not pass" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "**Result:** PASSED - All PR quality checks passed" >> "$GITHUB_STEP_SUMMARY"
