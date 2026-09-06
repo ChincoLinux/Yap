@@ -19,6 +19,12 @@ Ver requisitos detallados en [README.md](README.md#61-requisitos-del-sistema).
 | `yap guia` | Tutorial interactivo de 7 pasos. |
 | `yap ayuda` | Lista de comandos disponibles. |
 | `yap progreso` | Progreso de cursos. |
+
+| `yap sesion` | Estado de la sesion activa. |
+| `yap sesion pausar` | Pausar la sesion y guardar el contexto. |
+| `yap sesion retomar 3` | Retomar una sesion pausada. |
+
+| `yap telemetria` | Resumen local de tu uso de Yap. |
 | `yap curso FPY1101` | Plan de estudio del curso. |
 | `yap iniciar EA1` | Comenzar una experiencia de aprendizaje. |
 | `yap <pregunta>` | Consulta directa al AI. |
@@ -200,6 +206,158 @@ Cada actividad de una EA puede declarar:
 Campos: `criterios_evaluacion` (lista), `enunciado` (opcional), `opciones` y `respuesta_correcta` (requeridos en opcion multiple), `max_intentos` (opcional, default 3).
 
 El evaluador responde JSON `{aprobado, puntaje, feedback, criterios_cumplidos, criterios_fallidos, sugerencia}`. Si el LLM devuelve texto plano, Yap lo interpreta igual.
+
+## Sesiones
+
+Una **sesion** agrupa el contexto de trabajo: el curso y la EA en curso, junto con los
+turnos de conversacion con el tutor. Puede pausarse y reanudarse posteriormente
+conservando dicho contexto.
+
+### Comandos
+
+| Comando | Descripcion |
+|---------|-------------|
+| `yap sesion` | Estado de la sesion activa y resumen de las pausadas. |
+| `yap sesion nueva` | Inicia una sesion limpia (pausa la anterior si la hay). |
+| `yap sesion pausar` | Pausa la sesion y guarda el contexto de conversacion. |
+| `yap sesion retomar [ID]` | Retoma una sesion pausada. Sin ID, retoma la ultima. |
+| `yap sesion cerrar` | Cierra la sesion y la archiva en el historial. |
+| `yap sesion listar` | Lista todas las sesiones, incluidas las cerradas. |
+
+El identificador se muestra en el prompt del modo interactivo:
+
+```
+Chinco [S1] > que es un ciclo mientras
+```
+
+### Flujo tipico
+
+```bash
+yap curso FPY1101        # abre una sesion asociada al curso automaticamente
+yap iniciar EA1          # asocia la EA a la sesion activa
+yap sesion pausar        # interrupcion: guarda el contexto y libera la sesion
+yap sesion retomar       # reanudacion: restaura la conversacion previa
+yap sesion cerrar        # cierre de la unidad: archiva en el historial
+```
+
+Al salir del modo interactivo con una sesion activa, Yap solicita confirmacion para
+pausarla o cerrarla (`p/C`, cierra por defecto).
+
+### Limites y almacenamiento
+
+- Maximo **3 sesiones abiertas** simultaneamente (activas o pausadas). Configurable
+  mediante la variable de entorno `YAP_MAX_SESSIONS`.
+- Solo puede existir **una sesion activa**: abrir o retomar otra pausa la anterior.
+- Las sesiones se almacenan en `~/.config/yap/sessions.json`, con escritura atomica.
+- Al **cerrar** una sesion, su conversacion se traslada a `~/.config/yap/history.json`
+  y queda disponible mediante `yap historial` y `yap historial --ultimo`. Las sesiones
+  **pausadas no** se archivan hasta su cierre.
+
+## Telemetria local
+
+Yap lleva un registro de **cuantas veces** se usa cada funcion, para saber que
+partes resultan utiles y cuales pasan desapercibidas.
+
+### Que se registra, y que no
+
+| Se registra | No se registra |
+|-------------|----------------|
+| Contadores por accion (`query: 7`, `curso: 3`) | El texto de tus consultas |
+| Fecha del primer y ultimo uso | Los parametros de los comandos |
+| Que funciones no has usado nunca | Nombres, rutas o cualquier dato personal |
+
+**Nada se transmite.** El archivo vive en `~/.config/yap/telemetry.json` y no
+existe ningun envio automatico. Compartirlo requiere una accion explicita tuya.
+
+### Comandos
+
+| Comando | Descripcion |
+|---------|-------------|
+| `yap telemetria` | Resumen de uso: mas usadas, nunca usadas y total. |
+| `yap telemetria exportar` | Crea una copia anonima que puedes compartir. |
+| `yap telemetria desactivar` | Deja de registrar uso. |
+| `yap telemetria activar` | Vuelve a registrar. |
+| `yap telemetria borrar` | Elimina los datos acumulados. |
+
+### Exportacion
+
+```bash
+yap telemetria exportar
+```
+
+Genera `~/.config/yap/telemetry-export.json` con unicamente los contadores:
+
+```json
+{
+  "version": 1,
+  "comandos": { "curso": 3, "open_app": 1, "query": 7 },
+  "total": 11,
+  "sin_usar": ["search", "webfetch", "pseint"]
+}
+```
+
+Sin fechas, sin rutas y sin identificadores. El archivo queda en tu equipo; si
+decides enviarlo a los desarrolladores, lo haces tu manualmente.
+
+### Desactivar la recoleccion
+
+```bash
+yap telemetria desactivar
+```
+
+Los contadores dejan de incrementarse de inmediato. Los datos previos se
+conservan hasta que ejecutes `yap telemetria borrar`.
+
+## Feedback pedagogico
+
+Al resolver las actividades de una experiencia de aprendizaje, Yap distingue
+dos momentos.
+
+### Durante la EA — feedback formativo
+
+Acompana el aprendizaje y no penaliza. El evaluador reconoce primero lo que
+esta bien, explica que falla y como corregirlo, e invita a reintentar:
+
+```
+REPROBADO — 45/100  (intento 1/3)
+
+Cumplidos: variables
+Fallidos: ciclos
+```
+
+Si vuelves a intentarlo, se muestra ademas el avance:
+
+```
+APROBADO — 85/100  (intento 2/3)
+
+Cumplidos: variables; ciclos
+
+Avance: 45 -> 85 (+40 respecto al intento anterior)
+```
+
+### Al terminar la EA — feedback sumativo
+
+Cierra la experiencia con la nota y un balance:
+
+```
+Experiencia completada: EA1: Fundamentos de Algoritmos
+
+Nota final: 4.5/7.0   (67.5/100)
+
+Fortalezas:
+  + variables
+  + ciclos
+
+A mejorar:
+  - arreglos
+
+Actividades no aprobadas: 2
+```
+
+Las fortalezas y las areas por mejorar se calculan a partir de los criterios
+registrados durante la EA, sin consultar al modelo. Un criterio solo cuenta
+como fortaleza si no se fallo en ninguna actividad: aprobarlo una vez no
+cancela un fallo posterior.
 
 ## Ramas de configuracion
 

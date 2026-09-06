@@ -16,7 +16,7 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 
 | # | Issue | Prioridad | Estado |
 |---|-------|-----------|--------|
-| 21 | Control de sesiones dentro del agente | P0 | Planeado |
+| 21 | Control de sesiones dentro del agente | P0 | En revisión |
 | 22 | Explicación automática al abrir Yap (onboarding interactivo) | P0 | Planeado |
 | 23 | Sistema de evaluación automática con feedback del LLM | P1 | Completado |
 | 24 | Perfil de estudiante (nombre, nivel, cursos activos, preferencias) | P1 | Planeado |
@@ -30,7 +30,7 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 | 26 | Cursos adicionales — MAT1101, INF1101, TEL1101 | P1 | Planeado |
 | 27 | Sistema de ejercicios interactivos con validación automática | P1 | Planeado |
 | 28 | Adaptación de dificultad según progreso del estudiante | P2 | Planeado |
-| 29 | Feedback pedagógico estructurado (formativo vs sumativo) | P2 | Planeado |
+| 29 | Feedback pedagógico estructurado (formativo vs sumativo) | P2 | En revisión |
 | 30 | Exportación de progreso a PDF/CSV para el docente | P2 | Planeado |
 
 ### Fase 3 — Empaquetado para ChincoLinux OS (v1.3)
@@ -51,10 +51,20 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 |---|-------|-----------|--------|
 | 36 | i18n — soporte multi-idioma (español, inglés, mapudungun) | P2 | Planeado |
 | 37 | Accesibilidad — lector de pantalla, alto contraste, fuentes grandes | P2 | Planeado |
-| 38 | Telemetría local anónima — métricas de uso para mejorar el agente | P3 | Planeado |
+| 38 | Telemetría local anónima — métricas de uso para mejorar el agente | P3 | Parcial (1) |
 | 39 | Modo offline total — sin dependencia de red en ningún flujo | P1 | Planeado |
 | 40 | Benchmarks de rendimiento en hardware educativo real | P1 | Planeado |
 
+## Bugs detectados pendientes de revisión
+
+Hallazgos surgidos durante la validación de #21 en Debian 13 Trixie. Ninguno
+pertenece al alcance de ese issue y todos requieren un issue propio.
+
+| # | Descripción | Ubicación | Prioridad | Estado |
+|---|-------------|-----------|-----------|--------|
+| B1 | El `sed` que extrae el nombre del modelo desde `yap.py` no elimina el paréntesis de cierre de `os.environ.get(...)`. El nombre resultante queda como `Llama-3.2-1B-Instruct-Q4_K_M.gguf)` y la URL de descarga se construye inválida, por lo que la instalación aborta al descargar el modelo. | `setup.sh:142` | P0 | Por revisar |
+| B2 | `cmd_curso()` captura `FileNotFoundError`, `ValueError` y `JSONDecodeError`, pero no `PermissionError`. Un fichero de curso sin permisos de lectura produce una traza completa en pantalla en lugar de un mensaje de error controlado. | `yap.py:804` | P2 | Por revisar |
+| B3 | El menú del modo interactivo numera las entradas como `[1] [2] [3]`, lo que sugiere que son opciones seleccionables. Al escribir un número, el texto se envía al LLM como consulta en lugar de ejecutar la acción correspondiente. | `yap.py` — `display_menu()` | P2 | Por revisar |
 ### Notas
 
 **(1) #33 — entrega parcial.** Se cubren las whitelists escolares y queda
@@ -65,6 +75,16 @@ Los dos criterios restantes quedan pendientes por motivos distintos:
 |---|---|
 | Servicio systemd `yap-daemon` | Yap invoca `llama-cli` de nuevo en cada consulta, sin proceso persistente. Precargar el modelo exige migrar a `llama-server`, lo que excede una tarea de configuración post-install y merece issue propio |
 | `postinst` del paquete | Depende de #31, aún sin empezar |
+
+**(2) #38 — entrega parcial.** Los criterios de aceptación del issue están
+cubiertos: `telemetry.json`, comando `telemetria`, exportación anónima opt-in,
+garantía de no transmisión y pruebas. Quedan pendientes dos de las métricas
+descritas en la propuesta, por depender de trabajo que aún no está en `main`:
+
+| Métrica pendiente | Depende de |
+|---|---|
+| Tiempo promedio por sesión | #21 — control de sesiones |
+| Actividades con más reprobaciones | #23 — evaluación automática |
 
 ## Prioridades globales
 
