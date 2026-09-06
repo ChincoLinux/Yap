@@ -2,14 +2,22 @@
 
 ## Instalacion
 
+Paquete `.deb` (aulas / ChincoLinux):
+
 ```bash
-git clone https://github.com/VECTORG99/Yap.git
+sudo apt install ./yap_*.deb ./yap-models-1b_*.deb
+```
+
+Desarrollo (compila llama.cpp desde fuente):
+
+```bash
+git clone https://github.com/ChincoLinux/Yap.git
 cd Yap
 chmod +x setup.sh
 sudo ./setup.sh
 ```
 
-Ver requisitos detallados en [README.md](README.md#61-requisitos-del-sistema).
+Ver requisitos detallados en [README.md](README.md#61-requisitos-del-sistema) y [docs/PACKAGING.md](docs/PACKAGING.md).
 
 ## Comandos basicos
 

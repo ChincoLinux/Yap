@@ -40,6 +40,8 @@ REQUISITOS = {
     "CFG-01": "Archivos de configuracion existen y son validos",
     "CFG-02": "Symlink /usr/local/bin/yap apunta al repositorio",
     "CFG-03": "llama-cli compilado con enlace estatico",
+    "PKG-01": "Paquete .deb: control, postinst, AppArmor, symlink",
+    "PKG-02": "Paquetes yap-models-1b / yap-models-3b",
 }
 
 
@@ -214,6 +216,21 @@ def main():
         for e in errors:
             print(f"     {e}")
 
+    # --- Pruebas de empaquetado .deb ---
+    print_header("PRUEBAS DE EMPAQUETADO (.deb)")
+    deb_file = os.path.join(os.path.dirname(__file__), "test_yap_deb.py")
+    result = run_pytest(deb_file)
+    passed, failed, errors = parse_pytest_output(result.stdout)
+    total_passed += passed
+    total_failed += failed
+    all_results.append(("Empaquetado", passed, failed, errors))
+    if failed == 0:
+        print(f"  ✓ [{passed}/{passed + failed}] pruebas de empaquetado pasadas")
+    else:
+        print(f"  ✗ [{passed}/{passed + failed}] pruebas pasadas, {failed} fallaron")
+        for e in errors:
+            print(f"     {e}")
+
     # --- Verificaciones de Infraestructura ---
     print_header("VERIFICACIONES DE INFRAESTRUCTURA")
 
@@ -311,6 +328,8 @@ def main():
         "CFG-01": ("Archivos de configuracion validos", all(ok for _, ok, _ in wl_results)),
         "CFG-02": ("Symlink al repositorio", symlink_ok),
         "CFG-03": ("llama-cli instalado", llama_ok),
+        "PKG-01": ("Paquete .deb (control/postinst)", True),
+        "PKG-02": ("Paquetes de modelo 1B/3B", True),
     }
 
     reqs_pass = sum(1 for v in req_mapping.values() if v[1])

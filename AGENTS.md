@@ -148,14 +148,16 @@ Yap/
 ├── CONTRIBUTING.md        # Guía de contribución
 ├── GOVERNANCE.md          # Gobernanza de la organización
 ├── yap.py                 # Agente principal (~1253 líneas)
-├── setup.sh               # Instalador (compila llama.cpp, descarga modelo)
+├── setup.sh               # Instalador de desarrollo (compila llama.cpp, descarga modelo)
+├── build-deb.sh           # Genera paquetes .deb (issue #31)
+├── packaging/             # Plantillas DEBIAN (yap, yap-models-1b/3b)
 ├── deploy-yap.sh          # Despliegue masivo por SSH
 ├── whitelist/             # Apps y dominios permitidos
 │   ├── apps.conf
 │   └── web.conf
 ├── cursos/                # JSON de cursos (FPY1101, etc.)
 ├── tests/                 # Suite de tests (49+)
-├── docs/                  # ROADMAP, TRUNK-BASED, DEPLOY, SECURITY-AUDIT
+├── docs/                  # ROADMAP, PACKAGING, TRUNK-BASED, SECURITY-AUDIT
 ├── .github/
 │   ├── workflows/         # CI, pr-review, test, auto-release
 │   ├── adev/              # Políticas Hardness + agente reviewer

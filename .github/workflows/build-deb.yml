@@ -1,0 +1,135 @@
+# Yap — Build de paquetes .deb (issue #31)
+#
+# PR:     construye .deb con llama-cli stub + instalacion en Debian 12
+# Release: compila llama.cpp estatico y adjunta .deb al GitHub Release
+# Manual:  workflow_dispatch (compile real; opcional --embed-models)
+
+name: Build .deb
+
+on:
+  pull_request:
+    branches: [main, lowmem, ultra-lowmem]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      embed_models:
+        description: "Embeber GGUF en yap-models-*.deb (lento, ~2 GB de descarga)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-deb-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package-tests:
+    name: Tests de empaquetado
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: pytest tests/test_yap_deb.py
+        run: |
+          pip install pytest
+          python -m pytest tests/test_yap_deb.py -v --tb=short
+
+  build-stub:
+    name: Build .deb (stub llama-cli)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar dpkg-deb
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq dpkg-dev
+
+      - name: Generar paquetes
+        run: |
+          chmod +x build-deb.sh
+          ./build-deb.sh --stub-llama --outdir dist
+
+      - name: Subir artefactos
+        uses: actions/upload-artifact@v4
+        with:
+          name: yap-deb-stub
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  install-debian12:
+    name: Instalacion limpia (Debian 12)
+    needs: [build-stub]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Descargar .deb
+        uses: actions/download-artifact@v4
+        with:
+          name: yap-deb-stub
+          path: debs
+
+      - name: apt install yap en debian:bookworm
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD/debs:/debs:ro" \
+            -v "$PWD/packaging/test-install-debian.sh:/test-install-debian.sh:ro" \
+            debian:bookworm \
+            sh /test-install-debian.sh /debs
+
+  build-release:
+    name: Build .deb de release (llama.cpp real)
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependencias de compilacion
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential cmake git pkg-config dpkg-dev wget
+
+      - name: Compilar llama.cpp y generar .deb
+        run: |
+          chmod +x build-deb.sh
+          EXTRA=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.embed_models }}" = "true" ]; then
+            EXTRA="--embed-models all"
+          fi
+          ./build-deb.sh --outdir dist $EXTRA
+
+      - name: Subir artefactos
+        uses: actions/upload-artifact@v4
+        with:
+          name: yap-deb-release
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Adjuntar .deb al GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.deb
+          tag_name: ${{ github.event.release.tag_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

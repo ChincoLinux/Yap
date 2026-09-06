@@ -7,6 +7,7 @@ tests/
 ├── test_yap_security.py     # 25 pruebas de seguridad y configuracion
 ├── test_yap_functional.py   # 32 pruebas funcionales
 ├── test_yap_evaluacion.py   # Evaluacion automatica de actividades (#23)
+├── test_yap_deb.py          # empaquetado .deb (#31)
 ├── run_tests.py             # Ejecutor con reporte integrado
 ├── report/                  # Reportes generados (--report)
 └── README.md                # Este archivo
@@ -58,3 +59,5 @@ python3 tests/run_tests.py --vm --report
 | CFG-01 | Archivos de configuracion validos | `TestRealConfig` |
 | CFG-02 | Symlink al repositorio | `run_tests.py` (infraestructura) |
 | CFG-03 | llama-cli instalado | `run_tests.py` (infraestructura) |
+| PKG-01 | Plantillas DEBIAN y `build-deb.sh` | `TestYapDebianTemplates`, `TestBuildDebScript` |
+| PKG-02 | Paquetes de modelo 1B/3B | `TestModelPackages` |

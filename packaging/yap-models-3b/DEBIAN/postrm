@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+# postrm de yap-models-3b — solo en purge elimina el GGUF.
+# Conserva ~/.config/yap/ y no toca el modelo 1B.
+
+MODEL_FILE="/opt/yap/models/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+
+case "$1" in
+    purge)
+        rm -f "$MODEL_FILE" "$MODEL_FILE.part"
+        ;;
+esac
+
+exit 0
