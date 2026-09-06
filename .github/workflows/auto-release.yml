@@ -74,6 +74,7 @@ jobs:
           export RELEASE_VERSION PR_TITLE PR_NUMBER SECTION DATE
 
           python3 << 'PYEOF'
+          import os
           import re
 
           release_version = os.environ.get('RELEASE_VERSION', '0.0.0')
