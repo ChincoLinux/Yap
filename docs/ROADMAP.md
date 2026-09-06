@@ -30,7 +30,7 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 | 26 | Cursos adicionales — MAT1101, INF1101, TEL1101 | P1 | Planeado |
 | 27 | Sistema de ejercicios interactivos con validación automática | P1 | Planeado |
 | 28 | Adaptación de dificultad según progreso del estudiante | P2 | Planeado |
-| 29 | Feedback pedagógico estructurado (formativo vs sumativo) | P2 | Planeado |
+| 29 | Feedback pedagógico estructurado (formativo vs sumativo) | P2 | En revisión |
 | 30 | Exportación de progreso a PDF/CSV para el docente | P2 | Planeado |
 
 ### Fase 3 — Empaquetado para ChincoLinux OS (v1.3)
@@ -51,7 +51,7 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 |---|-------|-----------|--------|
 | 36 | i18n — soporte multi-idioma (español, inglés, mapudungun) | P2 | Planeado |
 | 37 | Accesibilidad — lector de pantalla, alto contraste, fuentes grandes | P2 | Planeado |
-| 38 | Telemetría local anónima — métricas de uso para mejorar el agente | P3 | Planeado |
+| 38 | Telemetría local anónima — métricas de uso para mejorar el agente | P3 | Parcial (1) |
 | 39 | Modo offline total — sin dependencia de red en ningún flujo | P1 | Planeado |
 | 40 | Benchmarks de rendimiento en hardware educativo real | P1 | Planeado |
 
@@ -74,6 +74,16 @@ Queda pendiente el daemon systemd:
 | Criterio pendiente | Motivo |
 |---|---|
 | Servicio systemd `yap-daemon` | Yap invoca `llama-cli` de nuevo en cada consulta, sin proceso persistente. Precargar el modelo exige migrar a `llama-server`, lo que excede una tarea de configuración post-install y merece issue propio |
+
+**(2) #38 — entrega parcial.** Los criterios de aceptación del issue están
+cubiertos: `telemetry.json`, comando `telemetria`, exportación anónima opt-in,
+garantía de no transmisión y pruebas. Quedan pendientes dos de las métricas
+descritas en la propuesta, por depender de trabajo que aún no está en `main`:
+
+| Métrica pendiente | Depende de |
+|---|---|
+| Tiempo promedio por sesión | #21 — control de sesiones |
+| Actividades con más reprobaciones | #23 — evaluación automática |
 
 ## Prioridades globales
 
