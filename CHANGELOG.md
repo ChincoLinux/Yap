@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [1.0.0] - 2026-09-06
+### Added
 - Feedback pedagógico estructurado (#29): distinción entre feedback formativo
   y sumativo, con pautas diferenciadas en el prompt del evaluador. Al cerrar
   una experiencia se muestra la nota junto a fortalezas y áreas por mejorar,
@@ -52,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Path traversal vulnerability en domain whitelist (#1)
 - Conversation history and context management (#2)
 - Graceful handling of blocked apps (#3)
+- fix: fallos de CI y scripts (#81) (#76)
 
 ## [1.0.0-beta] - 2026-06-17
 
