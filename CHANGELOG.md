@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Menú numerado seleccionable y rutas de teclado (#59): escribir el número de
+  una opción ejecuta su acción, y `abre`, `busca`, `pseint` y el tutorial de
+  PSeInt se enrutan sin invocar al clasificador. El menú pasa a ser la fuente
+  única de la numeración mostrada y la enrutada
 - Control de sesiones dentro del agente (#21): crear, pausar, retomar, cerrar y
   listar sesiones, con límite de 3 abiertas, prompt marcado con la sesión activa
   y archivado en el historial al cerrar
@@ -34,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `auto-merge.yml`: workflow dedicado de auto-merge (reemplazado por auto-merge nativo de GitHub)
 
 ### Fixed
+- La telemetría contabilizaba el uso de `sesion` como consulta genérica al AI,
+  porque la acción faltaba en `ACCIONES_CONOCIDAS` (introducido en #38)
 - `nota_chilena()` no redondea puntajes en [59.1, 60) a 4.0
 - Fallback de evaluación trata "no es correcto" / "no esta correcto" como reprobado
 - Parser JSON reconcilia `aprobado` y `puntaje` para que no se apruebe con 2.0 ni se repruebe con nota de aprobación

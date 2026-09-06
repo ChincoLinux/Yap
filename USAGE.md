@@ -308,6 +308,47 @@ yap telemetria desactivar
 Los contadores dejan de incrementarse de inmediato. Los datos previos se
 conservan hasta que ejecutes `yap telemetria borrar`.
 
+## Menu numerado
+
+Al abrir el modo interactivo, cada opcion lleva un numero y puedes escribirlo
+en lugar del comando completo:
+
+```
+  [5] Curso FPY1101 — plan de estudio
+  [8] Sesion — estado, pausar, retomar o cerrar sesion
+
+Chinco > 5
+```
+
+Las opciones que necesitan que escribas algo —abrir una app, buscar un tema o
+consultar al tutor— no se ejecutan solas: al pulsar su numero te indican como
+usarlas.
+
+```
+Chinco > 2
+Escribe 'abre' y el nombre. Por ejemplo: abre firefox
+```
+
+Un numero fuera del rango del menu se trata como una consulta normal, asi que
+puedes seguir preguntando cosas como `cuanto es 7 por 8` sin que se interprete
+como una seleccion.
+
+## Ordenes directas
+
+Estas ordenes se reconocen por palabra clave y no dependen del modelo, de modo
+que funcionan siempre:
+
+| Escribe | Hace |
+|---------|------|
+| `abre firefox` / `abrir firefox` | Abre una aplicacion de la whitelist |
+| `busca [tema]` / `buscar [tema]` | Busca en Wikipedia y resume |
+| `pseint [duda]` / `tutor pseint [duda]` | Consulta al tutor de PSeInt |
+| `aprender pseint` / `ejercicios pseint` | Inicia el tutorial interactivo |
+| `curso FPY1101` | Abre el plan del curso |
+| `sesion`, `telemetria`, `historial`, `progreso`, `guia`, `ayuda` | Comandos directos |
+
+Cualquier otra cosa se interpreta como una pregunta al asistente.
+
 ## Ramas de configuracion
 
 | Rama | RAM | Modelo | Uso |
