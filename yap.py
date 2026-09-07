@@ -1285,25 +1285,8 @@ def cmd_telemetria(sub="", param=""):
     return display_box(AYUDA_TELEMETRIA, color="YELLOW")
 
 
-def cargar_perfil():
-    path = PROFILE_FILE
-    if not os.path.exists(path):
-        return None
-    try:
-        with open(path) as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return None
-
-def guardar_perfil(perfil):
-    path = PROFILE_FILE
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(perfil, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, path)
-
 def run_onboarding():
+    """Interactive onboarding for first-time users (#22)."""
     sys.stdout.write(f"{C['GREEN']} ¡Bienvenido a Yap! Tu asistente y tutor personal {C['RESET']}\n")
     
     print(f"{C['YELLOW']}1. ¿Qué es Yap?{C['RESET']}")
@@ -1329,11 +1312,11 @@ def run_onboarding():
     if not nombre:
         nombre = "Estudiante"
         
-    perfil = {
-        "nombre": nombre,
-        "onboarding_completed": True,
-        "primer_uso": _now_iso()
-    }
+    # Use cargar_perfil() to get a full profile with all defaults,
+    # then update the name and mark onboarding as completed.
+    perfil = cargar_perfil()
+    perfil["nombre"] = nombre
+    perfil["onboarding_completed"] = True
     guardar_perfil(perfil)
     
     print(f"\n¡Listo, {nombre}! Ya puedes empezar a explorar.")
@@ -3076,7 +3059,7 @@ def main():
         atexit.register(_save_history_session)
 
         perfil = cargar_perfil()
-        if not perfil:
+        if not perfil.get("onboarding_completed"):
             perfil = run_onboarding()
         else:
             nombre = perfil.get('nombre', 'Estudiante')
