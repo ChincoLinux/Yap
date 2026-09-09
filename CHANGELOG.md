@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Super Yap se activa solo si hay **≥7000 MB de RAM libre** y el destino es
   `137.184.146.113:8742` (host nube pin). Cualquier otra IP pública sigue
   bloqueada. `YAP_SUPER_ENABLED=0` fuerza el Yap local.
+- Super Yap en Cloud Run (Gradio 5 `/chat`): el Yap local usa `urllib`
+  (sin `requests`) contra el host pin `*.southamerica-west1.run.app`.
+  `super on` / `super off` cambian el motor desde el menú. Si el LLM local
+  tarda (>40 s), se pasa de ~1200 tokens o hay timeout, se consulta Super
+  Yap. Fallback local si la nube no responde.
 
 ### Changed
 

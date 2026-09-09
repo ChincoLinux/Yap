@@ -263,7 +263,7 @@ El proyecto mantiene **tres ramas** con distintos perfiles de consumo de RAM y c
 | **lowmem** | 3B Q4_K_M (2.0 GB) | 2048 | Q8_0 | ~3.1 GB | 6 GB RAM |
 | **ultra-lowmem** | 1B Q4_K_M (0.81 GB) | 2048 | Q8_0 | ~1.8 GB | 3-4 GB RAM |
 
-**Super Yap** (opt-in, issue #91) corre un Llama 3.1 8B Instruct Q4_K_M (~7 GB) en un PC del aula con 8 GB y se comunica con el Yap local **sin perder el historial**. Ver [docs/SUPER-YAP.md](docs/SUPER-YAP.md).
+**Super Yap** (opt-in, issue #91) corre un Llama 3.1 8B Instruct Q4_K_M (~7 GB) en un PC del aula con 8 GB **o** en Cloud Run (Gradio `/chat`) y se comunica con el Yap local **sin perder el historial**. `super on` / `super off` cambian el motor; si el local tarda o se pasa de tokens, se usa Super Yap. Ver [docs/SUPER-YAP.md](docs/SUPER-YAP.md).
 
 ### 7.1 Cambio entre ramas
 

@@ -84,7 +84,7 @@ Comandos arbitrarios · red fuera de whitelist · instalar/eliminar software · 
 | `ultra-lowmem` | 1B Q4_K_M | 2048 | Q8_0 | ~1.8GB | 2 |
 | Super Yap (`super_yap.py`) | 8B Q4_K_M (Llama 3.1 Instruct) | 4096 | Q8_0 | ~6.5–7.5GB | 4 |
 
-Super Yap es opt-in (`YAP_SUPER_ENABLED=1`): el alumno sigue en 1B/3B; el host de 8 GB responde consultas largas reenviando `HISTORY`. Ver `docs/SUPER-YAP.md`.
+Super Yap es opt-in (`YAP_SUPER_ENABLED=1` o auto en Gradio Cloud Run): el alumno sigue en 1B/3B; el host de 8 GB o la nube Gradio responden consultas largas, con timeout o `super on`, reenviando `HISTORY`. Ver `docs/SUPER-YAP.md`.
 
 El hook `.githooks/post-checkout` informa del cambio de modelo al hacer `git checkout`.
 

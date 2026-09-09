@@ -89,16 +89,31 @@ LLAMA_TEMP_CLASSIFY = float(os.environ.get("YAP_LLAMA_TEMP_CLASSIFY", "0.1"))
 # Llama 3.2 texto maximo es 3B. Super Yap usa Llama 3.1 8B Instruct
 # Q4_K_M (misma plantilla de chat) que cabe en ~7 GB con ctx 4096.
 SUPER_MODEL_NAME = os.environ.get("YAP_SUPER_MODEL", "Llama-3.1-8B-Instruct-Q4_K_M")
-# Host fijo de Super Yap en la nube. "puerto" en el aula = esta IP; el
-# contrato HTTP usa 8742. Cualquier otra IP publica sigue bloqueada.
-SUPER_NUBE_HOST = "137.184.146.113"
-SUPER_NUBE_PORT = 8742
-SUPER_DEFAULT_ENDPOINT = f"http://{SUPER_NUBE_HOST}:{SUPER_NUBE_PORT}/v1/query"
+# Host Gradio en Cloud Run (chat publico /chat). Pin exacto, sin DNS.
+# La IP 137.184.146.113 sigue permitida para el contrato HTTP /v1/query.
+SUPER_GRADIO_HOST = (
+    "genai-app-superyap-1-1788986315174-114418439872"
+    ".southamerica-west1.run.app"
+)
+SUPER_NUBE_HOST_LEGACY = "137.184.146.113"
+SUPER_NUBE_HOST = SUPER_GRADIO_HOST
+SUPER_NUBE_HOSTS = (SUPER_GRADIO_HOST, SUPER_NUBE_HOST_LEGACY)
+SUPER_NUBE_PORT = 443
+SUPER_NUBE_PORT_LEGACY = 8742
+SUPER_DEFAULT_ENDPOINT = f"https://{SUPER_GRADIO_HOST}"
+# ponytail: clave de invocacion Cloud Run del laboratorio; override con
+# YAP_SUPER_TOKEN / YAP_SUPER_TOKEN_FILE. No se imprime ni va al historial.
+SUPER_NUBE_KEY_DEFAULT = "Rz6IDgPK6w5kfTRGJzQG3rgscJXoxEQr"
 SUPER_TOKEN_FILE = f"{CONFIG_DIR}/super-token"
 SUPER_HISTORY_MAX = 8
 SUPER_PROMPT_MAX = 4000
 SUPER_RESPUESTA_MAX = 8000
 SUPER_RAM_MIN_MB = 7000
+# Estimacion grosera (chars/4). El local usa ctx 2048 y -n 384.
+SUPER_TOKEN_LOCAL_MAX = 1200
+SUPER_LOCAL_TIMEOUT = 120
+SUPER_LOCAL_TIMEOUT_NUBE = 40
+SUPER_GRADIO_HTML_MAX = 2 * 1024 * 1024
 SUPER_HINTS = (
     "explica", "explique", "diferencia", "compara", "genera", "rubrica",
     "rúbrica", "por que", "por qué", "razon", "razón", "analisis",
@@ -107,6 +122,8 @@ SUPER_HINTS = (
 _RE_SUPER_HOME = re.compile(r"(?i)(/home/|/Users/)[^\s/]+")
 _RE_SUPER_EMAIL = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
 _SUPER_ESTADO = "local"  # local | super | degradado
+_SUPER_MODO = "auto"     # auto | super | local  (menu: super on / super off)
+_GRADIO_CACHE = {}
 
 BOS = "<|begin_of_text|>"
 HEADER = "<|start_header_id|>"
@@ -934,10 +951,14 @@ def session_banner():
 def session_prompt():
     """Interactive prompt, tagged with the active session id when there is one."""
     activa = _sesion_activa(_load_sessions())
+    marca_super = ""
+    if _SUPER_MODO == "super":
+        marca_super = f"{C['CYAN']}[SUPER]{C['RESET']} "
     if activa:
         return (f"{C['GREEN']}Chinco{C['RESET']} "
-                f"{C['GRAY']}[S{activa['id']}]{C['RESET']} > ")
-    return f"{C['GREEN']}Chinco{C['RESET']} > "
+                f"{C['GRAY']}[S{activa['id']}]{C['RESET']} "
+                f"{marca_super}> ")
+    return f"{C['GREEN']}Chinco{C['RESET']} {marca_super}> "
 
 
 def _linea_sesion(s):
@@ -1105,7 +1126,7 @@ TELEMETRY_VERSION = 1
 ACCIONES_CONOCIDAS = (
     "open_app", "search", "webfetch", "pseint", "introduccion_pseint",
     "curso", "guia", "progreso", "historial", "apparmor_status",
-    "telemetria", "help", "query", "super", "super_query",
+    "telemetria", "help", "query", "super", "super_query", "super_modo",
 )
 
 # Nombres legibles para el resumen
@@ -1125,6 +1146,7 @@ ACCIONES_NOMBRES = {
     "query": "Consulta directa al AI",
     "super": "Estado de Super Yap",
     "super_query": "Consulta a Super Yap (8B)",
+    "super_modo": "Cambiar a Super Yap o al Yap local",
 }
 
 
@@ -2746,13 +2768,17 @@ def _super_flag(nombre):
 
 
 def _super_habilitado():
-    """Env on/off, or auto: ≥7 GB libres AND host Super Yap (137.184.146.113)."""
+    """Env on/off, or auto: Gradio nube, or ≥7 GB + host Super Yap pin."""
     raw = os.environ.get("YAP_SUPER_ENABLED", "").strip().lower()
     if raw in ("0", "false", "no", "off"):
         return False
     if raw in ("1", "true", "si", "sí", "yes", "on"):
         return True
-    return ram_suficiente_super() and _host_es_super_nube(_super_endpoint())
+    url = _super_endpoint()
+    # El 8B de Gradio vive en Cloud Run: el PC del alumno no necesita 7 GB.
+    if _host_es_super_gradio(url):
+        return True
+    return ram_suficiente_super() and _host_es_super_nube(url)
 
 
 def _parse_meminfo_disponible_mb(texto):
@@ -2854,9 +2880,14 @@ def _super_token():
     path = os.environ.get("YAP_SUPER_TOKEN_FILE", SUPER_TOKEN_FILE)
     try:
         with open(path, encoding="utf-8") as f:
-            return f.read().strip()
+            token = f.read().strip()
+        if token:
+            return token
     except OSError:
-        return ""
+        pass
+    if _host_es_super_gradio(_super_endpoint()):
+        return SUPER_NUBE_KEY_DEFAULT
+    return ""
 
 
 def _super_hosts_extra():
@@ -2895,14 +2926,21 @@ def _host_es_loopback(url):
 
 
 def _host_es_super_nube(url):
-    """Exact pin of the Super Yap cloud host. No DNS, no other public IPs."""
+    """Exact pin of Super Yap cloud hosts. No DNS, no other public IPs."""
     parsed = urllib.parse.urlparse(url)
     host = (parsed.hostname or "").lower()
-    return host == SUPER_NUBE_HOST
+    return host in SUPER_NUBE_HOSTS
+
+
+def _host_es_super_gradio(url):
+    """Cloud Run Gradio chat. Pin exacto del hostname, no *.run.app."""
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return host == SUPER_GRADIO_HOST
 
 
 def _host_super_permitido(url):
-    """Loopback, RFC1918, the pinned Super Yap IP, or YAP_SUPER_HOSTS."""
+    """Loopback, RFC1918, pinned Super Yap hosts, or YAP_SUPER_HOSTS."""
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme not in ("http", "https"):
         return False
@@ -2911,19 +2949,41 @@ def _host_super_permitido(url):
         return False
     if host in ("localhost", "127.0.0.1", "::1"):
         return True
-    if host == SUPER_NUBE_HOST:
+    if host in SUPER_NUBE_HOSTS:
         return True
     if host in _super_hosts_extra():
         return True
     return _ipv4_privado_o_loopback(host)
 
 
-def consulta_para_super(texto):
-    """Heuristic: long or high-reasoning prompts go to Super Yap."""
+def _estimar_tokens(texto):
+    """Aprox. tokens = chars/4. Sin tokenizer (stdlib-only)."""
+    return max(0, (len(texto or "") + 3) // 4)
+
+
+def _tokens_consulta_local(prompt, context=None):
+    n = _estimar_tokens(SYSTEM_PROMPT)
+    n += _estimar_tokens(prompt)
+    if context:
+        n += _estimar_tokens(context)
+    for user_msg, assistant_msg in HISTORY:
+        n += _estimar_tokens(user_msg) + _estimar_tokens(assistant_msg)
+    n += 384  # -n del llama-cli local
+    return n
+
+
+def _excede_tokens_local(prompt, context=None):
+    return _tokens_consulta_local(prompt, context) > SUPER_TOKEN_LOCAL_MAX
+
+
+def consulta_para_super(texto, context=None):
+    """Heuristic: long, high-reasoning or over-token prompts go to Super Yap."""
     t = (texto or "").strip().lower()
     if len(t) >= 80:
         return True
-    return any(h in t for h in SUPER_HINTS)
+    if any(h in t for h in SUPER_HINTS):
+        return True
+    return _excede_tokens_local(texto, context=context)
 
 
 def _sanitizar_texto_super(texto, limite=SUPER_PROMPT_MAX):
@@ -3025,14 +3085,225 @@ def super_configurada():
     return bool(_super_token())
 
 
-def debe_delegar_super(texto):
-    return _super_habilitado() and super_configurada() and consulta_para_super(texto)
+def _super_disponible():
+    return _super_habilitado() and super_configurada() and _SUPER_MODO != "local"
+
+
+def debe_delegar_super(texto, context=None):
+    if not _super_disponible():
+        return False
+    if _SUPER_MODO == "super":
+        return True
+    return consulta_para_super(texto, context=context)
+
+
+def _local_llama_timeout():
+    raw = os.environ.get("YAP_LLAMA_TIMEOUT", "").strip()
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+    if _super_disponible():
+        return SUPER_LOCAL_TIMEOUT_NUBE
+    return SUPER_LOCAL_TIMEOUT
+
+
+def _gradio_reset_cache():
+    _GRADIO_CACHE.clear()
+
+
+def _gradio_query_params():
+    token = _super_token()
+    if token:
+        return {"key": token}
+    return {}
+
+
+def _gradio_url(base, path, extra=None):
+    params = dict(_gradio_query_params())
+    if extra:
+        params.update(extra)
+    url = base.rstrip("/") + path
+    if params:
+        url = url + "?" + urllib.parse.urlencode(params)
+    return url
+
+
+def _descubrir_gradio(html, fallback_root):
+    """Parse window.gradio_config / gradio_api_info from the Gradio 5 HTML."""
+    if "gradio_config" not in html and "gradio_api_info" not in html:
+        return None, None, None, "La web no devolvio la app Gradio esperada"
+    root_m = re.search(r'"root"\s*:\s*"([^"]+)"', html)
+    prefix_m = re.search(r'"api_prefix"\s*:\s*"([^"]+)"', html)
+    root_url = (root_m.group(1) if root_m else fallback_root).rstrip("/")
+    api_prefix = prefix_m.group(1) if prefix_m else "/gradio_api"
+    parsed_root = urllib.parse.urlparse(root_url)
+    if parsed_root.scheme and not _host_super_permitido(root_url):
+        return None, None, None, "root Gradio no permitido"
+    fn_index = 6
+    for m in re.finditer(r'"api_name"\s*:\s*"chat"', html):
+        prev = html[max(0, m.start() - 250): m.start()]
+        ids = re.findall(r'"id"\s*:\s*(\d+)', prev)
+        if ids:
+            fn_index = int(ids[-1])
+            break
+    return root_url, api_prefix, fn_index, None
+
+
+def _extraer_texto_gradio(data):
+    """Unwrap Gradio 5 /chat output (str, chatbot rows, or add-tuples)."""
+    if data is None:
+        return ""
+    if isinstance(data, str):
+        return data.strip()
+    if not isinstance(data, list) or not data:
+        return str(data).strip() if data else ""
+    first = data[0]
+    if isinstance(first, str):
+        return first.strip()
+    if isinstance(first, dict):
+        for key in ("text", "texto", "content", "value"):
+            val = first.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+        return ""
+    if isinstance(first, list):
+        partes = []
+        for item in first:
+            if isinstance(item, str):
+                partes.append(item)
+            elif (
+                isinstance(item, list)
+                and item
+                and item[0] == "add"
+                and len(item) >= 3
+                and isinstance(item[2], str)
+            ):
+                partes.append(item[2])
+            elif isinstance(item, dict):
+                for key in ("text", "content", "value"):
+                    val = item.get(key)
+                    if isinstance(val, str) and val.strip():
+                        partes.append(val)
+                        break
+        return "".join(partes).strip()
+    return str(first).strip()
+
+
+def _leer_sse_gradio(resp):
+    """Read Gradio 5 sse_v3 until process_completed / close_stream."""
+    resultado = None
+    error = None
+    lineas = 0
+    while lineas < 4000:
+        raw = resp.readline()
+        if not raw:
+            break
+        lineas += 1
+        if isinstance(raw, bytes):
+            line = raw.decode("utf-8", errors="replace")
+        else:
+            line = raw
+        line = line.strip()
+        if not line or not line.startswith("data:"):
+            continue
+        try:
+            msg = json.loads(line[5:].strip())
+        except json.JSONDecodeError:
+            continue
+        kind = msg.get("msg")
+        if kind == "process_completed":
+            out = msg.get("output") or {}
+            if out.get("error"):
+                error = str(out["error"])
+                break
+            resultado = out.get("data")
+            break
+        if kind == "unexpected_error":
+            error = str(msg.get("message") or msg)
+            break
+        if kind == "close_stream":
+            break
+    return resultado, error
+
+
+def _historial_gradio():
+    """Chatbot State: lista [user, assistant] para no perder el hilo."""
+    pares = []
+    for user_msg, assistant_msg in HISTORY[-SUPER_HISTORY_MAX:]:
+        pares.append([
+            _sanitizar_texto_super(user_msg, 500),
+            _sanitizar_texto_super(assistant_msg, 500),
+        ])
+    return pares
+
+
+def _post_super_gradio(payload):
+    """Gradio 5: GET / → POST /gradio_api/queue/join → GET /queue/data (SSE)."""
+    url = _super_endpoint()
+    parsed = urllib.parse.urlparse(url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+    headers = {"User-Agent": "Yap-ChincoLinux/1.0"}
+    pregunta = payload.get("prompt") or payload.get("message") or ""
+    try:
+        root_url = _GRADIO_CACHE.get("root_url")
+        api_prefix = _GRADIO_CACHE.get("api_prefix")
+        fn_index = _GRADIO_CACHE.get("fn_index")
+        if not root_url or api_prefix is None or fn_index is None:
+            req = urllib.request.Request(_gradio_url(base, "/"), headers=headers)
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                html = resp.read(SUPER_GRADIO_HTML_MAX).decode("utf-8", errors="replace")
+            root_url, api_prefix, fn_index, err = _descubrir_gradio(html, base)
+            if err:
+                return None, err
+            _GRADIO_CACHE["root_url"] = root_url
+            _GRADIO_CACHE["api_prefix"] = api_prefix
+            _GRADIO_CACHE["fn_index"] = fn_index
+        session_hash = os.urandom(16).hex()
+        join_body = json.dumps({
+            "data": [{"text": pregunta, "files": []}, _historial_gradio()],
+            "fn_index": fn_index,
+            "session_hash": session_hash,
+        }).encode("utf-8")
+        join_headers = dict(headers)
+        join_headers["Content-Type"] = "application/json"
+        join_req = urllib.request.Request(
+            _gradio_url(root_url, f"{api_prefix}/queue/join"),
+            data=join_body,
+            method="POST",
+            headers=join_headers,
+        )
+        with urllib.request.urlopen(join_req, timeout=_super_timeout()) as join_resp:
+            join_resp.read(4096)
+        sse_timeout = max(180, _super_timeout())
+        sse_req = urllib.request.Request(
+            _gradio_url(
+                root_url,
+                f"{api_prefix}/queue/data",
+                extra={"session_hash": session_hash},
+            ),
+            headers={**headers, "Accept": "text/event-stream"},
+        )
+        with urllib.request.urlopen(sse_req, timeout=sse_timeout) as sse:
+            data, err = _leer_sse_gradio(sse)
+        if err:
+            return None, err
+        texto = _extraer_texto_gradio(data)
+        if not texto:
+            return None, "respuesta vacia"
+        return {"texto": texto[:SUPER_RESPUESTA_MAX], "modelo": SUPER_MODEL_NAME}, None
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError) as err:
+        _gradio_reset_cache()
+        return None, str(err)
 
 
 def _post_super(payload):
     url = _super_endpoint()
     if not _host_super_permitido(url):
         return None, "host no permitido"
+    if _host_es_super_gradio(url):
+        return _post_super_gradio(payload)
     body = json.dumps(payload).encode("utf-8")
     headers = {"Content-Type": "application/json", "User-Agent": "Yap-ChincoLinux/1.0"}
     token = _super_token()
@@ -3061,21 +3332,34 @@ def cmd_super_status():
         ram_txt = "no se pudo medir"
     else:
         ram_txt = f"{ram} MB ({ram / 1024:.1f} GB)"
-    ram_veredicto = "si — se puede usar Super Yap" if ram_ok else (
-        f"no — se necesitan ≥{SUPER_RAM_MIN_MB} MB libres"
-    )
+    if _host_es_super_gradio(url):
+        ram_veredicto = "no aplica (8B en Cloud Run)"
+    else:
+        ram_veredicto = "si — se puede usar Super Yap" if ram_ok else (
+            f"no — se necesitan ≥{SUPER_RAM_MIN_MB} MB libres"
+        )
+    modo_txt = {
+        "super": "super (todas las consultas)",
+        "local": "local (sin Super Yap)",
+        "auto": "auto (largo / tokens / timeout)",
+    }.get(_SUPER_MODO, _SUPER_MODO)
+    proto = "Gradio /chat" if _host_es_super_gradio(url) else "HTTP /v1/query"
+    port = parsed.port or (443 if parsed.scheme == "https" else SUPER_NUBE_PORT_LEGACY)
     lines = [
         display_header("Super Yap"),
         f"  Estado:     {etiqueta_motor()}",
-        f"  Habilitada: {'si' if habilitada else 'no'} (env o auto: 7 GB + {SUPER_NUBE_HOST})",
+        f"  Modo:       {modo_txt}",
+        f"  Habilitada: {'si' if habilitada else 'no'} (env, Gradio nube o auto 7 GB)",
         f"  Modelo:     {SUPER_MODEL_NAME}",
-        f"  Host:       {parsed.hostname or '(vacio)'}:{parsed.port or SUPER_NUBE_PORT}",
-        f"  Nube:       {'si' if _host_es_super_nube(url) else 'no'} ({SUPER_NUBE_HOST}:{SUPER_NUBE_PORT})",
+        f"  Host:       {parsed.hostname or '(vacio)'}:{port}",
+        f"  Protocolo:  {proto}",
+        f"  Nube:       {'si' if _host_es_super_nube(url) else 'no'}",
         f"  Permitido:  {'si' if host_ok else 'no'} (loopback / LAN / host nube)",
         f"  RAM libre:  {ram_txt}",
         f"  RAM 7 GB:   {ram_veredicto}",
         f"  Token:      {'presente' if token_ok else 'no'}",
         f"  Historial:  {len(HISTORY)} turnos locales se reenvian (max {SUPER_HISTORY_MAX})",
+        f"  {C['GRAY']}'super on' usa Super Yap; 'super off' vuelve al local.{C['RESET']}",
         f"  {C['GRAY']}El token nunca se imprime. Ver docs/SUPER-YAP.md{C['RESET']}",
     ]
     if loopback and habilitada and not ram_ok:
@@ -3085,11 +3369,41 @@ def cmd_super_status():
     return "\n".join(lines)
 
 
-def cmd_query_super(prompt, context=None, store_history=True):
+def cmd_super_modo(valor):
+    """Menu: super on / super off. Session-level, no persiste."""
+    global _SUPER_MODO
+    v = (valor or "").strip().lower()
+    if v in ("on", "activar", "super", "nube", "1"):
+        _SUPER_MODO = "super"
+        if not _super_habilitado() or not super_configurada():
+            return (
+                f"{C['YELLOW']}Super Yap pedido, pero no esta configurado. "
+                f"Revisa 'super' (estado).{C['RESET']}"
+            )
+        return (
+            f"{C['CYAN']}Super Yap activado.{C['RESET']} "
+            "Las consultas van a la nube. Escribe 'super off' para volver al local."
+        )
+    if v in ("off", "local", "auto", "0"):
+        _SUPER_MODO = "auto"
+        _actualizar_estado_super(False)
+        return (
+            f"{C['GREEN']}Yap local activado.{C['RESET']} "
+            "Super Yap solo en consultas largas, muchos tokens, timeout o 'super <pregunta>'."
+        )
+    return cmd_super_status()
+
+
+def cmd_query_super(prompt, context=None, store_history=True, skip_local=False):
     """Delegate to Super Yap with local HISTORY; fall back to llama local."""
     if not _super_habilitado() or not super_configurada():
         _actualizar_estado_super(False)
-        local = cmd_query(prompt, context=context, store_history=store_history)
+        if skip_local:
+            return "[WARN] Super Yap no disponible."
+        local = cmd_query(
+            prompt, context=context, store_history=store_history,
+            allow_super_fallback=False,
+        )
         url = _super_endpoint()
         if (
             _super_habilitado()
@@ -3109,8 +3423,13 @@ def cmd_query_super(prompt, context=None, store_history=True):
     texto = _texto_respuesta_super(data) if data is not None else None
     if not texto or texto.startswith("[ERROR]"):
         _actualizar_estado_super(False)
-        local = cmd_query(prompt, context=context, store_history=store_history)
         motivo = err or (texto if texto else "respuesta vacia")
+        if skip_local:
+            return f"[WARN] Super Yap no disponible. ({motivo})"
+        local = cmd_query(
+            prompt, context=context, store_history=store_history,
+            allow_super_fallback=False,
+        )
         return f"[WARN] Super Yap no disponible, usando LLM local. ({motivo})\n{local}"
     _actualizar_estado_super(True)
     out = texto[:SUPER_RESPUESTA_MAX]
@@ -3130,7 +3449,32 @@ def _clean_output(result):
     return out if out else (result.stderr.strip() or "(sin respuesta)")
 
 
-def cmd_query(prompt, context=None, store_history=True):
+def _responder_super_por_fallback(prompt, context, store_history, motivo):
+    """Local timeout / too many tokens → Super Yap. No reintenta el 1B/3B."""
+    out = cmd_query_super(
+        prompt, context=context, store_history=store_history, skip_local=True,
+    )
+    if out and not out.startswith("[WARN]") and not out.startswith("[ERROR]"):
+        return f"[INFO] {motivo} Respuesta de Super Yap:\n{out}"
+    return None
+
+
+def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=True):
+    if (
+        allow_super_fallback
+        and _super_disponible()
+        and (_SUPER_MODO == "super" or _excede_tokens_local(prompt, context))
+    ):
+        super_out = _responder_super_por_fallback(
+            prompt, context, store_history,
+            "La consulta supera los tokens del modelo local.",
+        )
+        if super_out:
+            return super_out
+        if _SUPER_MODO == "super":
+            # Modo menu: no bajar al 1B si Super fallo; el caller ya aviso.
+            pass
+
     parts = [BOS]
     parts.append(f"{HEADER}system{FOOTER}\n\n{_system_prompt()}{EOT}")
 
@@ -3160,8 +3504,9 @@ def cmd_query(prompt, context=None, store_history=True):
         "-no-cnv",
         "--no-display-prompt",
     ]
+    timeout_s = _local_llama_timeout()
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
         out = _clean_output(result)
         if store_history and out not in ("(sin respuesta)", ""):
             HISTORY.append((prompt, out))
@@ -3169,7 +3514,14 @@ def cmd_query(prompt, context=None, store_history=True):
                 HISTORY.pop(0)
         return out
     except subprocess.TimeoutExpired:
-        return "[WARN] Tiempo de espera agotado (120s)"
+        if allow_super_fallback and _super_disponible():
+            super_out = _responder_super_por_fallback(
+                prompt, context, store_history,
+                "El modelo local tardo demasiado.",
+            )
+            if super_out:
+                return super_out
+        return f"[WARN] Tiempo de espera agotado ({timeout_s}s)"
     except FileNotFoundError:
         return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
 
@@ -3425,11 +3777,23 @@ def interpret(user_input):
     if stripped in ("telemetria", "telemetría") or stripped.startswith(("telemetria ", "telemetría ")):
         partes = stripped.split(" ", 1)
         return "telemetria", partes[1].strip() if len(partes) > 1 else ""
-    # super | nube | super explica while  -> ("super", "") o ("super_query", ...)
+    # super | nube | super on | super explica while
     if stripped in ("super", "nube", "super yap", "superyap"):
         return "super", ""
+    if stripped in (
+        "super on", "super activar", "nube on", "nube activar",
+        "usar super", "cambiar a super", "cambiar a superyap",
+    ):
+        return "super_modo", "on"
+    if stripped in (
+        "super off", "super local", "nube off", "nube local",
+        "usar local", "cambiar a local",
+    ):
+        return "super_modo", "off"
     if stripped.startswith(("super ", "nube ")):
         pregunta = user_input.split(" ", 1)[1].strip()
+        if pregunta.lower() in ("on", "activar", "off", "local"):
+            return "super_modo", "on" if pregunta.lower() in ("on", "activar") else "off"
         if pregunta:
             return "super_query", pregunta
         return "super", ""
@@ -3533,7 +3897,7 @@ def main():
             "Sesion — estado, pausar, retomar o cerrar sesion",
 
             "Telemetria — ver tu uso de Yap (100% local)",
-            "Super / nube — Super Yap (Llama 8B, opt-in)",
+            "Super / nube — estado; 'super on' usa Super Yap; 'super off' vuelve al local",
             "Ayuda — lista de comandos",
             "Salir — Ctrl+C o 'salir'",
         ]))
@@ -3661,6 +4025,9 @@ def handle_action(action, param, original_input):
     elif action == "super":
         print(cmd_super_status())
 
+    elif action == "super_modo":
+        print(cmd_super_modo(param))
+
     elif action == "super_query":
         print("Consultando Super Yap...")
         print(cmd_query_super(param or original_input))
@@ -3686,7 +4053,9 @@ def handle_action(action, param, original_input):
 
         print("  Telemetria:    'telemetria' — resumen local de tu uso")
         print("  Super Yap:     'super' — estado del modelo 8B (opt-in)")
+        print("                 'super on' / 'super off' — usar Super Yap o volver al local")
         print("                 'super <pregunta>' — forzar Super Yap; si cae, LLM local")
+        print("                 Si el local tarda, se pasa de tokens o hay timeout, usa Super Yap")
         print("  Perfil:        'perfil' — ver tu perfil")
         print("  Actualizar:    'perfil nombre Maria' | 'perfil nivel basico' | 'perfil idioma es'")
         print()

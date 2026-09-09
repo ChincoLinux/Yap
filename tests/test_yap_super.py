@@ -14,10 +14,18 @@ import yap
 import super_yap
 
 
+def _json_endpoint():
+    return (
+        f"http://{yap.SUPER_NUBE_HOST_LEGACY}:{yap.SUPER_NUBE_PORT_LEGACY}/v1/query"
+    )
+
+
 class SuperTestBase:
     def setup_method(self):
         yap.HISTORY.clear()
         yap._SUPER_ESTADO = "local"
+        yap._SUPER_MODO = "auto"
+        yap._gradio_reset_cache()
         super_yap.SESIONES.clear()
         self._env_backup = {
             k: os.environ.get(k)
@@ -41,11 +49,13 @@ class SuperTestBase:
                 os.environ[k] = v
         yap.HISTORY.clear()
         yap._SUPER_ESTADO = "local"
+        yap._SUPER_MODO = "auto"
+        yap._gradio_reset_cache()
         super_yap.SESIONES.clear()
 
     def habilitar(self, endpoint=None, token=""):
         os.environ["YAP_SUPER_ENABLED"] = "1"
-        os.environ["YAP_SUPER_ENDPOINT"] = endpoint or yap.SUPER_DEFAULT_ENDPOINT
+        os.environ["YAP_SUPER_ENDPOINT"] = endpoint or _json_endpoint()
         if token:
             os.environ["YAP_SUPER_TOKEN"] = token
 
@@ -83,6 +93,11 @@ class TestConsultaParaSuper(SuperTestBase):
     def test_texto_largo_delega(self):
         assert yap.consulta_para_super("x" * 80) is True
 
+    def test_historial_largo_excede_tokens(self):
+        yap.HISTORY.extend([("u" * 400, "a" * 400) for _ in range(6)])
+        assert yap._excede_tokens_local("sigue") is True
+        assert yap.consulta_para_super("sigue") is True
+
 
 class TestHostSuperPermitido(SuperTestBase):
     def test_loopback_permitido(self):
@@ -91,8 +106,13 @@ class TestHostSuperPermitido(SuperTestBase):
 
     def test_host_nube_pin_permitido(self):
         assert yap._host_es_super_nube(yap.SUPER_DEFAULT_ENDPOINT) is True
+        assert yap._host_es_super_gradio(yap.SUPER_DEFAULT_ENDPOINT) is True
+        assert yap._host_super_permitido(yap.SUPER_DEFAULT_ENDPOINT) is True
         assert yap._host_super_permitido("http://137.184.146.113:8742/v1/query") is True
         assert yap._host_super_permitido("http://137.184.146.113:80/v1/query") is True
+
+    def test_run_app_ajeno_bloqueado(self):
+        assert yap._host_super_permitido("https://otro.southamerica-west1.run.app") is False
 
     def test_rfc1918_permitido(self):
         assert yap._host_super_permitido("http://10.40.0.10:8742/v1/query") is True
@@ -152,14 +172,15 @@ class TestDelegacion(SuperTestBase):
         assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
 
     def test_auto_con_7gb_y_host_nube_delega(self):
-        """≥7 GB libres + 137.184.146.113 activa Super Yap sin YAP_SUPER_ENABLED."""
-        os.environ["YAP_SUPER_RAM_MB"] = "8192"
+        """Gradio Cloud Run activa Super Yap sin YAP_SUPER_ENABLED ni 7 GB locales."""
+        os.environ["YAP_SUPER_RAM_MB"] = "1800"
         assert yap._super_habilitado() is True
         assert yap.super_configurada() is True
         assert yap.debe_delegar_super("explica la diferencia entre while y for") is True
 
-    def test_auto_sin_7gb_no_delega(self):
+    def test_auto_sin_7gb_en_ip_legacy_no_delega(self):
         os.environ["YAP_SUPER_RAM_MB"] = "3000"
+        os.environ["YAP_SUPER_ENDPOINT"] = _json_endpoint()
         assert yap._super_habilitado() is False
         assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
 
@@ -302,6 +323,12 @@ class TestInterpretSuper(SuperTestBase):
         assert yap.interpret("super") == ("super", "")
         assert yap.interpret("nube") == ("super", "")
 
+    def test_super_on_off_cambia_modo(self):
+        assert yap.interpret("super on") == ("super_modo", "on")
+        assert yap.interpret("super off") == ("super_modo", "off")
+        assert yap.interpret("usar super") == ("super_modo", "on")
+        assert yap.interpret("cambiar a local") == ("super_modo", "off")
+
     def test_super_pregunta_fuerza_super_query(self):
         action, param = yap.interpret("super explica while")
         assert action == "super_query"
@@ -339,6 +366,15 @@ class TestHandleActionSuper(SuperTestBase):
                 yap.handle_action("super_query", "explica", "super explica")
         cmd.assert_called_once()
 
+    def test_super_modo_on_off(self):
+        self.habilitar()
+        with patch("builtins.print"):
+            yap.handle_action("super_modo", "on", "super on")
+        assert yap._SUPER_MODO == "super"
+        with patch("builtins.print"):
+            yap.handle_action("super_modo", "off", "super off")
+        assert yap._SUPER_MODO == "auto"
+
 
 class TestCmdSuperStatus(SuperTestBase):
     def test_status_no_imprime_el_token(self):
@@ -349,6 +385,7 @@ class TestCmdSuperStatus(SuperTestBase):
         assert "presente" in out
         assert "RAM libre" in out
         assert "se puede usar Super Yap" in out
+        assert "Modo:" in out
 
     def test_status_avisa_si_faltan_7gb(self):
         self.habilitar(endpoint="http://127.0.0.1:8742/v1/query")
@@ -477,10 +514,146 @@ class TestDeteccionRam(SuperTestBase):
         srv.assert_not_called()
 
 
+def _gradio_html():
+    host = yap.SUPER_GRADIO_HOST
+    return (
+        "<html><script>window.gradio_config = {"
+        f'"root": "https://{host}", "api_prefix": "/gradio_api"'
+        '}; var x = {"id": 6, "api_name": "chat"};'
+        "</script></html>"
+    )
+
+
+def _urlopen_html(html, status=200):
+    resp = MagicMock()
+    resp.read.return_value = html.encode("utf-8")
+    resp.status = status
+    resp.readline.return_value = b""
+    resp.__enter__.return_value = resp
+    resp.__exit__.return_value = False
+    return resp
+
+
+def _urlopen_sse(texto="Hola desde Super Yap"):
+    payload = json.dumps({
+        "msg": "process_completed",
+        "output": {"data": [texto]},
+    })
+    lines = [
+        f"data: {payload}\n".encode("utf-8"),
+        b"",
+    ]
+    resp = MagicMock()
+    resp.read.return_value = b""
+    resp.readline.side_effect = lines
+    resp.status = 200
+    resp.__enter__.return_value = resp
+    resp.__exit__.return_value = False
+    return resp
+
+
+class TestGradioNube(SuperTestBase):
+    def test_extraer_texto_plano(self):
+        assert yap._extraer_texto_gradio(["Hola nube"]) == "Hola nube"
+
+    def test_extraer_texto_add_tuples(self):
+        data = [[["add", [], "parte1"], ["add", [], "parte2"]]]
+        assert yap._extraer_texto_gradio(data) == "parte1parte2"
+
+    def test_descubrir_fn_index_chat(self):
+        root, prefix, fn, err = yap._descubrir_gradio(_gradio_html(), "https://x")
+        assert err is None
+        assert prefix == "/gradio_api"
+        assert fn == 6
+        assert yap.SUPER_GRADIO_HOST in root
+
+    @patch("urllib.request.urlopen")
+    def test_chat_gradio_join_y_sse(self, mock_urlopen):
+        self.habilitar(endpoint=yap.SUPER_DEFAULT_ENDPOINT)
+        mock_urlopen.side_effect = [
+            _urlopen_html(_gradio_html()),
+            _urlopen_json({"event_id": "e1"}),
+            _urlopen_sse("Algoritmo EnLaNube"),
+        ]
+        out = yap.cmd_query_super("explica while", store_history=True)
+        assert "Algoritmo EnLaNube" in out
+        assert "[WARN]" not in out
+        assert mock_urlopen.call_count == 3
+        join_req = mock_urlopen.call_args_list[1][0][0]
+        assert "/queue/join" in join_req.full_url
+        assert "key=" in join_req.full_url
+        body = json.loads(join_req.data.decode("utf-8"))
+        assert body["data"][0]["text"] == "explica while"
+        assert "files" in body["data"][0]
+        sse_req = mock_urlopen.call_args_list[2][0][0]
+        assert "/queue/data" in sse_req.full_url
+        assert "session_hash=" in sse_req.full_url
+        assert yap.etiqueta_motor() == "SUPER"
+        assert yap.HISTORY[-1][0] == "explica while"
+
+    @patch("urllib.request.urlopen")
+    def test_clave_no_va_en_json_ni_en_historial(self, mock_urlopen):
+        self.habilitar(endpoint=yap.SUPER_DEFAULT_ENDPOINT)
+        mock_urlopen.side_effect = [
+            _urlopen_html(_gradio_html()),
+            _urlopen_json({"event_id": "e1"}),
+            _urlopen_sse("ok"),
+        ]
+        yap.cmd_query_super("explica", store_history=True)
+        join_req = mock_urlopen.call_args_list[1][0][0]
+        body = json.loads(join_req.data.decode("utf-8"))
+        blob = json.dumps(body)
+        assert yap.SUPER_NUBE_KEY_DEFAULT not in blob
+        assert yap.SUPER_NUBE_KEY_DEFAULT not in yap.HISTORY[-1][1]
+
+    def test_status_no_imprime_clave_gradio(self):
+        out = yap.cmd_super_status()
+        assert yap.SUPER_NUBE_KEY_DEFAULT not in out
+        assert "Gradio" in out or "gradio" in out.lower() or "chat" in out.lower()
+
+
+class TestFallbackLocalASuper(SuperTestBase):
+    @patch("yap.cmd_query_super", return_value="desde-nube")
+    @patch("subprocess.run")
+    def test_timeout_local_usa_super(self, mock_run, mock_super):
+        self.habilitar()
+        from subprocess import TimeoutExpired
+        mock_run.side_effect = TimeoutExpired("llama-cli", 40)
+        out = yap.cmd_query("hola", store_history=False)
+        mock_super.assert_called_once()
+        assert "desde-nube" in out
+        assert "modelo local tardo demasiado" in out.lower() or "tardo demasiado" in out
+
+    @patch("yap.cmd_query_super", return_value="desde-nube")
+    @patch("subprocess.run")
+    def test_tokens_de_mas_van_a_super(self, mock_run, mock_super):
+        self.habilitar()
+        yap.HISTORY.extend([("u" * 400, "a" * 400) for _ in range(6)])
+        out = yap.cmd_query("sigue", store_history=False)
+        mock_run.assert_not_called()
+        mock_super.assert_called_once()
+        assert "desde-nube" in out
+
+    @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    def test_modo_super_delega_aunque_sea_corta(self, _cls):
+        self.habilitar()
+        yap._SUPER_MODO = "super"
+        action, param = yap.interpret("hola")
+        assert action == "super_query"
+
+    @patch.object(yap, "classify_intent", return_value=("query", "explica while"))
+    def test_modo_local_no_delega_auto(self, _cls):
+        self.habilitar()
+        yap._SUPER_MODO = "local"
+        action, param = yap.interpret("explica la diferencia entre while y for")
+        assert action == "query"
+
+
 class TestNoImportsPeligrososSuper:
     def test_yap_sigue_sin_imports_prohibidos(self):
         with open(yap.__file__, encoding="utf-8") as f:
             source = f.read()
+        assert "import requests" not in source
         for line in source.split("\n"):
             if line.startswith("import ") or line.startswith("from "):
                 for peligroso in ("socket", "ctypes", "pickle", "base64", "codecs"):

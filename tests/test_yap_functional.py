@@ -209,9 +209,10 @@ class TestQuery:
         assert "Linux" in result
         assert "sistema operativo" in result
 
+    @patch("urllib.request.urlopen", side_effect=OSError("sin red"))
     @patch("subprocess.run")
-    def test_cmd_query_timeout(self, mock_run):
-        """Timeout debe devolver mensaje de advertencia."""
+    def test_cmd_query_timeout(self, mock_run, _red):
+        """Timeout debe devolver mensaje de advertencia (Super Yap no disponible)."""
         from subprocess import TimeoutExpired
         mock_run.side_effect = TimeoutExpired("llama-cli", 120)
         result = yap.cmd_query("test", store_history=False)

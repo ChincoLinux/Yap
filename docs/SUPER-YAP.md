@@ -81,17 +81,25 @@ python3 super_yap.py --info
 python3 super_yap.py --serve
 ```
 
-En el PC del alumno Super Yap se **activa solo** si hay **≥7 GB libres** y el
-destino es el host nube `137.184.146.113` (puerto HTTP **8742**):
+En el PC del alumno Super Yap en **Cloud Run (Gradio `/chat`)** se activa
+sin pedir 7 GB locales (el 8B vive en la nube). El contrato HTTP
+`137.184.146.113:8742` sigue permitido; ahí el auto-on sí exige ≥7 GB
+libres si el endpoint es esa IP.
 
 ```bash
-python3 yap.py super
+python3 yap.py super                 # estado
+python3 yap.py super on              # todas las consultas a Super Yap
+python3 yap.py super off             # vuelve al local (auto: largo/timeout)
 python3 yap.py super explica la diferencia entre while y for
 ```
 
-Endpoint por defecto: `http://137.184.146.113:8742/v1/query`.
+Endpoint por defecto: Gradio Cloud Run (hostname pin en `yap.py`).
 `YAP_SUPER_ENABLED=0` fuerza el Yap local. `YAP_SUPER_ENABLED=1` activa
 aunque el PC del alumno no tenga 7 GB (el 8B vive en ese host).
+
+Si el modelo local **tarda más de 40 s**, **se pasa del umbral de tokens**
+(~1200, ctx 2048 / `-n 384`) o hay **timeout**, Yap consulta Super Yap
+solo. Abrir apps, Wikipedia y webfetch nunca salen del kernel local.
 
 Opcional: dejar `llama-server` con el 8B cargado y apuntar Super Yap a él
 para no recargar el GGUF en cada consulta:
@@ -108,12 +116,13 @@ python3 super_yap.py --serve
 
 | Variable | Default | Rol |
 |---|---|---|
-| `YAP_SUPER_ENABLED` | auto | `1` fuerza on; `0` fuerza local. Vacío: on si ≥7 GB libres **y** host `137.184.146.113` |
-| `YAP_SUPER_ENDPOINT` | `http://137.184.146.113:8742/v1/query` | Loopback, LAN privada o el host nube pin |
+| `YAP_SUPER_ENABLED` | auto | `1` fuerza on; `0` fuerza local. Vacío: on si el host es Gradio Cloud Run, o si ≥7 GB libres **y** host pin |
+| `YAP_SUPER_ENDPOINT` | Gradio Cloud Run | Loopback, LAN, IP `137.184.146.113` o hostname Gradio pin |
 | `YAP_SUPER_HOSTS` | (vacío) | Hostnames extra del aula (coincidencia exacta, sin DNS) |
-| `YAP_SUPER_TOKEN` | (vacío) | Bearer. Obligatorio si el endpoint no es loopback |
+| `YAP_SUPER_TOKEN` | (clave Gradio) | `?key=` en Gradio; Bearer en `/v1/query`. Obligatorio si el endpoint no es loopback/pin |
 | `YAP_SUPER_TOKEN_FILE` | `/etc/yap/super-token` | Alternativa al env |
-| `YAP_SUPER_TIMEOUT` | `90` | Segundos del POST |
+| `YAP_SUPER_TIMEOUT` | `90` | Segundos del POST JSON; SSE Gradio usa ≥180 s |
+| `YAP_LLAMA_TIMEOUT` | `120` / `40` | Timeout del llama-cli local. Con Super disponible baja a 40 s |
 | `YAP_SUPER_MODEL_PATH` | (auto) | GGUF 8B, o 3B si el 8B no está |
 | `YAP_SUPER_BIND` | `127.0.0.1` | Loopback, LAN o `137.184.146.113`. Nunca `0.0.0.0` |
 | `YAP_SUPER_PORT` | `8742` | Puerto del contrato Yap |
@@ -129,19 +138,32 @@ El token no va en el repo ni en `~/.config/yap/` del estudiante.
 
 ```
 yap super                 # estado LOCAL / SUPER / DEGRADADO (sin secretos)
+yap super on              # menú: todas las consultas a Super Yap
+yap super off             # menú: volver al Yap local (auto)
 yap super <pregunta>      # forzar Super Yap; fallback local si cae
 yap nube                  # alias de super
 ```
 
-Las consultas largas o de razonamiento (`explica`, `diferencia`, `rúbrica`…)
-se delegan solas cuando Super Yap está configurado. Abrir apps, Wikipedia y
-webfetch **nunca** salen del kernel local.
+Las consultas largas, de razonamiento (`explica`, `diferencia`, `rúbrica`…),
+con muchos tokens o con timeout del 1B/3B se delegan solas cuando Super Yap
+está configurado. Abrir apps, Wikipedia y webfetch **nunca** salen del
+kernel local.
+
+## Protocolo Gradio (Cloud Run)
+
+`GET /` lee `window.gradio_config` (root, `api_prefix`, `fn_index` de
+`/chat`). Luego `POST {api_prefix}/queue/join` con
+`[{text, files: []}, historial]` y `GET {api_prefix}/queue/data` (SSE
+`process_completed`). Cliente en `yap.py` con `urllib` (stdlib); no hay
+`requests`. El contrato JSON `/v1/query` se usa si el endpoint no es el
+hostname Gradio.
 
 ## Seguridad
 
 - `yap.py` no importa `socket`. El cliente usa `urllib.request` como webfetch.
 - Hosts públicos (`8.8.8.8`, `googleapis.com`) están bloqueados.
-  Única excepción pin: `137.184.146.113` (Super Yap en la nube).
+  Excepciones pin: hostname Gradio Cloud Run y `137.184.146.113`.
+  No se permite `*.run.app` genérico.
 - Super Yap solo escucha en `127.0.0.1` o una IP RFC1918.
 - Super Yap **sugiere**; no abre apps ni ejecuta comandos.
 - Rutas `/home/...` y correos se sustituyen antes de salir del PC del alumno.
