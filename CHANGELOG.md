@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Super Yap (#91): proceso `super_yap.py` con Llama 3.1 8B Instruct Q4_K_M
+  (~7 GB, host de 8 GB) y puente HTTP con el Yap local. Cada consulta envía
+  el historial vivo (`HISTORY` + `session_id`) para no perder contexto; si
+  Super Yap cae, se usa el LLM local. Opt-in `YAP_SUPER_ENABLED=1`. Comandos
+  `super` / `nube`. Solo loopback o LAN privada; sin `socket` en `yap.py`.
 
 ### Changed
 

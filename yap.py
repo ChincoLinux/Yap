@@ -10,6 +10,7 @@ import json
 import glob
 import urllib.request
 import urllib.parse
+import urllib.error
 import re
 import atexit
 
@@ -83,6 +84,24 @@ LLAMA_THREADS = int(os.environ.get("YAP_LLAMA_THREADS", "2"))
 LLAMA_TEMP_QUERY = float(os.environ.get("YAP_LLAMA_TEMP_QUERY", "0.7"))
 LLAMA_TEMP_PSEINT = float(os.environ.get("YAP_LLAMA_TEMP_PSEINT", "0.5"))
 LLAMA_TEMP_CLASSIFY = float(os.environ.get("YAP_LLAMA_TEMP_CLASSIFY", "0.1"))
+
+# ── Super Yap (#91) — Llama 8B en host de 8 GB, opt-in ────────
+# Llama 3.2 texto maximo es 3B. Super Yap usa Llama 3.1 8B Instruct
+# Q4_K_M (misma plantilla de chat) que cabe en ~7 GB con ctx 4096.
+SUPER_MODEL_NAME = os.environ.get("YAP_SUPER_MODEL", "Llama-3.1-8B-Instruct-Q4_K_M")
+SUPER_DEFAULT_ENDPOINT = "http://127.0.0.1:8742/v1/query"
+SUPER_TOKEN_FILE = f"{CONFIG_DIR}/super-token"
+SUPER_HISTORY_MAX = 8
+SUPER_PROMPT_MAX = 4000
+SUPER_RESPUESTA_MAX = 8000
+SUPER_HINTS = (
+    "explica", "explique", "diferencia", "compara", "genera", "rubrica",
+    "rúbrica", "por que", "por qué", "razon", "razón", "analisis",
+    "análisis", "diseña", "disena", "paso a paso", "detalla",
+)
+_RE_SUPER_HOME = re.compile(r"(?i)(/home/|/Users/)[^\s/]+")
+_RE_SUPER_EMAIL = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+_SUPER_ESTADO = "local"  # local | super | degradado
 
 BOS = "<|begin_of_text|>"
 HEADER = "<|start_header_id|>"
@@ -1081,7 +1100,7 @@ TELEMETRY_VERSION = 1
 ACCIONES_CONOCIDAS = (
     "open_app", "search", "webfetch", "pseint", "introduccion_pseint",
     "curso", "guia", "progreso", "historial", "apparmor_status",
-    "telemetria", "help", "query",
+    "telemetria", "help", "query", "super", "super_query",
 )
 
 # Nombres legibles para el resumen
@@ -1099,6 +1118,8 @@ ACCIONES_NOMBRES = {
     "telemetria": "Telemetria",
     "help": "Ayuda",
     "query": "Consulta directa al AI",
+    "super": "Estado de Super Yap",
+    "super_query": "Consulta a Super Yap (8B)",
 }
 
 
@@ -2713,6 +2734,256 @@ def cmd_webfetch(url, feed_to_llm=False):
     return f"Contenido obtenido ({len(text)} chars):\n{text[:1000]}..."
 
 
+def _super_habilitado():
+    return os.environ.get("YAP_SUPER_ENABLED", "").strip().lower() in (
+        "1", "true", "si", "sí", "yes", "on",
+    )
+
+
+def _super_endpoint():
+    return os.environ.get("YAP_SUPER_ENDPOINT", SUPER_DEFAULT_ENDPOINT).strip() or SUPER_DEFAULT_ENDPOINT
+
+
+def _super_timeout():
+    raw = os.environ.get("YAP_SUPER_TIMEOUT", "").strip()
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+    return 90
+
+
+def _super_token():
+    token = os.environ.get("YAP_SUPER_TOKEN", "").strip()
+    if token:
+        return token
+    path = os.environ.get("YAP_SUPER_TOKEN_FILE", SUPER_TOKEN_FILE)
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def _super_hosts_extra():
+    return [
+        h.strip().lower()
+        for h in os.environ.get("YAP_SUPER_HOSTS", "").split(",")
+        if h.strip()
+    ]
+
+
+def _ipv4_privado_o_loopback(host):
+    """True for loopback / RFC1918 literals. No DNS, no socket."""
+    partes = host.split(".")
+    if len(partes) != 4:
+        return False
+    try:
+        octetos = [int(p) for p in partes]
+    except ValueError:
+        return False
+    if any(o < 0 or o > 255 for o in octetos):
+        return False
+    a, b = octetos[0], octetos[1]
+    if a == 127 or a == 10:
+        return True
+    if a == 192 and b == 168:
+        return True
+    if a == 172 and 16 <= b <= 31:
+        return True
+    return False
+
+
+def _host_es_loopback(url):
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return host in ("localhost", "127.0.0.1", "::1")
+
+
+def _host_super_permitido(url):
+    """Only loopback, RFC1918 literals, or exact names in YAP_SUPER_HOSTS."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+    if host in ("localhost", "127.0.0.1", "::1"):
+        return True
+    if host in _super_hosts_extra():
+        return True
+    return _ipv4_privado_o_loopback(host)
+
+
+def consulta_para_super(texto):
+    """Heuristic: long or high-reasoning prompts go to Super Yap."""
+    t = (texto or "").strip().lower()
+    if len(t) >= 80:
+        return True
+    return any(h in t for h in SUPER_HINTS)
+
+
+def _sanitizar_texto_super(texto, limite=SUPER_PROMPT_MAX):
+    t = str(texto or "")
+    t = _RE_SUPER_HOME.sub("[home]", t)
+    t = _RE_SUPER_EMAIL.sub("[correo]", t)
+    return t[:limite]
+
+
+def _session_meta_super():
+    """session_id / curso / ea from the active session, if any."""
+    meta = {"session_id": "", "curso": "", "ea": ""}
+    try:
+        activa = _sesion_activa(_load_sessions())
+    except (OSError, TypeError, ValueError):
+        return meta
+    if not activa:
+        return meta
+    sid = activa.get("id")
+    meta["session_id"] = f"S{sid}" if sid is not None else ""
+    meta["curso"] = activa.get("curso") or ""
+    meta["ea"] = activa.get("ea") or ""
+    return meta
+
+
+def _payload_super(prompt, context=None):
+    """Build the Yap contract. HISTORY is the source of truth."""
+    historial = []
+    for user_msg, assistant_msg in HISTORY[-SUPER_HISTORY_MAX:]:
+        historial.append({"rol": "user", "texto": _sanitizar_texto_super(user_msg, 500)})
+        historial.append({"rol": "assistant", "texto": _sanitizar_texto_super(assistant_msg, 500)})
+    mensaje = _sanitizar_texto_super(prompt)
+    if context:
+        mensaje = _sanitizar_texto_super(f"Contexto:\n{context}\n\n{prompt}")
+    meta = _session_meta_super()
+    return {
+        "intent": "query",
+        "model": SUPER_MODEL_NAME,
+        "prompt": mensaje,
+        "message": mensaje,
+        "historial": historial,
+        "session_id": meta["session_id"],
+        "curso": meta["curso"],
+        "ea": meta["ea"],
+        "request_id": "yap-" + _now_iso().replace(":", "").replace("-", "")[:15],
+    }
+
+
+def _texto_respuesta_super(data):
+    if not isinstance(data, dict):
+        if isinstance(data, str):
+            return data.strip()
+        return ""
+    for key in ("texto", "text", "content", "response", "output"):
+        val = data.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    choices = data.get("choices") or []
+    if choices and isinstance(choices[0], dict):
+        msg = choices[0].get("message") or {}
+        content = msg.get("content") if isinstance(msg, dict) else ""
+        if content:
+            return str(content).strip()
+    return ""
+
+
+def _actualizar_estado_super(ok):
+    global _SUPER_ESTADO
+    if not _super_habilitado():
+        _SUPER_ESTADO = "local"
+    elif ok:
+        _SUPER_ESTADO = "super"
+    else:
+        _SUPER_ESTADO = "degradado"
+
+
+def etiqueta_motor():
+    if not _super_habilitado():
+        return "LOCAL"
+    if _SUPER_ESTADO == "degradado":
+        return "DEGRADADO"
+    if _SUPER_ESTADO == "super":
+        return "SUPER"
+    return "LOCAL"
+
+
+def super_configurada():
+    if not _super_habilitado():
+        return False
+    url = _super_endpoint()
+    if not _host_super_permitido(url):
+        return False
+    if _host_es_loopback(url):
+        return True
+    return bool(_super_token())
+
+
+def debe_delegar_super(texto):
+    return _super_habilitado() and super_configurada() and consulta_para_super(texto)
+
+
+def _post_super(payload):
+    url = _super_endpoint()
+    if not _host_super_permitido(url):
+        return None, "host no permitido"
+    body = json.dumps(payload).encode("utf-8")
+    headers = {"Content-Type": "application/json", "User-Agent": "Yap-ChincoLinux/1.0"}
+    token = _super_token()
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    req = urllib.request.Request(url, data=body, method="POST", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=_super_timeout()) as resp:
+            raw = resp.read(SUPER_RESPUESTA_MAX + 1024)
+        data = json.loads(raw.decode("utf-8", errors="replace"))
+        return data, None
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError) as err:
+        return None, str(err)
+
+
+def cmd_super_status():
+    habilitada = _super_habilitado()
+    url = _super_endpoint()
+    host_ok = _host_super_permitido(url) if habilitada else False
+    token_ok = bool(_super_token())
+    parsed = urllib.parse.urlparse(url)
+    lines = [
+        display_header("Super Yap"),
+        f"  Estado:     {etiqueta_motor()}",
+        f"  Habilitada: {'si' if habilitada else 'no'} (YAP_SUPER_ENABLED)",
+        f"  Modelo:     {SUPER_MODEL_NAME}",
+        f"  Host:       {parsed.hostname or '(vacio)'}",
+        f"  Permitido:  {'si' if host_ok else 'no'} (solo loopback / LAN privada)",
+        f"  Token:      {'presente' if token_ok else 'no'}",
+        f"  Historial:  {len(HISTORY)} turnos locales se reenvian (max {SUPER_HISTORY_MAX})",
+        f"  {C['GRAY']}El token nunca se imprime. Ver docs/SUPER-YAP.md{C['RESET']}",
+    ]
+    return "\n".join(lines)
+
+
+def cmd_query_super(prompt, context=None, store_history=True):
+    """Delegate to Super Yap with local HISTORY; fall back to llama local."""
+    if not _super_habilitado() or not super_configurada():
+        _actualizar_estado_super(False)
+        return cmd_query(prompt, context=context, store_history=store_history)
+    payload = _payload_super(prompt, context=context)
+    data, err = _post_super(payload)
+    texto = _texto_respuesta_super(data) if data is not None else None
+    if not texto:
+        _actualizar_estado_super(False)
+        local = cmd_query(prompt, context=context, store_history=store_history)
+        motivo = err or "respuesta vacia"
+        return f"[WARN] Super Yap no disponible, usando LLM local. ({motivo})\n{local}"
+    _actualizar_estado_super(True)
+    out = texto[:SUPER_RESPUESTA_MAX]
+    if store_history and out not in ("(sin respuesta)", ""):
+        HISTORY.append((prompt, out))
+        if len(HISTORY) > MAX_HISTORY:
+            HISTORY.pop(0)
+    return out
+
+
 def _clean_output(result):
     """Strip BOS/EOT/header tokens from llama-cli stdout. Falls back to stderr."""
     out = result.stdout.strip()
@@ -3017,6 +3288,14 @@ def interpret(user_input):
     if stripped in ("telemetria", "telemetría") or stripped.startswith(("telemetria ", "telemetría ")):
         partes = stripped.split(" ", 1)
         return "telemetria", partes[1].strip() if len(partes) > 1 else ""
+    # super | nube | super explica while  -> ("super", "") o ("super_query", ...)
+    if stripped in ("super", "nube", "super yap", "superyap"):
+        return "super", ""
+    if stripped.startswith(("super ", "nube ")):
+        pregunta = user_input.split(" ", 1)[1].strip()
+        if pregunta:
+            return "super_query", pregunta
+        return "super", ""
     if stripped in ("ayuda", "help", "--help", "-h", "comandos", "ayuda yap"):
         return "help", "ayuda"
     if stripped in ("--apparmor-status", "apparmor-status", "apparmor status"):
@@ -3036,7 +3315,10 @@ def interpret(user_input):
         if param and param.startswith("EA"):
             return "curso", f"FPY1101:{param}"  # ponytail: assumes active course
 
-    return classify_intent(user_input)
+    action, param = classify_intent(user_input)
+    if action == "query" and debe_delegar_super(user_input):
+        return "super_query", param or user_input
+    return action, param
 
 
 def main():
@@ -3114,6 +3396,7 @@ def main():
             "Sesion — estado, pausar, retomar o cerrar sesion",
 
             "Telemetria — ver tu uso de Yap (100% local)",
+            "Super / nube — Super Yap (Llama 8B, opt-in)",
             "Ayuda — lista de comandos",
             "Salir — Ctrl+C o 'salir'",
         ]))
@@ -3238,6 +3521,13 @@ def handle_action(action, param, original_input):
     elif action == "telemetria":
         print(cmd_telemetria(param))
 
+    elif action == "super":
+        print(cmd_super_status())
+
+    elif action == "super_query":
+        print("Consultando Super Yap...")
+        print(cmd_query_super(param or original_input))
+
     elif action == "apparmor_status":
         print(cmd_apparmor_status())
 
@@ -3258,6 +3548,8 @@ def handle_action(action, param, original_input):
         print("                 'sesion nueva|pausar|retomar|cerrar|listar'")
 
         print("  Telemetria:    'telemetria' — resumen local de tu uso")
+        print("  Super Yap:     'super' — estado del modelo 8B (opt-in)")
+        print("                 'super <pregunta>' — forzar Super Yap; si cae, LLM local")
         print("  Perfil:        'perfil' — ver tu perfil")
         print("  Actualizar:    'perfil nombre Maria' | 'perfil nivel basico' | 'perfil idioma es'")
         print()

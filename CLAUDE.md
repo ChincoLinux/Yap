@@ -52,7 +52,7 @@ PROGRESS_FILE = ~/.config/yap/progress.json
 
 ### Intenciones soportadas
 
-`open_app` (abrir app whitelist) · `search` (Wikipedia API) · `webfetch` (URL directa) · `query` (LLM directo) · `pseint` (tutor PSeInt).
+`open_app` (abrir app whitelist) · `search` (Wikipedia API) · `webfetch` (URL directa) · `query` (LLM directo) · `pseint` (tutor PSeInt) · `super` / `super_query` (Super Yap 8B, opt-in, #91).
 
 ---
 
@@ -82,6 +82,9 @@ Comandos arbitrarios · red fuera de whitelist · instalar/eliminar software · 
 | `master` | 3B Q4_K_M | 4096 | FP16 | ~3.5GB | 4 |
 | `lowmem` | 3B Q4_K_M | 2048 | Q8_0 | ~3.1GB | 2 |
 | `ultra-lowmem` | 1B Q4_K_M | 2048 | Q8_0 | ~1.8GB | 2 |
+| Super Yap (`super_yap.py`) | 8B Q4_K_M (Llama 3.1 Instruct) | 4096 | Q8_0 | ~6.5–7.5GB | 4 |
+
+Super Yap es opt-in (`YAP_SUPER_ENABLED=1`): el alumno sigue en 1B/3B; el host de 8 GB responde consultas largas reenviando `HISTORY`. Ver `docs/SUPER-YAP.md`.
 
 El hook `.githooks/post-checkout` informa del cambio de modelo al hacer `git checkout`.
 
@@ -91,7 +94,8 @@ El hook `.githooks/post-checkout` informa del cambio de modelo al hacer `git che
 
 ```
 Yap/
-├── yap.py                 # Agente principal (36KB, ~640 líneas)
+├── yap.py                 # Agente principal
+├── super_yap.py           # Super Yap 8B (#91) — HTTP 127.0.0.1:8742 + REPL
 ├── setup.sh               # Instalador de desarrollo (compila llama.cpp)
 ├── build-deb.sh           # Genera yap_*.deb y yap-models-*.deb (#31)
 ├── packaging/             # Plantillas DEBIAN (control, postinst, prerm, postrm)
@@ -107,7 +111,7 @@ Yap/
 ├── .github/
 │   ├── workflows/test.yml      # CI: 81 pruebas + verificación estática
 │   └── adev/                   # Configuración A-Dev (ver sección 7)
-├── docs/                  # ROADMAP, PACKAGING, TRUNK-BASED, SECURITY-AUDIT
+├── docs/                  # ROADMAP, PACKAGING, TRUNK-BASED, SECURITY-AUDIT, SUPER-YAP
 └── USAGE.md              # Guía de uso
 ```
 

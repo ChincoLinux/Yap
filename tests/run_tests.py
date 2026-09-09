@@ -37,6 +37,7 @@ REQUISITOS = {
     "FUN-07": "Notificaciones graficas via notify-send",
     "FUN-08": "Modo interactivo (loop while True) y modo comando directo",
     "FUN-11": "Evaluacion automatica de actividades con feedback del LLM",
+    "FUN-12": "Super Yap 8B con historial compartido (opt-in, host privado)",
     "CFG-01": "Archivos de configuracion existen y son validos",
     "CFG-02": "Symlink /usr/local/bin/yap apunta al repositorio",
     "CFG-03": "llama-cli compilado con enlace estatico",
@@ -211,6 +212,21 @@ def main():
     all_results.append(("Evaluacion", passed, failed, errors))
     if failed == 0:
         print(f"  ✓ [{passed}/{passed + failed}] pruebas de evaluacion pasadas")
+    else:
+        print(f"  ✗ [{passed}/{passed + failed}] pruebas pasadas, {failed} fallaron")
+        for e in errors:
+            print(f"     {e}")
+
+    # --- Pruebas de Super Yap (#91) ---
+    print_header("PRUEBAS DE SUPER YAP")
+    super_file = os.path.join(os.path.dirname(__file__), "test_yap_super.py")
+    result = run_pytest(super_file)
+    passed, failed, errors = parse_pytest_output(result.stdout)
+    total_passed += passed
+    total_failed += failed
+    all_results.append(("Super Yap", passed, failed, errors))
+    if failed == 0:
+        print(f"  ✓ [{passed}/{passed + failed}] pruebas de Super Yap pasadas")
     else:
         print(f"  ✗ [{passed}/{passed + failed}] pruebas pasadas, {failed} fallaron")
         for e in errors:
