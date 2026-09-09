@@ -20,6 +20,21 @@ de la misma familia (misma plantilla `<|begin_of_text|>` /
 Cabe en un host de 8 GB dejando margen para el sistema. Si el GGUF 8B no
 está, Super Yap cae al Llama 3.2 3B ya instalado.
 
+## Umbral de RAM (7 GB libres)
+
+Super Yap **no se usa** si el host del 8B tiene menos de **7000 MB libres**:
+
+- `python3 super_yap.py --serve` / REPL / una pregunta: miden `MemAvailable`
+  (Linux) o la RAM física libre (Windows). Por debajo de 7 GB, no cargan el
+  8B y salen con error.
+- `yap.py` en **loopback** (este PC es el host Super Yap): si hay menos de
+  7 GB libres, no delega y sigue con el LLM local 1B/3B, con un `[WARN]`.
+- Si Super Yap está en **otro PC del aula** (10.x / 192.168.x), el alumno
+  no necesita 7 GB: el umbral se aplica en el servidor.
+
+`yap super` muestra la RAM libre y si se llega al umbral. Forzar (laboratorio):
+`YAP_SUPER_FORCE=1`. Tests/CI: `YAP_SUPER_RAM_MB=8192`.
+
 ## Contrato local → Super Yap (sin perder contexto)
 
 `yap.py` clasifica la intención **en local**. Solo `query` complejas (o
@@ -105,6 +120,8 @@ python3 super_yap.py --serve
 | `YAP_SUPER_CTX` | `4096` | Contexto del 8B |
 | `YAP_SUPER_THREADS` | `4` | Hilos CPU |
 | `YAP_SUPER_LLAMA_SERVER` | (vacío) | URL `/completion` si el modelo ya está en RAM |
+| `YAP_SUPER_RAM_MB` | (auto) | Override de MB libres (tests). Si se omite, se mide el sistema |
+| `YAP_SUPER_FORCE` | off | `1` omite el umbral de 7 GB libres |
 
 El token no va en el repo ni en `~/.config/yap/` del estudiante.
 

@@ -94,6 +94,7 @@ SUPER_TOKEN_FILE = f"{CONFIG_DIR}/super-token"
 SUPER_HISTORY_MAX = 8
 SUPER_PROMPT_MAX = 4000
 SUPER_RESPUESTA_MAX = 8000
+SUPER_RAM_MIN_MB = 7000
 SUPER_HINTS = (
     "explica", "explique", "diferencia", "compara", "genera", "rubrica",
     "rúbrica", "por que", "por qué", "razon", "razón", "analisis",
@@ -2734,10 +2735,92 @@ def cmd_webfetch(url, feed_to_llm=False):
     return f"Contenido obtenido ({len(text)} chars):\n{text[:1000]}..."
 
 
-def _super_habilitado():
-    return os.environ.get("YAP_SUPER_ENABLED", "").strip().lower() in (
+def _super_flag(nombre):
+    return os.environ.get(nombre, "").strip().lower() in (
         "1", "true", "si", "sí", "yes", "on",
     )
+
+
+def _super_habilitado():
+    return _super_flag("YAP_SUPER_ENABLED")
+
+
+def _parse_meminfo_disponible_mb(texto):
+    """MemAvailable (kB) from /proc/meminfo → MB. None if missing."""
+    for line in (texto or "").splitlines():
+        if line.startswith("MemAvailable:"):
+            try:
+                return int(line.split()[1]) // 1024
+            except (IndexError, ValueError):
+                return None
+    return None
+
+
+def _parse_wmic_free_mb(texto):
+    """wmic OS get FreePhysicalMemory /Value → MB."""
+    for line in (texto or "").splitlines():
+        if line.lower().startswith("freephysicalmemory"):
+            try:
+                return int(line.split("=", 1)[1].strip()) // 1024
+            except (IndexError, ValueError):
+                return None
+    return None
+
+
+def _ram_windows_mb():
+    """Free physical RAM on Windows. subprocess + timeout, no ctypes."""
+    ps = [
+        "powershell", "-NoProfile", "-NonInteractive", "-Command",
+        "(Get-CimInstance -ClassName Win32_OperatingSystem).FreePhysicalMemory",
+    ]
+    try:
+        result = subprocess.run(ps, capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            raw = (result.stdout or "").strip().split()
+            if raw:
+                return int(raw[-1]) // 1024
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, OSError):
+        pass
+    try:
+        result = subprocess.run(
+            ["wmic", "OS", "get", "FreePhysicalMemory", "/Value"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            return _parse_wmic_free_mb(result.stdout)
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    return None
+
+
+def ram_disponible_mb():
+    """MB de RAM libre. Override de tests/lab: YAP_SUPER_RAM_MB."""
+    raw = os.environ.get("YAP_SUPER_RAM_MB", "").strip()
+    if raw:
+        try:
+            return int(raw)
+        except ValueError:
+            pass
+    try:
+        with open("/proc/meminfo") as f:
+            mb = _parse_meminfo_disponible_mb(f.read())
+        if mb is not None:
+            return mb
+    except OSError:
+        pass
+    if os.name == "nt":
+        return _ram_windows_mb()
+    return None
+
+
+def ram_suficiente_super():
+    """True si hay ≥7 GB libres (o YAP_SUPER_FORCE=1)."""
+    if _super_flag("YAP_SUPER_FORCE"):
+        return True
+    ram = ram_disponible_mb()
+    if ram is None:
+        return False
+    return ram >= SUPER_RAM_MIN_MB
 
 
 def _super_endpoint():
@@ -2914,6 +2997,10 @@ def super_configurada():
     url = _super_endpoint()
     if not _host_super_permitido(url):
         return False
+    # El 8B se carga en el host Super Yap. En loopback este PC ES ese host:
+    # sin ≥7 GB libres no se usa Super Yap (el 1B/3B local sigue).
+    if _host_es_loopback(url) and not ram_suficiente_super():
+        return False
     if _host_es_loopback(url):
         return True
     return bool(_super_token())
@@ -2947,7 +3034,17 @@ def cmd_super_status():
     url = _super_endpoint()
     host_ok = _host_super_permitido(url) if habilitada else False
     token_ok = bool(_super_token())
+    ram = ram_disponible_mb()
+    ram_ok = ram_suficiente_super()
+    loopback = _host_es_loopback(url)
     parsed = urllib.parse.urlparse(url)
+    if ram is None:
+        ram_txt = "no se pudo medir"
+    else:
+        ram_txt = f"{ram} MB ({ram / 1024:.1f} GB)"
+    ram_veredicto = "si — se puede usar Super Yap" if ram_ok else (
+        f"no — se necesitan ≥{SUPER_RAM_MIN_MB} MB libres"
+    )
     lines = [
         display_header("Super Yap"),
         f"  Estado:     {etiqueta_motor()}",
@@ -2955,10 +3052,16 @@ def cmd_super_status():
         f"  Modelo:     {SUPER_MODEL_NAME}",
         f"  Host:       {parsed.hostname or '(vacio)'}",
         f"  Permitido:  {'si' if host_ok else 'no'} (solo loopback / LAN privada)",
+        f"  RAM libre:  {ram_txt}",
+        f"  RAM 7 GB:   {ram_veredicto}",
         f"  Token:      {'presente' if token_ok else 'no'}",
         f"  Historial:  {len(HISTORY)} turnos locales se reenvian (max {SUPER_HISTORY_MAX})",
         f"  {C['GRAY']}El token nunca se imprime. Ver docs/SUPER-YAP.md{C['RESET']}",
     ]
+    if loopback and habilitada and not ram_ok:
+        lines.append(
+            f"  {C['YELLOW']}Super Yap no se usara: este PC no tiene 7 GB libres.{C['RESET']}"
+        )
     return "\n".join(lines)
 
 
@@ -2966,14 +3069,28 @@ def cmd_query_super(prompt, context=None, store_history=True):
     """Delegate to Super Yap with local HISTORY; fall back to llama local."""
     if not _super_habilitado() or not super_configurada():
         _actualizar_estado_super(False)
-        return cmd_query(prompt, context=context, store_history=store_history)
+        local = cmd_query(prompt, context=context, store_history=store_history)
+        url = _super_endpoint()
+        if (
+            _super_habilitado()
+            and _host_es_loopback(url)
+            and _host_super_permitido(url)
+            and not ram_suficiente_super()
+        ):
+            ram = ram_disponible_mb()
+            medido = f"{ram} MB libres" if ram is not None else "RAM no medida"
+            return (
+                f"[WARN] RAM insuficiente para Super Yap ({medido}, "
+                f"se necesitan ≥{SUPER_RAM_MIN_MB} MB). Usando LLM local.\n{local}"
+            )
+        return local
     payload = _payload_super(prompt, context=context)
     data, err = _post_super(payload)
     texto = _texto_respuesta_super(data) if data is not None else None
-    if not texto:
+    if not texto or texto.startswith("[ERROR]"):
         _actualizar_estado_super(False)
         local = cmd_query(prompt, context=context, store_history=store_history)
-        motivo = err or "respuesta vacia"
+        motivo = err or (texto if texto else "respuesta vacia")
         return f"[WARN] Super Yap no disponible, usando LLM local. ({motivo})\n{local}"
     _actualizar_estado_super(True)
     out = texto[:SUPER_RESPUESTA_MAX]

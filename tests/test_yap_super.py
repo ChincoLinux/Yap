@@ -27,6 +27,8 @@ class SuperTestBase:
         for k in list(os.environ):
             if k.startswith("YAP_SUPER"):
                 del os.environ[k]
+        # ponytail: tests no dependen de la RAM real del runner (CI ~7 GB totales)
+        os.environ["YAP_SUPER_RAM_MB"] = "8192"
 
     def teardown_method(self):
         for k in list(os.environ):
@@ -166,6 +168,33 @@ class TestDelegacion(SuperTestBase):
         self.habilitar()
         assert yap.super_configurada() is True
 
+    def test_loopback_sin_7gb_no_configurada(self):
+        self.habilitar()
+        os.environ["YAP_SUPER_RAM_MB"] = "3000"
+        assert yap.super_configurada() is False
+        assert yap.ram_suficiente_super() is False
+
+    def test_loopback_con_7gb_si_configurada(self):
+        self.habilitar()
+        os.environ["YAP_SUPER_RAM_MB"] = "7000"
+        assert yap.ram_suficiente_super() is True
+        assert yap.super_configurada() is True
+
+    def test_lan_con_poca_ram_local_sigue_configurada(self):
+        """El 8B vive en el servidor del aula, no en el PC del alumno."""
+        os.environ["YAP_SUPER_ENABLED"] = "1"
+        os.environ["YAP_SUPER_ENDPOINT"] = "http://10.40.0.10:8742/v1/query"
+        os.environ["YAP_SUPER_TOKEN"] = "aula"
+        os.environ["YAP_SUPER_RAM_MB"] = "1800"
+        assert yap.super_configurada() is True
+
+    def test_force_omite_el_umbral(self):
+        self.habilitar()
+        os.environ["YAP_SUPER_RAM_MB"] = "512"
+        os.environ["YAP_SUPER_FORCE"] = "1"
+        assert yap.ram_suficiente_super() is True
+        assert yap.super_configurada() is True
+
 
 class TestCmdQuerySuper(SuperTestBase):
     @patch("yap.cmd_query", return_value="local-ok")
@@ -176,6 +205,18 @@ class TestCmdQuerySuper(SuperTestBase):
         mock_local.assert_called_once()
         assert out == "local-ok"
         assert yap.etiqueta_motor() == "LOCAL"
+
+    @patch("yap.cmd_query", return_value="local-ok")
+    def test_sin_7gb_en_loopback_cae_a_local(self, mock_local):
+        self.habilitar()
+        os.environ["YAP_SUPER_RAM_MB"] = "4096"
+        with patch("urllib.request.urlopen") as red:
+            out = yap.cmd_query_super("explica listas", store_history=False)
+        red.assert_not_called()
+        mock_local.assert_called_once()
+        assert "[WARN] RAM insuficiente para Super Yap" in out
+        assert "4096 MB" in out
+        assert "local-ok" in out
 
     @patch("yap.cmd_query", return_value="local-ok")
     def test_endpoint_publico_no_abre_conexion(self, mock_local):
@@ -275,6 +316,16 @@ class TestCmdSuperStatus(SuperTestBase):
         assert "supersecreto" not in out
         assert "Llama-3.1-8B" in out
         assert "presente" in out
+        assert "RAM libre" in out
+        assert "se puede usar Super Yap" in out
+
+    def test_status_avisa_si_faltan_7gb(self):
+        self.habilitar()
+        os.environ["YAP_SUPER_RAM_MB"] = "2048"
+        out = yap.cmd_super_status()
+        assert "2048 MB" in out
+        assert "no — se necesitan" in out
+        assert "no tiene 7 GB libres" in out
 
 
 class TestFusionarContextoSuperYap(SuperTestBase):
@@ -331,6 +382,9 @@ class TestModeloOchoGigas(SuperTestBase):
         code, body = handler.manejar("GET", "/health", b"")
         assert code == 200
         assert body["ok"] is True
+        assert body["ram_ok"] is True
+        assert body["ram_min_mb"] == 7000
+        assert body["ram_mb"] == 8192
         assert "8B" in body["modelo"] or "3B" in body["modelo"]
 
     def test_handler_post_sin_prompt_es_400(self):
@@ -355,6 +409,41 @@ class TestModeloOchoGigas(SuperTestBase):
         assert "While itera" in body["texto"]
         assert body["session_id"] == "S9"
         assert super_yap.SESIONES["S9"][-1][0] == "explica while"
+
+
+class TestDeteccionRam(SuperTestBase):
+    def test_parse_meminfo(self):
+        texto = "MemTotal: 8192000 kB\nMemAvailable: 7340032 kB\n"
+        assert yap._parse_meminfo_disponible_mb(texto) == 7168
+        assert super_yap._parse_meminfo_disponible_mb(texto) == 7168
+
+    def test_parse_wmic(self):
+        texto = "FreePhysicalMemory=7340032\n"
+        assert yap._parse_wmic_free_mb(texto) == 7168
+        assert super_yap._parse_wmic_free_mb(texto) == 7168
+
+    def test_umbral_es_7000(self):
+        assert yap.SUPER_RAM_MIN_MB == 7000
+        assert super_yap.RAM_MIN_MB == 7000
+
+    def test_generar_bloquea_sin_7gb(self):
+        os.environ["YAP_SUPER_RAM_MB"] = "5000"
+        with patch.object(super_yap, "llamar_llama_cli") as cli:
+            out = super_yap.generar("explica while", [])
+        cli.assert_not_called()
+        assert "[ERROR] RAM insuficiente" in out
+        assert "5000 MB" in out
+
+    def test_servir_sale_sin_7gb(self):
+        os.environ["YAP_SUPER_RAM_MB"] = "1024"
+        with patch("http.server.ThreadingHTTPServer") as srv:
+            try:
+                super_yap.servir()
+            except SystemExit as exc:
+                assert "RAM insuficiente" in str(exc)
+            else:
+                raise AssertionError("servir() debio salir sin 7 GB libres")
+        srv.assert_not_called()
 
 
 class TestNoImportsPeligrososSuper:

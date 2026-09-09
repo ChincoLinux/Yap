@@ -99,17 +99,104 @@ def resolver_modelo():
     return modelo_candidato_paths()[0], "Llama-3.1-8B-Instruct-Q4_K_M"
 
 
+def _flag(nombre):
+    return os.environ.get(nombre, "").strip().lower() in (
+        "1", "true", "si", "sí", "yes", "on",
+    )
+
+
+def _parse_meminfo_disponible_mb(texto):
+    """MemAvailable (kB) from /proc/meminfo → MB."""
+    for line in (texto or "").splitlines():
+        if line.startswith("MemAvailable:"):
+            try:
+                return int(line.split()[1]) // 1024
+            except (IndexError, ValueError):
+                return None
+    return None
+
+
+def _parse_wmic_free_mb(texto):
+    """wmic OS get FreePhysicalMemory /Value → MB."""
+    for line in (texto or "").splitlines():
+        if line.lower().startswith("freephysicalmemory"):
+            try:
+                return int(line.split("=", 1)[1].strip()) // 1024
+            except (IndexError, ValueError):
+                return None
+    return None
+
+
+def _ram_windows_mb():
+    """Free physical RAM on Windows. subprocess + timeout, no ctypes."""
+    ps = [
+        "powershell", "-NoProfile", "-NonInteractive", "-Command",
+        "(Get-CimInstance -ClassName Win32_OperatingSystem).FreePhysicalMemory",
+    ]
+    try:
+        result = subprocess.run(ps, capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            raw = (result.stdout or "").strip().split()
+            if raw:
+                return int(raw[-1]) // 1024
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, OSError):
+        pass
+    try:
+        result = subprocess.run(
+            ["wmic", "OS", "get", "FreePhysicalMemory", "/Value"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            return _parse_wmic_free_mb(result.stdout)
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    return None
+
+
 def ram_disponible_mb():
-    """MemAvailable on Linux; None on other OS (tests, Windows)."""
+    """MB de RAM libre. Override: YAP_SUPER_RAM_MB. None si no se puede medir."""
+    raw = os.environ.get("YAP_SUPER_RAM_MB", "").strip()
+    if raw:
+        try:
+            return int(raw)
+        except ValueError:
+            pass
     try:
         with open("/proc/meminfo") as f:
-            for line in f:
-                if line.startswith("MemAvailable:"):
-                    kb = int(line.split()[1])
-                    return kb // 1024
-    except (OSError, ValueError, IndexError):
-        return None
+            mb = _parse_meminfo_disponible_mb(f.read())
+        if mb is not None:
+            return mb
+    except OSError:
+        pass
+    if os.name == "nt":
+        return _ram_windows_mb()
     return None
+
+
+def ram_suficiente_super():
+    """True si hay ≥7 GB libres para cargar el 8B, o YAP_SUPER_FORCE=1."""
+    if _flag("YAP_SUPER_FORCE"):
+        return True
+    # llama-server ya tiene el modelo en RAM: no exigir 7 GB *libres* otra vez.
+    if os.environ.get("YAP_SUPER_LLAMA_SERVER", "").strip():
+        return True
+    ram = ram_disponible_mb()
+    if ram is None:
+        return False
+    return ram >= RAM_MIN_MB
+
+
+def mensaje_ram_insuficiente():
+    ram = ram_disponible_mb()
+    if ram is None:
+        return (
+            f"[ERROR] RAM insuficiente para Super Yap: no se pudo medir la "
+            f"memoria libre. Se necesitan ≥{RAM_MIN_MB} MB (7 GB)."
+        )
+    return (
+        f"[ERROR] RAM insuficiente para Super Yap: {ram} MB libres, "
+        f"se necesitan ≥{RAM_MIN_MB} MB (7 GB). Usa el Yap local (1B/3B)."
+    )
 
 
 def perfil_ram():
@@ -275,6 +362,8 @@ def llamar_llama_server(full_prompt, endpoint):
 
 
 def generar(prompt, turnos, context=None):
+    if not ram_suficiente_super():
+        return mensaje_ram_insuficiente()
     full_prompt = construir_prompt(prompt, turnos, context=context)
     server = os.environ.get("YAP_SUPER_LLAMA_SERVER", "").strip()
     if server:
@@ -310,6 +399,7 @@ def cmd_info():
     existe = os.path.isfile(path)
     ram = ram_disponible_mb()
     perfil = perfil_ram()
+    ram_ok = ram_suficiente_super()
     lines = [
         "Super Yap — modelo grande para host de 8 GB (#91)",
         f"  Modelo:     {etiqueta}",
@@ -321,12 +411,16 @@ def cmd_info():
         f"  Endpoint:   http://{DEFAULT_BIND}:{_entero_env('YAP_SUPER_PORT', DEFAULT_PORT)}/v1/query",
         f"  RAM est.:   {perfil['total_estimado_mb']} MB / {perfil['host_recomendado_mb']} MB",
     ]
-    if ram is not None:
-        lines.append(f"  RAM libre:  {ram} MB")
-        if ram < RAM_MIN_MB:
-            lines.append(
-                f"  [WARN] Se recomiendan ≥{RAM_MIN_MB} MB libres para el 8B Q4_K_M."
-            )
+    if ram is None:
+        lines.append("  RAM libre:  no se pudo medir")
+    else:
+        lines.append(f"  RAM libre:  {ram} MB ({ram / 1024:.1f} GB)")
+    if ram_ok:
+        lines.append(f"  Umbral 7 GB: si — Super Yap se puede usar (≥{RAM_MIN_MB} MB)")
+    else:
+        lines.append(
+            f"  Umbral 7 GB: no — Super Yap bloqueado (se necesitan ≥{RAM_MIN_MB} MB libres)"
+        )
     lines.append(
         "  Nota: Llama 3.2 texto maximo es 3B; el salto de parametros "
         "que cabe en 8 GB es Llama 3.1 8B Instruct (misma plantilla)."
@@ -340,12 +434,17 @@ class SuperYapHandler:
     def manejar(self, method, path, raw_body):
         if method == "GET" and path in ("/", "/health", "/v1/health"):
             path_modelo, etiqueta = resolver_modelo()
+            ram = ram_disponible_mb()
+            ram_ok = ram_suficiente_super()
             return 200, {
-                "ok": True,
+                "ok": ram_ok,
                 "modelo": etiqueta,
                 "modelo_presente": os.path.isfile(path_modelo),
                 "sesiones": len(SESIONES),
                 "ctx": _entero_env("YAP_SUPER_CTX", MAX_CTX),
+                "ram_mb": ram,
+                "ram_min_mb": RAM_MIN_MB,
+                "ram_ok": ram_ok,
             }
         if method != "POST" or path not in ("/v1/query", "/query", "/completion"):
             return 404, {"texto": "", "error": "Ruta no encontrada"}
@@ -394,8 +493,6 @@ def _hacer_handler():
 
 
 def servir(bind=None, port=None):
-    from http.server import ThreadingHTTPServer
-
     bind = bind or os.environ.get("YAP_SUPER_BIND", DEFAULT_BIND).strip() or DEFAULT_BIND
     port = port or _entero_env("YAP_SUPER_PORT", DEFAULT_PORT)
     if bind not in ("127.0.0.1", "localhost", "::1"):
@@ -413,6 +510,10 @@ def servir(bind=None, port=None):
                 "YAP_SUPER_BIND solo admite 127.0.0.1 o una IP privada "
                 "(10/8, 172.16/12, 192.168/16). No se escucha en 0.0.0.0."
             )
+    if not ram_suficiente_super():
+        print(cmd_info())
+        sys.exit(mensaje_ram_insuficiente())
+    from http.server import ThreadingHTTPServer
     print(cmd_info())
     print()
     print(f"Escuchando http://{bind}:{port}/v1/query")
@@ -422,6 +523,10 @@ def servir(bind=None, port=None):
 
 
 def repl():
+    if not ram_suficiente_super():
+        print(cmd_info())
+        print(mensaje_ram_insuficiente())
+        return
     print(cmd_info())
     print()
     print("Super Yap REPL. Escribe 'salir' para terminar.")
@@ -471,6 +576,10 @@ def main(argv=None):
             El Yap local envia el historial en cada POST para no perder
             el contexto. Ver docs/SUPER-YAP.md.
         """))
+        return
+    if not ram_suficiente_super():
+        print(cmd_info())
+        print(mensaje_ram_insuficiente())
         return
     prompt = " ".join(args)
     print(generar(prompt, []))
