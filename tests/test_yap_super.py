@@ -86,8 +86,13 @@ class TestConsultaParaSuper(SuperTestBase):
 
 class TestHostSuperPermitido(SuperTestBase):
     def test_loopback_permitido(self):
-        assert yap._host_super_permitido(yap.SUPER_DEFAULT_ENDPOINT) is True
+        assert yap._host_super_permitido("http://127.0.0.1:8742/v1/query") is True
         assert yap._host_super_permitido("http://localhost:8742/v1/query") is True
+
+    def test_host_nube_pin_permitido(self):
+        assert yap._host_es_super_nube(yap.SUPER_DEFAULT_ENDPOINT) is True
+        assert yap._host_super_permitido("http://137.184.146.113:8742/v1/query") is True
+        assert yap._host_super_permitido("http://137.184.146.113:80/v1/query") is True
 
     def test_rfc1918_permitido(self):
         assert yap._host_super_permitido("http://10.40.0.10:8742/v1/query") is True
@@ -143,6 +148,25 @@ class TestSanitizarYPayload(SuperTestBase):
 
 class TestDelegacion(SuperTestBase):
     def test_deshabilitada_no_delega(self):
+        os.environ["YAP_SUPER_ENABLED"] = "0"
+        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
+
+    def test_auto_con_7gb_y_host_nube_delega(self):
+        """≥7 GB libres + 137.184.146.113 activa Super Yap sin YAP_SUPER_ENABLED."""
+        os.environ["YAP_SUPER_RAM_MB"] = "8192"
+        assert yap._super_habilitado() is True
+        assert yap.super_configurada() is True
+        assert yap.debe_delegar_super("explica la diferencia entre while y for") is True
+
+    def test_auto_sin_7gb_no_delega(self):
+        os.environ["YAP_SUPER_RAM_MB"] = "3000"
+        assert yap._super_habilitado() is False
+        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
+
+    def test_auto_con_7gb_pero_otro_host_no_delega(self):
+        os.environ["YAP_SUPER_RAM_MB"] = "8192"
+        os.environ["YAP_SUPER_ENDPOINT"] = "http://127.0.0.1:8742/v1/query"
+        assert yap._super_habilitado() is False
         assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
 
     def test_habilitada_y_compleja_delega(self):
@@ -169,15 +193,21 @@ class TestDelegacion(SuperTestBase):
         assert yap.super_configurada() is True
 
     def test_loopback_sin_7gb_no_configurada(self):
-        self.habilitar()
+        self.habilitar(endpoint="http://127.0.0.1:8742/v1/query")
         os.environ["YAP_SUPER_RAM_MB"] = "3000"
         assert yap.super_configurada() is False
         assert yap.ram_suficiente_super() is False
 
     def test_loopback_con_7gb_si_configurada(self):
-        self.habilitar()
+        self.habilitar(endpoint="http://127.0.0.1:8742/v1/query")
         os.environ["YAP_SUPER_RAM_MB"] = "7000"
         assert yap.ram_suficiente_super() is True
+        assert yap.super_configurada() is True
+
+    def test_nube_con_poca_ram_local_si_env_sigue_configurada(self):
+        """El 8B está en 137.184.146.113; el alumno no necesita 7 GB si lo fuerza."""
+        self.habilitar()
+        os.environ["YAP_SUPER_RAM_MB"] = "1800"
         assert yap.super_configurada() is True
 
     def test_lan_con_poca_ram_local_sigue_configurada(self):
@@ -189,7 +219,7 @@ class TestDelegacion(SuperTestBase):
         assert yap.super_configurada() is True
 
     def test_force_omite_el_umbral(self):
-        self.habilitar()
+        self.habilitar(endpoint="http://127.0.0.1:8742/v1/query")
         os.environ["YAP_SUPER_RAM_MB"] = "512"
         os.environ["YAP_SUPER_FORCE"] = "1"
         assert yap.ram_suficiente_super() is True
@@ -199,6 +229,7 @@ class TestDelegacion(SuperTestBase):
 class TestCmdQuerySuper(SuperTestBase):
     @patch("yap.cmd_query", return_value="local-ok")
     def test_sin_super_usa_local_sin_red(self, mock_local):
+        os.environ["YAP_SUPER_ENABLED"] = "0"
         with patch("urllib.request.urlopen") as red:
             out = yap.cmd_query_super("explica listas", store_history=False)
         red.assert_not_called()
@@ -208,7 +239,7 @@ class TestCmdQuerySuper(SuperTestBase):
 
     @patch("yap.cmd_query", return_value="local-ok")
     def test_sin_7gb_en_loopback_cae_a_local(self, mock_local):
-        self.habilitar()
+        self.habilitar(endpoint="http://127.0.0.1:8742/v1/query")
         os.environ["YAP_SUPER_RAM_MB"] = "4096"
         with patch("urllib.request.urlopen") as red:
             out = yap.cmd_query_super("explica listas", store_history=False)
@@ -320,7 +351,7 @@ class TestCmdSuperStatus(SuperTestBase):
         assert "se puede usar Super Yap" in out
 
     def test_status_avisa_si_faltan_7gb(self):
-        self.habilitar()
+        self.habilitar(endpoint="http://127.0.0.1:8742/v1/query")
         os.environ["YAP_SUPER_RAM_MB"] = "2048"
         out = yap.cmd_super_status()
         assert "2048 MB" in out

@@ -81,17 +81,17 @@ python3 super_yap.py --info
 python3 super_yap.py --serve
 ```
 
-En el PC del alumno (o el mismo, si Super Yap escucha en localhost):
+En el PC del alumno Super Yap se **activa solo** si hay **≥7 GB libres** y el
+destino es el host nube `137.184.146.113` (puerto HTTP **8742**):
 
 ```bash
-# /etc/yap/super.env  (root-only si hay token de LAN)
-export YAP_SUPER_ENABLED=1
-export YAP_SUPER_ENDPOINT=http://127.0.0.1:8742/v1/query
 python3 yap.py super
 python3 yap.py super explica la diferencia entre while y for
 ```
 
-Sin `YAP_SUPER_ENABLED=1` el comportamiento es 100 % local.
+Endpoint por defecto: `http://137.184.146.113:8742/v1/query`.
+`YAP_SUPER_ENABLED=0` fuerza el Yap local. `YAP_SUPER_ENABLED=1` activa
+aunque el PC del alumno no tenga 7 GB (el 8B vive en ese host).
 
 Opcional: dejar `llama-server` con el 8B cargado y apuntar Super Yap a él
 para no recargar el GGUF en cada consulta:
@@ -108,14 +108,14 @@ python3 super_yap.py --serve
 
 | Variable | Default | Rol |
 |---|---|---|
-| `YAP_SUPER_ENABLED` | off | `1` / `true` / `si` para activar el cliente en `yap.py` |
-| `YAP_SUPER_ENDPOINT` | `http://127.0.0.1:8742/v1/query` | Solo loopback o IP privada |
+| `YAP_SUPER_ENABLED` | auto | `1` fuerza on; `0` fuerza local. Vacío: on si ≥7 GB libres **y** host `137.184.146.113` |
+| `YAP_SUPER_ENDPOINT` | `http://137.184.146.113:8742/v1/query` | Loopback, LAN privada o el host nube pin |
 | `YAP_SUPER_HOSTS` | (vacío) | Hostnames extra del aula (coincidencia exacta, sin DNS) |
 | `YAP_SUPER_TOKEN` | (vacío) | Bearer. Obligatorio si el endpoint no es loopback |
 | `YAP_SUPER_TOKEN_FILE` | `/etc/yap/super-token` | Alternativa al env |
 | `YAP_SUPER_TIMEOUT` | `90` | Segundos del POST |
 | `YAP_SUPER_MODEL_PATH` | (auto) | GGUF 8B, o 3B si el 8B no está |
-| `YAP_SUPER_BIND` | `127.0.0.1` | Nunca `0.0.0.0` |
+| `YAP_SUPER_BIND` | `127.0.0.1` | Loopback, LAN o `137.184.146.113`. Nunca `0.0.0.0` |
 | `YAP_SUPER_PORT` | `8742` | Puerto del contrato Yap |
 | `YAP_SUPER_CTX` | `4096` | Contexto del 8B |
 | `YAP_SUPER_THREADS` | `4` | Hilos CPU |
@@ -141,6 +141,7 @@ webfetch **nunca** salen del kernel local.
 
 - `yap.py` no importa `socket`. El cliente usa `urllib.request` como webfetch.
 - Hosts públicos (`8.8.8.8`, `googleapis.com`) están bloqueados.
+  Única excepción pin: `137.184.146.113` (Super Yap en la nube).
 - Super Yap solo escucha en `127.0.0.1` o una IP RFC1918.
 - Super Yap **sugiere**; no abre apps ni ejecuta comandos.
 - Rutas `/home/...` y correos se sustituyen antes de salir del PC del alumno.

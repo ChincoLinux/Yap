@@ -89,7 +89,11 @@ LLAMA_TEMP_CLASSIFY = float(os.environ.get("YAP_LLAMA_TEMP_CLASSIFY", "0.1"))
 # Llama 3.2 texto maximo es 3B. Super Yap usa Llama 3.1 8B Instruct
 # Q4_K_M (misma plantilla de chat) que cabe en ~7 GB con ctx 4096.
 SUPER_MODEL_NAME = os.environ.get("YAP_SUPER_MODEL", "Llama-3.1-8B-Instruct-Q4_K_M")
-SUPER_DEFAULT_ENDPOINT = "http://127.0.0.1:8742/v1/query"
+# Host fijo de Super Yap en la nube. "puerto" en el aula = esta IP; el
+# contrato HTTP usa 8742. Cualquier otra IP publica sigue bloqueada.
+SUPER_NUBE_HOST = "137.184.146.113"
+SUPER_NUBE_PORT = 8742
+SUPER_DEFAULT_ENDPOINT = f"http://{SUPER_NUBE_HOST}:{SUPER_NUBE_PORT}/v1/query"
 SUPER_TOKEN_FILE = f"{CONFIG_DIR}/super-token"
 SUPER_HISTORY_MAX = 8
 SUPER_PROMPT_MAX = 4000
@@ -2742,7 +2746,13 @@ def _super_flag(nombre):
 
 
 def _super_habilitado():
-    return _super_flag("YAP_SUPER_ENABLED")
+    """Env on/off, or auto: ≥7 GB libres AND host Super Yap (137.184.146.113)."""
+    raw = os.environ.get("YAP_SUPER_ENABLED", "").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        return False
+    if raw in ("1", "true", "si", "sí", "yes", "on"):
+        return True
+    return ram_suficiente_super() and _host_es_super_nube(_super_endpoint())
 
 
 def _parse_meminfo_disponible_mb(texto):
@@ -2884,8 +2894,15 @@ def _host_es_loopback(url):
     return host in ("localhost", "127.0.0.1", "::1")
 
 
+def _host_es_super_nube(url):
+    """Exact pin of the Super Yap cloud host. No DNS, no other public IPs."""
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return host == SUPER_NUBE_HOST
+
+
 def _host_super_permitido(url):
-    """Only loopback, RFC1918 literals, or exact names in YAP_SUPER_HOSTS."""
+    """Loopback, RFC1918, the pinned Super Yap IP, or YAP_SUPER_HOSTS."""
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme not in ("http", "https"):
         return False
@@ -2893,6 +2910,8 @@ def _host_super_permitido(url):
     if not host:
         return False
     if host in ("localhost", "127.0.0.1", "::1"):
+        return True
+    if host == SUPER_NUBE_HOST:
         return True
     if host in _super_hosts_extra():
         return True
@@ -3001,7 +3020,7 @@ def super_configurada():
     # sin ≥7 GB libres no se usa Super Yap (el 1B/3B local sigue).
     if _host_es_loopback(url) and not ram_suficiente_super():
         return False
-    if _host_es_loopback(url):
+    if _host_es_loopback(url) or _host_es_super_nube(url):
         return True
     return bool(_super_token())
 
@@ -3048,10 +3067,11 @@ def cmd_super_status():
     lines = [
         display_header("Super Yap"),
         f"  Estado:     {etiqueta_motor()}",
-        f"  Habilitada: {'si' if habilitada else 'no'} (YAP_SUPER_ENABLED)",
+        f"  Habilitada: {'si' if habilitada else 'no'} (env o auto: 7 GB + {SUPER_NUBE_HOST})",
         f"  Modelo:     {SUPER_MODEL_NAME}",
-        f"  Host:       {parsed.hostname or '(vacio)'}",
-        f"  Permitido:  {'si' if host_ok else 'no'} (solo loopback / LAN privada)",
+        f"  Host:       {parsed.hostname or '(vacio)'}:{parsed.port or SUPER_NUBE_PORT}",
+        f"  Nube:       {'si' if _host_es_super_nube(url) else 'no'} ({SUPER_NUBE_HOST}:{SUPER_NUBE_PORT})",
+        f"  Permitido:  {'si' if host_ok else 'no'} (loopback / LAN / host nube)",
         f"  RAM libre:  {ram_txt}",
         f"  RAM 7 GB:   {ram_veredicto}",
         f"  Token:      {'presente' if token_ok else 'no'}",

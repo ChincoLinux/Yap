@@ -36,6 +36,7 @@ SUPER_MODEL_3B = "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
 DEFAULT_MODEL_DIR = "/opt/yap/models"
 DEFAULT_BIND = "127.0.0.1"
 DEFAULT_PORT = 8742
+SUPER_NUBE_HOST = "137.184.146.113"
 MAX_CTX = 4096
 MAX_HISTORY = 12
 N_PREDICT = 512
@@ -495,8 +496,8 @@ def _hacer_handler():
 def servir(bind=None, port=None):
     bind = bind or os.environ.get("YAP_SUPER_BIND", DEFAULT_BIND).strip() or DEFAULT_BIND
     port = port or _entero_env("YAP_SUPER_PORT", DEFAULT_PORT)
-    if bind not in ("127.0.0.1", "localhost", "::1"):
-        # LAN del aula: solo RFC1918 literales, nunca 0.0.0.0
+    if bind not in ("127.0.0.1", "localhost", "::1", SUPER_NUBE_HOST):
+        # LAN del aula: RFC1918, o el host nube pin. Nunca 0.0.0.0.
         partes = bind.split(".")
         ok = False
         if len(partes) == 4:
@@ -507,8 +508,9 @@ def servir(bind=None, port=None):
                 ok = False
         if not ok:
             sys.exit(
-                "YAP_SUPER_BIND solo admite 127.0.0.1 o una IP privada "
-                "(10/8, 172.16/12, 192.168/16). No se escucha en 0.0.0.0."
+                "YAP_SUPER_BIND solo admite 127.0.0.1, una IP privada "
+                f"(10/8, 172.16/12, 192.168/16) o {SUPER_NUBE_HOST}. "
+                "No se escucha en 0.0.0.0."
             )
     if not ram_suficiente_super():
         print(cmd_info())

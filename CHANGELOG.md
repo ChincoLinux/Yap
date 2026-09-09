@@ -13,8 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   el historial vivo (`HISTORY` + `session_id`) para no perder contexto; si
   Super Yap cae, se usa el LLM local. Opt-in `YAP_SUPER_ENABLED=1`. Comandos
   `super` / `nube`. Solo loopback o LAN privada; sin `socket` en `yap.py`.
-  Super Yap solo se usa si hay **≥7000 MB de RAM libre** (Linux
-  `MemAvailable` / Windows RAM física libre); si no, queda el Yap local.
+  Super Yap se activa solo si hay **≥7000 MB de RAM libre** y el destino es
+  `137.184.146.113:8742` (host nube pin). Cualquier otra IP pública sigue
+  bloqueada. `YAP_SUPER_ENABLED=0` fuerza el Yap local.
 
 ### Changed
 
