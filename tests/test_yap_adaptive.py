@@ -284,7 +284,7 @@ class TestVariantes:
 class TestMetricas:
     """Requisito: cada actividad registra tiempo, intentos, puntaje, pistas y resultado."""
 
-    def _eval(self, aprobado=True, puntaje=85):
+    def _resultado(self, aprobado=True, puntaje=85):
         return {
             "aprobado": aprobado,
             "puntaje": puntaje,
@@ -305,7 +305,7 @@ class TestMetricas:
     def test_se_guardan_todas_las_metricas(self):
         progress = {"cursos": {}}
         yap.registrar_intento_actividad(
-            progress, "FPY1101", "EA1", 1, self._eval(aprobado=True, puntaje=90),
+            progress, "FPY1101", "EA1", 1, self._resultado(aprobado=True, puntaje=90),
             tiempo_actividad=420, pistas_usadas=1, variante="normal",
         )
         rec = progress["cursos"]["FPY1101"]["EA1"]["actividades"]["1"]
@@ -319,7 +319,7 @@ class TestMetricas:
     def test_resultado_reprobado(self):
         progress = {"cursos": {}}
         yap.registrar_intento_actividad(
-            progress, "FPY1101", "EA1", 2, self._eval(aprobado=False, puntaje=30),
+            progress, "FPY1101", "EA1", 2, self._resultado(aprobado=False, puntaje=30),
         )
         rec = progress["cursos"]["FPY1101"]["EA1"]["actividades"]["2"]
         assert rec["resultado"] == "reprobado"
@@ -329,7 +329,7 @@ class TestMetricas:
         progress = {"cursos": {}}
         yap.registrar_intento_actividad(
             progress, "FPY1101", "EA1", 1,
-            {**self._eval(), "error": True},
+            {**self._resultado(), "error": True},
         )
         rec = progress["cursos"]["FPY1101"]["EA1"]["actividades"]["1"]
         assert rec["resultado"] is None
@@ -343,7 +343,7 @@ class TestMetricas:
                                    os.path.join(pdir, "progress.json")):
                 progress = {"cursos": {}}
                 yap.registrar_intento_actividad(
-                    progress, "FPY1101", "EA1", 1, self._eval(),
+                    progress, "FPY1101", "EA1", 1, self._resultado(),
                     tiempo_actividad=300, pistas_usadas=0, variante="facil",
                 )
                 yap.guardar_progreso(progress)
