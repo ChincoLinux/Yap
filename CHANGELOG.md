@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Super Yap (#91): proceso `super_yap.py` con Llama 3.1 8B Instruct Q4_K_M
+  (~7 GB, host de 8 GB) y puente HTTP con el Yap local. Cada consulta envía
+  el historial vivo (`HISTORY` + `session_id`) para no perder contexto; si
+  Super Yap cae, se usa el LLM local. Opt-in `YAP_SUPER_ENABLED=1`. Comandos
+  `super` / `nube`. Solo loopback o LAN privada; sin `socket` en `yap.py`.
+  Super Yap se activa solo si hay **≥7000 MB de RAM libre** y el destino es
+  `137.184.146.113:8742` (host nube pin). Cualquier otra IP pública sigue
+  bloqueada. `YAP_SUPER_ENABLED=0` fuerza el Yap local.
+- Super Yap en Cloud Run (Gradio 5 `/chat`): el Yap local usa `urllib`
+  (sin `requests`) contra el host pin `*.southamerica-west1.run.app`.
+  `super on` / `super off` cambian el motor desde el menú. Si el LLM local
+  tarda (>40 s), se pasa de ~1200 tokens o hay timeout, se consulta Super
+  Yap. Fallback local si la nube no responde.
 
 ### Changed
 

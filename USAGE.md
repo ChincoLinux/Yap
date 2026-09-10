@@ -46,6 +46,9 @@ yap --tutorial
 | `yap sesion retomar 3` | Retomar una sesion pausada. |
 
 | `yap telemetria` | Resumen local de tu uso de Yap. |
+| `yap super` | Estado de Super Yap (Llama 8B, opt-in, ver [docs/SUPER-YAP.md](docs/SUPER-YAP.md)). |
+| `yap super on` / `yap super off` | Usar Super Yap en todas las consultas, o volver al local. |
+| `yap super <pregunta>` | Forzar Super Yap; si no está, usa el LLM local. |
 | `yap curso FPY1101` | Plan de estudio del curso. |
 | `yap iniciar EA1` | Comenzar una experiencia de aprendizaje. |
 | `yap <pregunta>` | Consulta directa al AI. |
