@@ -377,6 +377,12 @@ def _perfil_por_defecto():
             "tema": "claro",
             "feedback_detallado": True,
             "notificaciones": True,
+            "accesibilidad": {
+                "alto_contraste": False,
+                "fuentes_grandes": False,
+                "lector_pantalla": False,
+                "navegacion_teclado": False,
+            },
         },
         "onboarding_completed": False,
         "estadisticas": {
@@ -402,8 +408,16 @@ def _normalizar_perfil(data):
     prefs_data = data.get("preferencias")
     if isinstance(prefs_data, dict):
         for clave in list(perfil["preferencias"]):
+            if clave == "accesibilidad":
+                continue  # se normaliza por separado (dict anidado)
             if clave in prefs_data:
                 perfil["preferencias"][clave] = prefs_data[clave]
+        acc_data = prefs_data.get("accesibilidad")
+        if isinstance(acc_data, dict):
+            for clave in list(perfil["preferencias"]["accesibilidad"]):
+                if clave in acc_data:
+                    perfil["preferencias"]["accesibilidad"][clave] = (
+                        _coerce_bool(acc_data[clave]))
 
     stats_data = data.get("estadisticas")
     if isinstance(stats_data, dict):
@@ -520,6 +534,14 @@ def _formatar_perfil(perfil):
     fb = "sí" if prefs['feedback_detallado'] else "no"
     notif = "sí" if prefs['notificaciones'] else "no"
     lines.append(f"    Feedback detallado: {fb} | Notificaciones: {notif}")
+    acc = prefs["accesibilidad"]
+    def _marca(v):
+        return f"{C['GREEN']}SÍ{C['RESET']}" if v else f"{C['GRAY']}no{C['RESET']}"
+    lines.append("    Accesibilidad: "
+                 f"Alto contraste={_marca(acc['alto_contraste'])}"
+                 f" | Fuentes 2x={_marca(acc['fuentes_grandes'])}"
+                 f" | Lector pantalla={_marca(acc['lector_pantalla'])}"
+                 f" | Teclado={_marca(acc['navegacion_teclado'])}")
     stats = perfil["estadisticas"]
     lines.append(f"\n  {C['BOLD']}Estadísticas:{C['RESET']}")
     lines.append(f"    Sesiones: {stats['sesiones_totales']} | "
@@ -538,12 +560,17 @@ def cmd_perfil(args=""):
       nombre <valor>         — actualiza el nombre
       nivel <basico|...>     — actualiza el nivel
       idioma <es|en>         — actualiza preferencias.idioma
+      accesibilidad [op]     — muestra o actualiza opciones de accesibilidad
     """
     partes = args.strip().split(None, 1) if args.strip() else []
     if not partes or partes[0].lower() in ("ver", "mostrar"):
         return _formatar_perfil(cargar_perfil())
 
     campo = partes[0].lower()
+
+    if campo in ("accesibilidad", "a11y"):
+        return cmd_accesibilidad(partes[1].strip() if len(partes) > 1 else "")
+
     if len(partes) < 2 or not partes[1].strip():
         return f"[ERROR] Falta el valor para '{campo}'. Uso: yap perfil {campo} <valor>"
     valor = partes[1].strip()
@@ -557,13 +584,537 @@ def cmd_perfil(args=""):
             actualizar_idioma(valor)
         else:
             return (f"[ERROR] Campo desconocido: '{campo}'. "
-                    "Campos disponibles: nombre, nivel, idioma")
+                    "Campos disponibles: nombre, nivel, idioma, accesibilidad")
     except ValueError as e:
         return f"[ERROR] {e}"
     except OSError as e:
         return f"[ERROR] No se pudo guardar el perfil: {e}"
 
     return f"[OK] Perfil actualizado ({campo} = {valor})."
+
+
+# ── Accesibilidad y adaptabilidad (#37) ──────────────────────
+# Fase 4 (P2). Cuatro opciones bajo `yap perfil accesibilidad`:
+#   alto-contraste     — paleta blanco puro sobre fondo negro (sin degradados)
+#   fuentes-grandes    — escala 2x del texto renderizado
+#   lector-pantalla    — salida plana sin ANSI para sintetizadores de voz
+#   navegacion-teclado — menús navegables con Tab/Flechas/Enter/Esc
+# Detección automática de Orca: shutil.which + `ps` (subprocess, sin shell).
+
+ACCESIBILIDAD_DEFECTO = {
+    "alto_contraste": False,
+    "fuentes_grandes": False,
+    "lector_pantalla": False,
+    "navegacion_teclado": False,
+}
+
+# Clave de CLI (con guiones) → clave de almacenamiento en el perfil (con _)
+OPCIONES_ACCESIBILIDAD = {
+    "alto-contraste": "alto_contraste",
+    "fuentes-grandes": "fuentes_grandes",
+    "lector-pantalla": "lector_pantalla",
+    "navegacion-teclado": "navegacion_teclado",
+}
+
+ACCESIBILIDAD_NOMBRES = {
+    "alto_contraste": "Alto contraste",
+    "fuentes_grandes": "Fuentes grandes (2x)",
+    "lector_pantalla": "Lector de pantalla",
+    "navegacion_teclado": "Navegacion por teclado",
+}
+
+# Alias flexibles → clave canónica de CLI (con guiones)
+ALIAS_ACCESIBILIDAD = {
+    "alto-contraste": "alto-contraste",
+    "alto_contraste": "alto-contraste",
+    "altocontraste": "alto-contraste",
+    "contraste": "alto-contraste",
+    "fuentes-grandes": "fuentes-grandes",
+    "fuentes_grandes": "fuentes-grandes",
+    "fuentesgrandes": "fuentes-grandes",
+    "fuente-grande": "fuentes-grandes",
+    "letra-grande": "fuentes-grandes",
+    "letras-grandes": "fuentes-grandes",
+    "font-size": "fuentes-grandes",
+    "lector-pantalla": "lector-pantalla",
+    "lector_pantalla": "lector-pantalla",
+    "lector-de-pantalla": "lector-pantalla",
+    "lectorpantalla": "lector-pantalla",
+    "lector": "lector-pantalla",
+    "screen-reader": "lector-pantalla",
+    "sintetizador": "lector-pantalla",
+    "sintetizador-de-voz": "lector-pantalla",
+    "navegacion-teclado": "navegacion-teclado",
+    "navegacion_teclado": "navegacion-teclado",
+    "navegacion-por-teclado": "navegacion-teclado",
+    "navegacionteclado": "navegacion-teclado",
+    "navegador-teclado": "navegacion-teclado",
+    "teclado": "navegacion-teclado",
+    "keyboard": "navegacion-teclado",
+}
+
+VALORES_ON = ("on", "1", "si", "sí", "yes", "true", "activar", "activado")
+VALORES_OFF = ("off", "0", "no", "false", "desactivar", "desactivado", "apagar")
+
+
+def _coerce_bool(valor):
+    """Coerces a value into a strict boolean.
+
+    Desconocido/vacío → False (fail-safe: las ayudas nunca se activan por
+    contenido corrupto, y un lector mal inicializado no cambia contraste).
+    """
+    if isinstance(valor, bool):
+        return valor
+    if isinstance(valor, (int, float)):
+        return valor != 0
+    s = str(valor).strip().lower()
+    if s in VALORES_ON:
+        return True
+    return False
+
+
+def _canonizar_opcion_accesibilidad(opcion):
+    """Normaliza una opción (alias incluidos) a su clave de almacenaje, o None."""
+    clave = str(opcion or "").strip().lower()
+    clave = clave.replace("_", "-").replace(" ", "-")
+    canonico = ALIAS_ACCESIBILIDAD.get(clave)
+    if canonico is None:
+        return None
+    return OPCIONES_ACCESIBILIDAD[canonico]
+
+
+def _parsear_valor_accesibilidad(valor):
+    """Sin valor o vacío activa la opción; si no, on/1/si/... vs off/0/no/..."""
+    if valor is None or str(valor).strip() == "":
+        return True
+    return _coerce_bool(valor)
+
+
+def opciones_accesibilidad_perfil(perfil=None):
+    """Devuelve el dict de accesibilidad relleno con los defaults."""
+    if perfil is None:
+        perfil = cargar_perfil()
+    acc = (perfil.get("preferencias") or {}).get("accesibilidad")
+    if not isinstance(acc, dict):
+        acc = {}
+    return {**ACCESIBILIDAD_DEFECTO, **acc}
+
+
+def actualizar_accesibilidad(opcion, valor=None):
+    """Activa/desactiva una opción de accesibilidad y la guarda en el perfil.
+
+    opcion: nombre canónico o alias (alto-contraste, fuentes-grandes,
+            lector-pantalla, navegacion-teclado).
+    valor:  on/off (o 1/0, si/no, true/false). Omitido → activa.
+    Lanza ValueError para opciones desconocidas.
+    """
+    clave = _canonizar_opcion_accesibilidad(opcion)
+    if clave is None:
+        disponibles = ", ".join(sorted(OPCIONES_ACCESIBILIDAD))
+        raise ValueError(
+            f"Opción de accesibilidad no válida: '{opcion}'. "
+            f"Disponibles: {disponibles}")
+    activo = _parsear_valor_accesibilidad(valor)
+    perfil = cargar_perfil()
+    perfil.setdefault("preferencias", {}).setdefault("accesibilidad", {})
+    perfil["preferencias"]["accesibilidad"][clave] = activo
+    guardar_perfil(perfil)
+    return perfil
+
+
+# ── Sanitización ANSI para lector de pantalla ────────────────
+
+ANSI_ESCAPE_RE = re.compile(
+    r"\x1b\[[0-9;?]*[ -/]*[@-~]"       # CSI: colores, estilos, cursor
+    r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC: títulos, hyperlinks
+    r"|\x1b[()][0-9A-Za-z]"            # secuencias de 2 bytes (charset)
+)
+
+
+def sanitizar_salida(texto):
+    """Elimina TODO código ANSI (colores, estilos, movimiento de cursor).
+
+    Entrega texto plano para que el lector de pantalla no lea "basura".
+    """
+    if not texto:
+        return texto
+    return ANSI_ESCAPE_RE.sub("", texto)
+
+
+# ── Detección de Orca (#37) ──────────────────────────────────
+
+def detectar_orca():
+    """Detecta si el lector de pantalla Orca está activo.
+
+    Localiza el binario con shutil.which("orca") y, si existe, verifica
+    procesos con `subprocess.run(["ps", "-eo", "comm"], ...)` (sin shell).
+    Si no es posible comprobar el estado, se asume activo (fail-safe a11y:
+    sanear de más nunca perjudica a quien usa síntesis de voz).
+    """
+    if shutil.which("orca") is None:
+        return False
+    try:
+        result = subprocess.run(
+            ["ps", "-eo", "comm"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return True  # no se pudo verificar → asumir activo (fail-safe)
+    procesos = (result.stdout or "").splitlines()
+    return any(line.strip().lower().startswith("orca") for line in procesos)
+
+
+_ORCA_ACTIVO = None  # None = aún sin evaluar
+
+
+def _deteccion_orca():
+    """Detección de Orca cacheada (evita ejecutar ps en cada render)."""
+    global _ORCA_ACTIVO
+    if _ORCA_ACTIVO is None:
+        _ORCA_ACTIVO = detectar_orca()
+    return _ORCA_ACTIVO
+
+
+def lector_pantalla_activo():
+    """True si el modo lector de pantalla está activo (preferencia u Orca)."""
+    try:
+        perfil = cargar_perfil()
+        acc = (perfil.get("preferencias") or {}).get("accesibilidad") or {}
+        if acc.get("lector_pantalla"):
+            return True
+    except (OSError, ValueError):
+        pass
+    return _deteccion_orca()
+
+
+def fuentes_grandes_activo():
+    """True si la preferencia de fuentes grandes (2x) está activa."""
+    try:
+        perfil = cargar_perfil()
+        acc = (perfil.get("preferencias") or {}).get("accesibilidad") or {}
+        return bool(acc.get("fuentes_grandes"))
+    except (OSError, ValueError):
+        return False
+
+
+def alto_contraste_activo():
+    """True si la preferencia de alto contraste está activa."""
+    try:
+        perfil = cargar_perfil()
+        acc = (perfil.get("preferencias") or {}).get("accesibilidad") or {}
+        return bool(acc.get("alto_contraste"))
+    except (OSError, ValueError):
+        return False
+
+
+# ── Paleta de alto contraste ─────────────────────────────────
+
+PALETA_DEFAULT = dict(C)
+
+PALETA_ALTO_CONTRASTE = {
+    "RESET": "\033[0m",
+    "BOLD": "\033[1;97m",       # blanco puro en negrita
+    "GREEN": "\033[97m",        # blanco puro (sin tonos)
+    "CYAN": "\033[97m",
+    "YELLOW": "\033[97m",
+    "RED": "\033[97m",
+    "BLUE": "\033[97m",
+    "GRAY": "\033[97m",         # sin gris degradado (fondo negro puro)
+}
+
+
+def aplicar_alto_contraste():
+    """Aplica la paleta de alto contraste a la tabla de colores global C."""
+    C.clear()
+    C.update(PALETA_ALTO_CONTRASTE)
+
+
+def restaurar_paleta():
+    """Restaura la paleta de colores por defecto."""
+    C.clear()
+    C.update(PALETA_DEFAULT)
+
+
+def aplicar_preferencias_accesibilidad():
+    """Aplica las preferencias de accesibilidad al entorno de renderizado.
+
+    Devuelve el dict de accesibilidad activo (para pruebas y mensajes).
+    """
+    acc = opciones_accesibilidad_perfil()
+    if acc.get("alto_contraste"):
+        aplicar_alto_contraste()
+    else:
+        restaurar_paleta()
+    return acc
+
+
+# ── Fuentes grandes (escala 2x) ──────────────────────────────
+
+def texto_ampliado(texto):
+    """Escala tipográfica 2x: duplica cada carácter (ancho) y cada línea (alto).
+
+    Sanea ANSI internamente para no corromper las secuencias al duplicarlas.
+    """
+    texto = sanitizar_salida(texto)
+    if not texto:
+        return texto
+    filas = []
+    for fila in str(texto).split("\n"):
+        fila2 = "".join(ch * 2 for ch in fila)
+        filas.append(fila2)
+        filas.append(fila2)
+    return "\n".join(filas)
+
+
+def aplicar_accesibilidad(texto):
+    """Aplica el modo accesible actual a un texto de salida.
+
+    - Lector de pantalla u Orca activos: elimina ANSI.
+    - Fuentes grandes sin lector: escala 2x.
+    """
+    if lector_pantalla_activo():
+        return sanitizar_salida(texto)
+    if fuentes_grandes_activo():
+        return texto_ampliado(texto)
+    return texto
+
+
+class _FiltroSalida:
+    """Envuelve un stream y aplica el modo de salida accesible al vuelo."""
+
+    def __init__(self, stream, sanea_ansi=False, escala_2x=False):
+        self.stream = stream
+        self.sanea_ansi = sanea_ansi
+        self.escala_2x = escala_2x
+        self.encoding = getattr(stream, "encoding", None)
+
+    def write(self, texto):
+        if self.sanea_ansi:
+            texto = sanitizar_salida(texto)
+        elif self.escala_2x:
+            texto = texto_ampliado(texto)
+        self.stream.write(texto)
+        return len(texto)
+
+    def flush(self):
+        self.stream.flush()
+
+    def isatty(self):
+        try:
+            return self.stream.isatty()
+        except (ValueError, OSError):
+            return False
+
+
+_FILTRO_SALIDA_ACTIVO = False
+
+
+def _instalar_filtro_salida():
+    """Instala el filtro de salida si lector de pantalla u Orca están activos."""
+    global _FILTRO_SALIDA_ACTIVO
+    if _FILTRO_SALIDA_ACTIVO:
+        return True
+    sanea_ansi = False
+    escala_2x = False
+    if lector_pantalla_activo():
+        sanea_ansi = True
+    elif fuentes_grandes_activo():
+        escala_2x = True
+    if not (sanea_ansi or escala_2x):
+        return False
+    sys.stdout = _FiltroSalida(sys.stdout, sanea_ansi=sanea_ansi, escala_2x=escala_2x)
+    _FILTRO_SALIDA_ACTIVO = True
+    return True
+
+
+def _aplicar_accesibilidad_entorno():
+    """Aplica paleta de alto contraste y filtro de salida al arrancar."""
+    aplicar_preferencias_accesibilidad()
+    return _instalar_filtro_salida()
+
+
+def _mostrar_accesibilidad():
+    """Render del estado actual de accesibilidad (incluye detección de Orca)."""
+    acc = opciones_accesibilidad_perfil()
+    lines = [display_header("Accesibilidad")]
+    for clave, nombre in ACCESIBILIDAD_NOMBRES.items():
+        estado = acc.get(clave, False)
+        marca = "SI" if estado else "NO"
+        lines.append(f"  {C['BOLD']}{nombre}:{C['RESET']} {marca}")
+    lines.append("")
+    if _deteccion_orca():
+        lines.append(f"  {C['GREEN']}Orca detectado: SI — la salida se sanitiza"
+                     f" automáticamente (lector de pantalla).{C['RESET']}")
+    else:
+        lines.append("  Orca detectado: NO")
+    lines.append("")
+    lines.append("  Cambiar: yap perfil accesibilidad <opcion> [on|off]")
+    lines.append(f"  Opciones: {', '.join(sorted(OPCIONES_ACCESIBILIDAD))}")
+    lines.append(f"  {C['GRAY']}Guardado en: {PROFILE_FILE}{C['RESET']}")
+    lines.append(f"  {C['GRAY']}Actualizar: yap perfil accesibilidad lector-pantalla on{C['RESET']}")
+    return "\n".join(lines)
+
+
+def cmd_accesibilidad(args=""):
+    """Handle `yap perfil accesibilidad [opcion] [on|off]`.
+
+    Sin argumentos muestra el estado actual.
+    """
+    partes = args.strip().split(None, 1) if args.strip() else []
+    if not partes:
+        return _mostrar_accesibilidad()
+
+    opcion = partes[0]
+    valor = partes[1].strip() if len(partes) > 1 else ""
+    clave = _canonizar_opcion_accesibilidad(opcion)
+    if clave is None:
+        disponibles = ", ".join(sorted(OPCIONES_ACCESIBILIDAD))
+        return (f"[ERROR] Opción de accesibilidad no válida: '{opcion}'.\n"
+                f"Opciones: {disponibles}")
+
+    try:
+        perfil = actualizar_accesibilidad(clave, valor)
+    except ValueError as e:
+        return f"[ERROR] {e}"
+    except OSError as e:
+        return f"[ERROR] No se pudo guardar el perfil: {e}"
+
+    activo = perfil["preferencias"]["accesibilidad"].get(clave, False)
+    estado = "activada" if activo else "desactivada"
+    return f"[OK] Accesibilidad: {ACCESIBILIDAD_NOMBRES[clave]} = {estado}."
+
+
+# ── Navegación por teclado (#37) ─────────────────────────────
+# Menú interactivo 100% teclado: Tab/Flechas mueven, Enter confirma,
+# Esc cancela. Sin librerías externas (termios/tty en POSIX, fallback genérico).
+
+def _leer_tecla_generico():
+    """Fallback sin termios (Windows/scripts): lee y normaliza una línea."""
+    try:
+        data = sys.stdin.readline()
+    except (EOFError, OSError):
+        return "eof"
+    data = (data or "").strip().lower()
+    if not data:
+        return "enter"
+    mapa = {
+        "up": "up", "arriba": "up", "k": "up", "w": "up", "flecha-up": "up",
+        "down": "down", "abajo": "down", "j": "down", "s": "down", "flecha-down": "down",
+        "left": "left", "izquierda": "left", "h": "left", "a": "left",
+        "right": "right", "derecha": "right", "l": "right", "d": "right",
+        "tab": "tab", "\t": "tab",
+        "enter": "enter", "ok": "enter", "confirmar": "enter", "intro": "enter",
+        "esc": "esc", "escape": "esc", "q": "esc", "salir": "esc", "cancelar": "esc",
+    }
+    return mapa.get(data, data[0])
+
+
+def _leer_tecla():
+    """Lee una tecla real del terminal (POSIX). Devuelve un token normalizado.
+
+    Tokens: up/down/left/right/tab/backtab/enter/esc/backspace/ctrl-c o el char.
+    """
+    try:
+        import termios
+        import tty
+        import select
+    except ImportError:
+        return _leer_tecla_generico()
+
+    fd = sys.stdin.fileno()
+    try:
+        viejo = termios.tcgetattr(fd)
+    except (termios.error, ValueError, OSError):
+        return _leer_tecla_generico()
+    try:
+        tty.setraw(fd)
+        ch = sys.stdin.read(1)
+        if ch == "\x1b":
+            rest = ""
+            for _ in range(2):
+                r, _, _ = select.select([fd], [], [], 0.25)
+                if not r:
+                    break
+                rest += sys.stdin.read(1)
+            if rest == "[A":
+                return "up"
+            if rest == "[B":
+                return "down"
+            if rest == "[C":
+                return "right"
+            if rest == "[D":
+                return "left"
+            if rest == "[Z":
+                return "backtab"
+            return "esc" if not rest else "unknown"
+        if ch in ("\r", "\n"):
+            return "enter"
+        if ch == "\t":
+            return "tab"
+        if ch in ("\x7f", "\x08"):
+            return "backspace"
+        if ch == "\x03":
+            return "ctrl-c"
+        return ch
+    except (termios.error, ValueError, OSError):
+        return _leer_tecla_generico()
+    finally:
+        try:
+            termios.tcsetattr(fd, termios.TCSADRAIN, viejo)
+        except (termios.error, ValueError, OSError):
+            pass
+
+
+def menu_interactivo(titulo, opciones, reader=None):
+    """Menú navegable solo con teclado.
+
+    ↑/↓ o Tab: mover · Enter: confirmar · Esc/q: salir.
+    `reader` inyecta la lectura de teclas (útil en pruebas sin TTY).
+    Devuelve el índice elegido (0-based), o None si se cancela con Esc.
+    """
+    opciones = [str(o) for o in (opciones or [])]
+    if not opciones:
+        return None
+    if reader is None:
+        if sys.stdin.isatty():
+            reader = _leer_tecla
+        else:
+            reader = _leer_tecla_generico
+
+    seleccion = 0
+    n = len(opciones)
+    total_lineas = n + 2  # título + opciones + línea de ayuda
+
+    def pintar():
+        sys.stdout.write(f"  {C['BOLD']}{titulo}{C['RESET']}\n")
+        for i, opt in enumerate(opciones):
+            if i == seleccion:
+                sys.stdout.write(f"  {C['GREEN']}> {C['RESET']}{opt}\n")
+            else:
+                sys.stdout.write(f"    {opt}\n")
+        sys.stdout.write(f"  {C['GRAY']}[Tab/Flechas: mover · Enter: elegir · "
+                         f"Esc: salir]{C['RESET']}\n")
+        sys.stdout.write(f"\x1b[{total_lineas}A")
+        sys.stdout.flush()
+
+    def limpiar():
+        sys.stdout.write(f"\x1b[{total_lineas}B" + " " * 80 + "\n")
+        sys.stdout.flush()
+
+    while True:
+        pintar()
+        tecla = reader()
+        tecla = tecla.strip().lower() if isinstance(tecla, str) else ""
+        if tecla in ("down", "tab", "right"):
+            seleccion = (seleccion + 1) % n
+        elif tecla in ("up", "backtab", "left"):
+            seleccion = (seleccion - 1) % n
+        elif tecla in ("enter",):
+            limpiar()
+            return seleccion
+        elif tecla in ("esc", "q", "ctrl-c", "eof"):
+            limpiar()
+            return None
 
 
 # ── Progreso del estudiante ─────────────────────────────────
@@ -3000,6 +3551,12 @@ def interpret(user_input):
         return "guia", "guia"
     if stripped in ("progreso", "avance", "mi progreso", "mi avance", "avance curso"):
         return "progreso", "progreso"
+    # accesibilidad [opción]  → ("perfil", "accesibilidad [opción]")
+    if stripped in ("accesibilidad", "a11y") or stripped.startswith(("accesibilidad ", "a11y ")):
+        head = "a11y" if stripped.startswith("a11y") else "accesibilidad"
+        idx = stripped.find(head)
+        return "perfil", "accesibilidad " + user_input[idx + len(head):].strip()
+
     # perfil [nombre|nivel|idioma <valor>] — conserva mayúsculas del valor
     if stripped == "perfil" or stripped == "mi perfil" or stripped.startswith("perfil "):
         return "perfil", user_input[6:].strip()
@@ -3040,6 +3597,9 @@ def interpret(user_input):
 
 
 def main():
+    # Accesibilidad: paleta (alto contraste) + filtro de salida (lector/Orca)
+    _aplicar_accesibilidad_entorno()
+
     # ── Modo interactivo REPL (yap sin argumentos) ──
     if len(sys.argv) == 1:
         # readline: historial con flechas ↑↓
@@ -3260,6 +3820,8 @@ def handle_action(action, param, original_input):
         print("  Telemetria:    'telemetria' — resumen local de tu uso")
         print("  Perfil:        'perfil' — ver tu perfil")
         print("  Actualizar:    'perfil nombre Maria' | 'perfil nivel basico' | 'perfil idioma es'")
+        print("  Accesibilidad: 'perfil accesibilidad' — ver opciones")
+        print("                 'perfil accesibilidad alto-contraste|fuentes-grandes|lector-pantalla|navegacion-teclado [on|off]'")
         print()
 
     else:
