@@ -84,6 +84,16 @@ LLAMA_TEMP_QUERY = float(os.environ.get("YAP_LLAMA_TEMP_QUERY", "0.7"))
 LLAMA_TEMP_PSEINT = float(os.environ.get("YAP_LLAMA_TEMP_PSEINT", "0.5"))
 LLAMA_TEMP_CLASSIFY = float(os.environ.get("YAP_LLAMA_TEMP_CLASSIFY", "0.1"))
 
+# Timeout extendido para el modelo local (#94): hardware de escasos
+# recursos puede tardar mas de 120 s en generar la respuesta.
+LLM_TIMEOUT = int(os.environ.get("YAP_LLM_TIMEOUT", "300"))
+# La clasificacion de intenciones genera pocos tokens: timeout corto.
+LLM_TIMEOUT_CLASSIFY = int(os.environ.get("YAP_LLM_TIMEOUT_CLASSIFY", "30"))
+MSG_TIMEOUT_LLM = (
+    f"[WARN] Tiempo de espera agotado ({LLM_TIMEOUT}s): el modelo local "
+    "no pudo completar la solicitud dentro del tiempo limite."
+)
+
 BOS = "<|begin_of_text|>"
 HEADER = "<|start_header_id|>"
 FOOTER = "<|end_header_id|>"
@@ -1771,7 +1781,7 @@ def _llamar_llm_evaluacion(prompt):
             stderr=subprocess.PIPE,
             text=True,
         )
-        stdout, stderr = proc.communicate(timeout=120)
+        stdout, stderr = proc.communicate(timeout=LLM_TIMEOUT)
         result = subprocess.CompletedProcess(
             cmd,
             proc.returncode if proc.returncode is not None else 0,
@@ -1789,7 +1799,7 @@ def _llamar_llm_evaluacion(prompt):
                     f"[WARN] Error limpiando proceso llama-cli tras timeout: {cleanup_err}",
                     file=sys.stderr,
                 )
-        return "[WARN] Tiempo de espera agotado (120s)"
+        return MSG_TIMEOUT_LLM
     except FileNotFoundError:
         return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
 
@@ -2297,10 +2307,11 @@ def iniciar_ea(curso_codigo, ea_id):
                 pregunta = payload if kind == "pregunta" else resp
                 contexto = _contexto_actividad(curso, ea, act, t)
                 sys.stdout.write(f"\n{C['CYAN']}Tutor:{C['RESET']}\n")
+                consulta = contexto + f"\nDuda del estudiante: {pregunta}"
                 sys.stdout.write(
-                    cmd_query(
-                        contexto + f"\nDuda del estudiante: {pregunta}",
-                        store_history=False,
+                    manejar_timeout_local(
+                        cmd_query(consulta, store_history=False),
+                        consulta,
                     ) + "\n"
                 )
                 continue
@@ -2722,6 +2733,43 @@ def _clean_output(result):
     return out if out else (result.stderr.strip() or "(sin respuesta)")
 
 
+def preguntar_delegacion_cloud(consulta):
+    """Interfaz de timeout del modelo local (#94).
+
+    Informa que el modelo local no pudo terminar a tiempo y pregunta si
+    se desea delegar la consulta a la nube. Solo muestra la opcion: la
+    conexion real a la nube queda fuera de este alcance. Devuelve el
+    texto a mostrar al usuario.
+    """
+    sys.stdout.write(
+        "El modelo local no pudo terminar a tiempo. "
+        "¿Deseas reintentar en la nube? [s/N] "
+    )
+    sys.stdout.flush()
+    try:
+        opcion = input().strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        sys.stdout.write("\n")
+        return "[INFO] Consulta cancelada. Puedes reintentarla cuando quieras."
+    if opcion in ("s", "si", "y", "yes"):
+        return (
+            "[INFO] La delegacion a la nube aun no esta disponible en esta "
+            "version de Yap. Reintenta la consulta o reformulala mas breve."
+        )
+    return (
+        "[INFO] Sin delegacion a la nube. El modelo local sigue disponible: "
+        "reintenta la consulta cuando quieras."
+    )
+
+
+def manejar_timeout_local(respuesta, consulta):
+    """Si la respuesta del modelo local es un timeout, presenta la interfaz
+    de delegacion a la nube. Devuelve el texto a mostrar al usuario."""
+    if respuesta.startswith("[WARN] Tiempo de espera agotado"):
+        return preguntar_delegacion_cloud(consulta)
+    return respuesta
+
+
 def cmd_query(prompt, context=None, store_history=True):
     parts = [BOS]
     parts.append(f"{HEADER}system{FOOTER}\n\n{_system_prompt()}{EOT}")
@@ -2753,7 +2801,7 @@ def cmd_query(prompt, context=None, store_history=True):
         "--no-display-prompt",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=LLM_TIMEOUT)
         out = _clean_output(result)
         if store_history and out not in ("(sin respuesta)", ""):
             HISTORY.append((prompt, out))
@@ -2761,7 +2809,7 @@ def cmd_query(prompt, context=None, store_history=True):
                 HISTORY.pop(0)
         return out
     except subprocess.TimeoutExpired:
-        return "[WARN] Tiempo de espera agotado (120s)"
+        return MSG_TIMEOUT_LLM
     except FileNotFoundError:
         return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
 
@@ -2799,10 +2847,10 @@ def cmd_pseint(query):
         "--no-display-prompt",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=LLM_TIMEOUT)
         return _clean_output(result)
     except subprocess.TimeoutExpired:
-        return "[WARN] Tiempo de espera agotado (120s)"
+        return MSG_TIMEOUT_LLM
     except FileNotFoundError:
         return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
 
@@ -2971,7 +3019,7 @@ def classify_intent(user_input):
         "-no-cnv", "--no-display-prompt",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=LLM_TIMEOUT_CLASSIFY)
         out = result.stdout.strip()
         for tok in [BOS, HEADER, FOOTER, EOT, "[end of text]"]:
             out = out.replace(tok, "")
@@ -3162,15 +3210,15 @@ def handle_action(action, param, original_input):
         if isinstance(content, tuple):
             text, _ = content
             print(f"Contenido obtenido ({len(text)} chars). Resumiendo con LLM...")
-            response = cmd_query(
-                f"Resume el siguiente contenido sobre '{query}':",
-                context=text,
-                store_history=False,
+            prompt = f"Resume el siguiente contenido sobre '{query}':"
+            response = manejar_timeout_local(
+                cmd_query(prompt, context=text, store_history=False),
+                prompt,
             )
             print(response)
             source = "https://es.wikipedia.org/wiki/" + query.replace(" ", "_")
             print(f"\nFuente: {source}")
-            if not response.startswith("[WARN]") and not response.startswith("[ERROR]"):
+            if not response.startswith(("[WARN]", "[ERROR]", "[INFO]")):
                 HISTORY.append((query, response))
                 if len(HISTORY) > MAX_HISTORY:
                     HISTORY.pop(0)
@@ -3187,13 +3235,13 @@ def handle_action(action, param, original_input):
         if isinstance(content, tuple):
             text, _ = content
             print(f"Contenido obtenido ({len(text)} chars). Resumiendo con LLM...")
-            response = cmd_query(
-                f"Resume el siguiente contenido sobre '{param}':",
-                context=text,
-                store_history=False,
+            prompt = f"Resume el siguiente contenido sobre '{param}':"
+            response = manejar_timeout_local(
+                cmd_query(prompt, context=text, store_history=False),
+                prompt,
             )
             print(response)
-            if not response.startswith("[WARN]") and not response.startswith("[ERROR]"):
+            if not response.startswith(("[WARN]", "[ERROR]", "[INFO]")):
                 HISTORY.append((param, response))
                 if len(HISTORY) > MAX_HISTORY:
                     HISTORY.pop(0)
@@ -3202,7 +3250,7 @@ def handle_action(action, param, original_input):
 
     elif action == "pseint":
         print("Consultando tutor PSeInt...")
-        print(cmd_pseint(param))
+        print(manejar_timeout_local(cmd_pseint(param), param))
 
     elif action == "introduccion_pseint":
         cmd_intro_pseint()
@@ -3264,7 +3312,11 @@ def handle_action(action, param, original_input):
 
     else:
         print("Consultando LLM...")
-        print(cmd_query(original_input))
+        answer = manejar_timeout_local(
+            cmd_query(original_input),
+            original_input,
+        )
+        print(answer)
 
 
 if __name__ == "__main__":
