@@ -746,10 +746,11 @@ def sanitizar_salida(texto):
 def detectar_orca():
     """Detecta si el lector de pantalla Orca está activo.
 
-    Localiza el binario con shutil.which("orca") y, si existe, verifica
-    procesos con `subprocess.run(["ps", "-eo", "comm"], ...)` (sin shell).
-    Si no es posible comprobar el estado, se asume activo (fail-safe a11y:
-    sanear de más nunca perjudica a quien usa síntesis de voz).
+    Localiza el binario con shutil.which("orca") y, si existe, consulta
+    los procesos del sistema con `ps -eo comm` vía subprocess (lista de
+    argumentos, sin shell). Si no es posible comprobar el estado, se asume
+    activo (fail-safe a11y: sanear de más nunca perjudica a quien usa
+    síntesis de voz).
     """
     if shutil.which("orca") is None:
         return False
