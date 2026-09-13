@@ -13,6 +13,9 @@ commit-msg.txt
 .pytest_cache/
 resultado-*.txt
 
+# Reportes generados por tests/run_tests.py --report
+tests/report/*.txt
+
 # Paquetes Debian generados (#31)
 dist/
 *.deb
