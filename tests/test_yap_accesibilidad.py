@@ -46,12 +46,12 @@ def escribir_perfil(path, data):
 @pytest.fixture(autouse=True)
 def _entorno_accesibilidad_limpio():
     """Aísla el estado global mutable entre tests (paleta + cache Orca + filtro)."""
+    stdout_real = yap.sys.stdout
     yap._ORCA_ACTIVO = False
-    yap._FILTRO_SALIDA_ACTIVO = False
     yield
     yap.restaurar_paleta()
+    yap.sys.stdout = stdout_real
     yap._ORCA_ACTIVO = None
-    yap._FILTRO_SALIDA_ACTIVO = False
 
 
 # ============================================================
@@ -553,7 +553,6 @@ class TestRoutingYArranque:
 
     def test_instalar_filtro_con_lector_activo(self):
         original_stdout = yap.sys.stdout
-        yap._FILTRO_SALIDA_ACTIVO = False
         pf = perfil_tmp()
         try:
             with mock.patch.object(yap, "PROFILE_FILE", pf):
@@ -564,28 +563,23 @@ class TestRoutingYArranque:
                 assert yap.sys.stdout.sanea_ansi is True
                 yap.sys.stdout.write("\033[92mHola\033[0m")
         finally:
-            yap._FILTRO_SALIDA_ACTIVO = False
             yap.sys.stdout = original_stdout
 
     def test_instalar_filtro_con_orca_detectado(self):
         original_stdout = yap.sys.stdout
         yap._ORCA_ACTIVO = True
-        yap._FILTRO_SALIDA_ACTIVO = False
         pf = perfil_tmp()
         try:
             with mock.patch.object(yap, "PROFILE_FILE", pf):
                 assert yap._instalar_filtro_salida() is True
         finally:
-            yap._FILTRO_SALIDA_ACTIVO = False
             yap.sys.stdout = original_stdout
 
     def test_instalar_filtro_no_instala_con_defaults(self):
         yap._ORCA_ACTIVO = False
-        yap._FILTRO_SALIDA_ACTIVO = False
         pf = perfil_tmp()
         with mock.patch.object(yap, "PROFILE_FILE", pf):
             assert yap._instalar_filtro_salida() is False
-        yap._FILTRO_SALIDA_ACTIVO = False
 
 
 if __name__ == "__main__":

@@ -133,7 +133,8 @@ class TestCommandSecurity:
 
     def test_no_shell_true_en_subprocess(self):
         """Verificar que subprocess nunca usa shell=True."""
-        source = open(yap.__file__, encoding="utf-8").read()
+        with open(yap.__file__, encoding="utf-8") as f:
+            source = f.read()
         # Buscar shell=True en el codigo fuente
         # Nota: shell=True es peligroso porque permite injection
         assert "shell=True" not in source, (
@@ -142,14 +143,16 @@ class TestCommandSecurity:
 
     def test_no_eval(self):
         """Verificar que no se usa eval() en el codigo."""
-        source = open(yap.__file__, encoding="utf-8").read()
+        with open(yap.__file__, encoding="utf-8") as f:
+            source = f.read()
         assert "eval(" not in source, (
             "eval() detectado — riesgo de ejecucion de codigo arbitrario"
         )
 
     def test_no_os_system(self):
         """Verificar que no se usa os.system()."""
-        source = open(yap.__file__, encoding="utf-8").read()
+        with open(yap.__file__, encoding="utf-8") as f:
+            source = f.read()
         assert "os.system(" not in source, (
             "os.system() detectado — riesgo de shell injection"
         )
@@ -267,14 +270,16 @@ class TestSecurityLimits:
     def test_contenido_limitado_3000_chars(self):
         """El contenido webfetch debe limitarse a 3000 caracteres."""
         # Verificar que la funcion cmd_webfetch limita la salida
-        source = open(yap.__file__, encoding="utf-8").read()
+        with open(yap.__file__, encoding="utf-8") as f:
+            source = f.read()
         assert "text[:3000]" in source or "text[:2000]" in source, (
             "No se encontro limite de caracteres en cmd_webfetch"
         )
 
     def test_timeout_en_subprocess(self):
         """Todas las llamadas a subprocess deben tener timeout."""
-        source = open(yap.__file__, encoding="utf-8").read()
+        with open(yap.__file__, encoding="utf-8") as f:
+            source = f.read()
         # Buscar subprocess.run sin timeout
         import re
         # Encontrar todas las llamadas a subprocess.run
@@ -296,7 +301,8 @@ class TestFileSystemSecurity:
 
     def test_no_escritura_fuera_de_whitelist(self):
         """Verificar que no hay operaciones de escritura arbitrarias."""
-        source = open(yap.__file__, encoding="utf-8").read()
+        with open(yap.__file__, encoding="utf-8") as f:
+            source = f.read()
         # No debe haber open() con 'w' fuera de load_whitelist
         # (load_whitelist solo LEE archivos)
         dangerous_patterns = [

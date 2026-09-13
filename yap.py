@@ -784,6 +784,7 @@ def lector_pantalla_activo():
         if acc.get("lector_pantalla"):
             return True
     except (OSError, ValueError):
+        # Perfil ausente o corrupto: se asume lector no activo (fail-safe).
         pass
     return _deteccion_orca()
 
@@ -907,13 +908,12 @@ class _FiltroSalida:
             return False
 
 
-_FILTRO_SALIDA_ACTIVO = False
-
-
 def _instalar_filtro_salida():
-    """Instala el filtro de salida si lector de pantalla u Orca están activos."""
-    global _FILTRO_SALIDA_ACTIVO
-    if _FILTRO_SALIDA_ACTIVO:
+    """Instala el filtro de salida si lector de pantalla u Orca están activos.
+
+    Idempotente: si el stream ya está envuelto, no se vuelve a instalar.
+    """
+    if isinstance(sys.stdout, _FiltroSalida):
         return True
     sanea_ansi = False
     escala_2x = False
@@ -924,7 +924,6 @@ def _instalar_filtro_salida():
     if not (sanea_ansi or escala_2x):
         return False
     sys.stdout = _FiltroSalida(sys.stdout, sanea_ansi=sanea_ansi, escala_2x=escala_2x)
-    _FILTRO_SALIDA_ACTIVO = True
     return True
 
 
