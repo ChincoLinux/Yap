@@ -227,6 +227,84 @@ class TestQuery:
 
 
 # ============================================================
+# 4b. TIMEOUT EXTENDIDO Y DELEGACION A LA NUBE (#94)
+# ============================================================
+
+class TestTimeoutExtendido:
+    """Issue #94: timeout ampliado para hardware de escasos recursos y
+    oferta de delegacion a la nube (solo interfaz)."""
+
+    def test_timeout_predeterminado_es_extendido(self):
+        """El timeout por defecto debe superar los 120 s originales."""
+        assert yap.LLM_TIMEOUT >= 120
+
+    def test_mensaje_timeout_es_informativo(self):
+        """El marcador [WARN] debe informar del limite agotado."""
+        assert "[WARN]" in yap.MSG_TIMEOUT_LLM
+        assert f"{yap.LLM_TIMEOUT}s" in yap.MSG_TIMEOUT_LLM
+        assert "no pudo completar la solicitud" in yap.MSG_TIMEOUT_LLM
+
+    @patch("subprocess.run")
+    def test_cmd_query_aplica_timeout_extendido(self, mock_run):
+        """cmd_query debe pasar LLM_TIMEOUT a subprocess.run."""
+        mock_run.return_value = Mock(stdout="ok", stderr="")
+        yap.cmd_query("test", store_history=False)
+        _, kwargs = mock_run.call_args
+        assert kwargs.get("timeout") == yap.LLM_TIMEOUT
+
+    @patch("subprocess.run")
+    def test_cmd_pseint_aplica_timeout_extendido(self, mock_run):
+        """cmd_pseint debe usar el mismo timeout extendido."""
+        mock_run.return_value = Mock(stdout="paso 1", stderr="")
+        yap.cmd_pseint("como hago un ciclo mientras")
+        _, kwargs = mock_run.call_args
+        assert kwargs.get("timeout") == yap.LLM_TIMEOUT
+
+    @patch("subprocess.run")
+    def test_classify_usa_timeout_corto_propio(self, mock_run):
+        """La clasificacion de intenciones mantiene un timeout corto."""
+        mock_run.return_value = Mock(stdout="query|hola", stderr="")
+        yap.classify_intent("hola")
+        _, kwargs = mock_run.call_args
+        assert kwargs.get("timeout") == yap.LLM_TIMEOUT_CLASSIFY
+
+    @patch("subprocess.run")
+    def test_timeout_excepcion_no_rompe_y_deriva_a_delegacion(self, mock_run, capsys):
+        """TimeoutExpired se captura y se presenta la opcion de la nube."""
+        from subprocess import TimeoutExpired
+        mock_run.side_effect = TimeoutExpired("llama-cli", yap.LLM_TIMEOUT)
+        with patch("builtins.input", return_value="n"):
+            respuesta = yap.manejar_timeout_local(
+                yap.cmd_query("test", store_history=False), "test"
+            )
+        out = capsys.readouterr().out
+        assert "no pudo terminar a tiempo" in out
+        assert "[s/N]" in out
+        assert respuesta.startswith("[INFO]")
+
+    def test_preguntar_delegacion_cloud_rechaza(self, capsys):
+        """Respuesta 'n' no delega y devuelve confirmacion [INFO]."""
+        with patch("builtins.input", return_value="n"):
+            texto = yap.preguntar_delegacion_cloud("hola")
+        out = capsys.readouterr().out
+        assert "El modelo local no pudo terminar a tiempo" in out
+        assert "¿Deseas reintentar en la nube? [s/N]" in out
+        assert texto.startswith("[INFO]")
+
+    def test_preguntar_delegacion_cloud_acepta_si(self, capsys):
+        """Respuesta 's' indica intencion de delegar (interfaz unicamente)."""
+        with patch("builtins.input", return_value="s"):
+            texto = yap.preguntar_delegacion_cloud("hola")
+        assert texto.startswith("[INFO]")
+        assert "no esta disponible" in texto
+
+    def test_manejar_timeout_local_passthrough_normal(self):
+        """Respuestas normales del LLM no activan la delegacion."""
+        texto = yap.manejar_timeout_local("respuesta normal", "hola")
+        assert texto == "respuesta normal"
+
+
+# ============================================================
 # 5. HISTORIAL DE CONVERSACION
 # ============================================================
 

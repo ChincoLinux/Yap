@@ -494,7 +494,7 @@ git checkout lowmem
 
 - **Contexto limitado**: 2048 tokens (~1500 palabras) en ramas lowmem y ultra-lowmem con KV cache cuantizada Q8_0 para minimizar RAM.
 - **Sin persistencia**: cada sesion interactiva es independiente; no hay memoria entre ejecuciones.
-- **Latencia**: timeout de 120 s por consulta. En CPU con 2 nucleos, la primera respuesta puede tardar hasta 60 s.
+- **Latencia**: timeout de 300 s por consulta (configurable con `YAP_LLM_TIMEOUT`). En CPU con 2 nucleos, la primera respuesta puede tardar hasta 60 s.
 - **Alucinaciones**: el modelo Llama 3.2 3B puede generar informacion incorrecta. Se prefiere `webfetch` para datos factuales.
 - **Idioma**: optimizado para espanol; otros idiomas pueden dar resultados inconsistentes.
 - **Hardware**: sin soporte GPU ni aceleracion hardware.
