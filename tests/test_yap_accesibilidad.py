@@ -8,7 +8,7 @@ Verifica:
   1. Defaults y normalización de preferencias.accesibilidad en el perfil
   2. Activación/guardado de cada opción (on/off, aliases, opciones inválidas)
   3. Sanitización de códigos ANSI cuando el lector de pantalla u Orca está activo
-  4. Detección de Orca con mock de shutil.which y de procesos (sin shell=True)
+  4. Detección de Orca con mock de shutil.which y de procesos (sin modo shell)
   5. Paleta de alto contraste (blanco puro sobre fondo negro)
   6. Escala 2x de fuentes (ancho y alto), ANSI-safe
   7. Estructura CLI: yap perfil accesibilidad [opción] [on|off]
@@ -256,7 +256,7 @@ class TestSanitizarSalida:
 # ============================================================
 
 class TestDetectarOrca:
-    """Requisito: detección con shutil.which y procesos (sin shell=True)."""
+    """Requisito: detección con shutil.which y procesos (sin modo shell)."""
 
     def test_sin_binario_no_consulta_procesos(self):
         with mock.patch.object(yap.shutil, "which", return_value=None) as mw, \
