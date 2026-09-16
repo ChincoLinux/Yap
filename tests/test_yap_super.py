@@ -665,3 +665,74 @@ class TestNoImportsPeligrososSuper:
         assert "shell=True" not in source
         assert "os.system(" not in source
         assert "eval(" not in source
+
+
+class TestComandoLlamaSinInjection(SuperTestBase):
+    """CWE-078: el prompt HTTP no puede ir en argv de llama-cli."""
+
+    def test_ruta_http_rechaza_traversal(self):
+        assert super_yap.ruta_http("/health") == "/health"
+        assert super_yap.ruta_http("/v1/query?x=1") == "/v1/query"
+        assert super_yap.ruta_http("/health/../../etc/passwd") == ""
+        assert super_yap.ruta_http("health") == ""
+        assert super_yap.ruta_http("/v1/query\x00-p") == ""
+
+    def test_content_length_invalido(self):
+        assert super_yap.parsear_content_length(None) == (200, 0)
+        assert super_yap.parsear_content_length("12") == (200, 12)
+        assert super_yap.parsear_content_length("no-es-numero") == (400, 0)
+        assert super_yap.parsear_content_length("-1") == (400, 0)
+        assert super_yap.parsear_content_length("999999999") == (413, 0)
+
+    def test_cmd_llama_no_incluye_prompt(self):
+        cmd = super_yap._cmd_llama_cli(
+            "/usr/local/bin/llama-cli",
+            "/opt/yap/models/Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+        )
+        assert "-p" not in cmd
+        assert cmd[cmd.index("-f") + 1] == "/dev/stdin"
+        assert "rm -rf" not in " ".join(cmd)
+        assert all(isinstance(x, str) for x in cmd)
+
+    @patch("subprocess.run")
+    @patch("super_yap.shutil.which", return_value="/usr/local/bin/llama-cli")
+    @patch("super_yap.os.path.isfile", return_value=True)
+    def test_prompt_malicioso_va_por_stdin(self, _isfile, _which, mock_run):
+        mock_run.return_value = MagicMock(stdout="ok", stderr="", returncode=0)
+        evil = 'hola"; rm -rf /; echo "$(whoami)" && shutdown'
+        out = super_yap.llamar_llama_cli(
+            evil, "/opt/yap/models/Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+        )
+        assert out == "ok"
+        cmd = mock_run.call_args[0][0]
+        joined = " ".join(cmd)
+        assert evil not in joined
+        assert "-p" not in cmd
+        assert cmd[cmd.index("-f") + 1] == "/dev/stdin"
+        assert mock_run.call_args.kwargs["input"] == evil
+        assert mock_run.call_args.kwargs["timeout"] == super_yap.LLAMA_TIMEOUT
+
+    @patch("subprocess.run")
+    def test_modelo_no_gguf_no_ejecuta(self, mock_run):
+        out = super_yap.llamar_llama_cli("hola", "/tmp/evil; rm -rf /")
+        assert "[ERROR]" in out
+        mock_run.assert_not_called()
+
+    @patch("subprocess.run")
+    @patch("super_yap.shutil.which", return_value="/usr/local/bin/llama-cli")
+    @patch("super_yap.os.path.isfile", return_value=True)
+    def test_post_http_no_inyecta_en_argv(self, _isfile, _which, mock_run):
+        mock_run.return_value = MagicMock(
+            stdout="While itera.", stderr="", returncode=0,
+        )
+        evil = 'explica; rm -rf / $(id)'
+        payload = json.dumps({"prompt": evil, "session_id": "S-inj"}).encode()
+        code, body = super_yap.SuperYapHandler().manejar(
+            "POST", "/v1/query?cmd=id", payload,
+        )
+        assert code == 200
+        cmd = mock_run.call_args[0][0]
+        assert evil not in " ".join(cmd)
+        assert "-p" not in cmd
+        assert evil in mock_run.call_args.kwargs["input"]
+        assert "While itera" in body["texto"]

@@ -297,22 +297,73 @@ def _hilos():
     return _entero_env("YAP_SUPER_THREADS", 4)
 
 
-def llamar_llama_cli(full_prompt, model_path):
+def _temperatura():
+    raw = os.environ.get("YAP_SUPER_TEMP", "0.7").strip()
+    try:
+        val = float(raw)
+    except ValueError:
+        return "0.7"
+    if val < 0.0 or val > 2.0:
+        return "0.7"
+    return str(val)
+
+
+def ruta_http(raw_path):
+    """Path without query string. Reject traversal and control chars."""
+    path = (raw_path or "").split("?", 1)[0]
+    if not path.startswith("/"):
+        return ""
+    for ch in ("..", "\\", "\x00", "\n", "\r"):
+        if ch in path:
+            return ""
+    return path
+
+
+def parsear_content_length(raw, maximo=BODY_MAX):
+    """Return (http_status, nbytes). 200 + n, or 400/413 + 0."""
+    if raw is None or raw == "":
+        return 200, 0
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return 400, 0
+    if n < 0:
+        return 400, 0
+    if n > maximo:
+        return 413, 0
+    return 200, n
+
+
+def _binario_llama_cli():
     bin_path = shutil.which("llama-cli")
     if not bin_path:
-        return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
-    if not os.path.isfile(model_path):
-        return (
-            f"[ERROR] Modelo Super Yap no encontrado: {model_path}\n"
-            "Descarga Llama-3.1-8B-Instruct-Q4_K_M.gguf a /opt/yap/models/ "
-            "(ver docs/SUPER-YAP.md)."
-        )
-    cmd = [
+        return None
+    if os.path.basename(bin_path) not in ("llama-cli", "llama-cli.exe"):
+        return None
+    return bin_path
+
+
+def _es_modelo_gguf(model_path):
+    if not model_path or not isinstance(model_path, str):
+        return False
+    if "\x00" in model_path:
+        return False
+    if not model_path.endswith(".gguf"):
+        return False
+    try:
+        return os.path.isfile(model_path)
+    except OSError:
+        return False
+
+
+def _cmd_llama_cli(bin_path, model_path):
+    """Argv fijo: el prompt nunca entra por -p (CWE-078 / CWE-088)."""
+    return [
         bin_path,
         "-m", model_path,
-        "-p", full_prompt,
+        "-f", "/dev/stdin",
         "-n", str(N_PREDICT),
-        "--temp", os.environ.get("YAP_SUPER_TEMP", "0.7"),
+        "--temp", _temperatura(),
         "--ctx-size", str(_entero_env("YAP_SUPER_CTX", MAX_CTX)),
         "--cache-type-k", "q8_0",
         "--cache-type-v", "q8_0",
@@ -321,9 +372,26 @@ def llamar_llama_cli(full_prompt, model_path):
         "-no-cnv",
         "--no-display-prompt",
     ]
+
+
+def llamar_llama_cli(full_prompt, model_path):
+    bin_path = _binario_llama_cli()
+    if not bin_path:
+        return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."
+    if not _es_modelo_gguf(model_path):
+        return (
+            f"[ERROR] Modelo Super Yap no encontrado: {model_path}\n"
+            "Descarga Llama-3.1-8B-Instruct-Q4_K_M.gguf a /opt/yap/models/ "
+            "(ver docs/SUPER-YAP.md)."
+        )
+    cmd = _cmd_llama_cli(bin_path, model_path)
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=LLAMA_TIMEOUT,
+            cmd,
+            input=full_prompt,
+            capture_output=True,
+            text=True,
+            timeout=LLAMA_TIMEOUT,
         )
         return _limpiar_salida(result)
     except subprocess.TimeoutExpired:
@@ -433,6 +501,7 @@ class SuperYapHandler:
     """HTTP handler extracted so tests do not need to bind a port."""
 
     def manejar(self, method, path, raw_body):
+        path = ruta_http(path)
         if method == "GET" and path in ("/", "/health", "/v1/health"):
             path_modelo, etiqueta = resolver_modelo()
             ram = ram_disponible_mb()
@@ -478,16 +547,19 @@ def _hacer_handler():
             self.wfile.write(raw)
 
         def do_GET(self):
-            code, obj = nucleo.manejar("GET", self.path.split("?", 1)[0], b"")
+            code, obj = nucleo.manejar("GET", ruta_http(self.path), b"")
             self._send(code, obj)
 
         def do_POST(self):
-            n = int(self.headers.get("Content-Length") or "0")
-            if n > BODY_MAX:
+            status, n = parsear_content_length(self.headers.get("Content-Length"))
+            if status == 413:
                 self._send(413, {"texto": "", "error": "Cuerpo demasiado grande"})
                 return
+            if status != 200:
+                self._send(400, {"texto": "", "error": "Content-Length invalido"})
+                return
             raw = self.rfile.read(n) if n else b"{}"
-            code, obj = nucleo.manejar("POST", self.path.split("?", 1)[0], raw)
+            code, obj = nucleo.manejar("POST", ruta_http(self.path), raw)
             self._send(code, obj)
 
     return Handler
