@@ -14,6 +14,7 @@ import urllib.error
 import http.cookiejar
 import re
 import atexit
+import time
 
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
@@ -163,6 +164,8 @@ SUPER_LOCAL_TIMEOUT = 180  # 3 min; luego Gradio Cloud Run
 SUPER_GRADIO_HTML_TIMEOUT = 30
 SUPER_GRADIO_JOIN_TIMEOUT = 30
 SUPER_GRADIO_SSE_TIMEOUT = 180
+SUPER_INTERNET_PROBE_TIMEOUT = 3
+SUPER_INTERNET_CACHE_S = 60
 SUPER_GRADIO_HTML_MAX = 2 * 1024 * 1024
 SUPER_HINTS = (
     "explica", "explique", "diferencia", "compara", "genera", "rubrica",
@@ -176,6 +179,7 @@ _SUPER_MODO = "auto"     # auto | super | local  (menu: super on / super off)
 _GRADIO_CACHE = {}
 _GRADIO_COOKIEJAR = http.cookiejar.CookieJar()
 _GRADIO_OPENER = None
+_INTERNET_CACHE = {"ok": None, "ts": 0.0}
 
 BOS = "<|begin_of_text|>"
 HEADER = "<|start_header_id|>"
@@ -3040,6 +3044,13 @@ def etiqueta_familia_modelo():
     """Llama (Yap local) u otro modelo (Super Yap / Gradio)."""
     if etiqueta_motor() == "SUPER":
         return "otro modelo"
+    if (
+        _SUPER_MODO != "local"
+        and _super_habilitado()
+        and super_configurada()
+        and _hay_internet()
+    ):
+        return "otro modelo"
     return "Llama"
 
 
@@ -3059,12 +3070,12 @@ def _super_disponible():
 
 
 def debe_delegar_super(texto, context=None):
-    """En auto no adelanta a la nube: cmd_query espera 3 min y luego Gradio."""
+    """En auto, nube si hay internet. Sin red, Yap local."""
     if not _super_disponible():
         return False
     if _SUPER_MODO == "super":
         return True
-    return False
+    return _hay_internet()
 
 
 def _local_llama_timeout():
@@ -3080,6 +3091,46 @@ def _local_llama_timeout():
 def _gradio_reset_cache():
     _GRADIO_CACHE.clear()
     _GRADIO_COOKIEJAR.clear()
+    _INTERNET_CACHE["ok"] = None
+    _INTERNET_CACHE["ts"] = 0.0
+
+
+def _hay_internet():
+    """True si hay red hacia Gradio Cloud Run. urllib, sin socket."""
+    raw = os.environ.get("YAP_SUPER_INTERNET", "").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        return False
+    if raw in ("1", "true", "si", "sí", "yes", "on"):
+        return True
+    now = time.time()
+    if (
+        _INTERNET_CACHE["ok"] is not None
+        and now - _INTERNET_CACHE["ts"] < SUPER_INTERNET_CACHE_S
+    ):
+        return _INTERNET_CACHE["ok"]
+    ok = _probar_internet()
+    _INTERNET_CACHE["ok"] = ok
+    _INTERNET_CACHE["ts"] = now
+    return ok
+
+
+def _probar_internet():
+    """GET corto al host Gradio pin. No sonda IPs publicas ajenas."""
+    url = _super_endpoint()
+    if not _host_es_super_gradio(url):
+        return False
+    parsed = urllib.parse.urlparse(url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+    try:
+        req = urllib.request.Request(
+            _gradio_url(base, "/"),
+            headers={"User-Agent": "Yap-ChincoLinux/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=SUPER_INTERNET_PROBE_TIMEOUT) as resp:
+            resp.read(256)
+        return True
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return False
 
 
 def _gradio_opener():
@@ -3311,7 +3362,7 @@ def cmd_super_status():
     modo_txt = {
         "super": "super (todas las consultas)",
         "local": "local (sin Super Yap)",
-        "auto": "auto (local; Gradio si tarda 3 min o se pasa de tokens)",
+        "auto": "auto (nube si hay internet; si no, local)",
     }.get(_SUPER_MODO, _SUPER_MODO)
     proto = "Gradio /chat" if _host_es_super_gradio(url) else "HTTP /v1/query"
     port = parsed.port or (443 if parsed.scheme == "https" else SUPER_NUBE_PORT_LEGACY)
@@ -3323,6 +3374,7 @@ def cmd_super_status():
         f"  Host:       {parsed.hostname or '(vacio)'}:{port}",
         f"  Protocolo:  {proto}",
         f"  Nube:       {'si' if _host_es_super_nube(url) else 'no'}",
+        f"  Internet:   {'si' if _hay_internet() else 'no'} (nube solo con red)",
         f"  Permitido:  {'si' if host_ok else 'no'} (loopback / LAN / host nube)",
         f"  Timeout:    {_local_llama_timeout()} s locales; luego Gradio "
         f"({SUPER_GRADIO_SSE_TIMEOUT} s SSE)",
@@ -3354,7 +3406,7 @@ def cmd_super_modo(valor):
         _actualizar_estado_super(False)
         return (
             f"{C['GREEN']}Yap local activado.{C['RESET']} "
-            "Super Yap solo si el local tarda 3 min, se pasa de tokens o 'super <pregunta>'."
+            "Super Yap si hay internet, si el local tarda 3 min, o 'super <pregunta>'."
         )
     return cmd_super_status()
 
@@ -3414,11 +3466,19 @@ def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=Tru
     if (
         allow_super_fallback
         and _super_disponible()
-        and (_SUPER_MODO == "super" or _excede_tokens_local(prompt, context))
+        and (
+            _SUPER_MODO == "super"
+            or _hay_internet()
+            or _excede_tokens_local(prompt, context)
+        )
     ):
+        motivo = (
+            "Hay internet; se usa Super Yap en la nube."
+            if (_SUPER_MODO == "super" or _hay_internet())
+            else "La consulta supera los tokens del modelo local."
+        )
         super_out = _responder_super_por_fallback(
-            prompt, context, store_history,
-            "La consulta supera los tokens del modelo local.",
+            prompt, context, store_history, motivo,
         )
         if super_out:
             return super_out

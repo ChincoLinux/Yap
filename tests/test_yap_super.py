@@ -35,6 +35,7 @@ class SuperTestBase:
         for k in list(os.environ):
             if k.startswith("YAP_SUPER"):
                 del os.environ[k]
+        os.environ["YAP_SUPER_INTERNET"] = "0"
 
     def teardown_method(self):
         for k in list(os.environ):
@@ -169,12 +170,20 @@ class TestDelegacion(SuperTestBase):
         os.environ["YAP_SUPER_ENABLED"] = "0"
         assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
 
-    def test_auto_gradio_no_adelanta_a_la_nube(self):
-        """Gradio esta on, pero auto espera 3 min de llama-cli local."""
+    def test_auto_sin_internet_no_delega(self):
+        """Sin red, auto se queda en el Llama local."""
         assert yap._super_habilitado() is True
         assert yap.super_configurada() is True
+        assert yap._hay_internet() is False
         assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
         assert yap.debe_delegar_super("hola") is False
+
+    def test_auto_con_internet_delega_a_la_nube(self):
+        os.environ["YAP_SUPER_INTERNET"] = "1"
+        assert yap._hay_internet() is True
+        assert yap.debe_delegar_super("hola") is True
+        assert yap.debe_delegar_super("explica la diferencia entre while y for") is True
+        assert yap.etiqueta_familia_modelo() == "otro modelo"
 
     def test_auto_ip_legacy_sin_env_no_delega(self):
         os.environ["YAP_SUPER_ENDPOINT"] = _json_endpoint()
@@ -299,9 +308,17 @@ class TestInterpretSuper(SuperTestBase):
         action, param = yap.interpret("explica la diferencia entre while y for")
         assert action == "query"
 
+    @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    def test_con_internet_la_consulta_va_a_la_nube(self, _cls):
+        self.habilitar()
+        os.environ["YAP_SUPER_INTERNET"] = "1"
+        action, param = yap.interpret("hola")
+        assert action == "super_query"
+
     @patch.object(yap, "classify_intent", return_value=("open_app", "firefox"))
     def test_open_app_nunca_se_va_a_super(self, _cls):
         self.habilitar()
+        os.environ["YAP_SUPER_INTERNET"] = "1"
         action, param = yap.interpret("abre firefox")
         assert action == "open_app"
         assert param == "firefox"
@@ -345,6 +362,7 @@ class TestCmdSuperStatus(SuperTestBase):
         assert "Timeout:" in out
         assert "180" in out
         assert "Modo:" in out
+        assert "Internet:" in out
         assert "Modelo:" not in out
 
     def test_timeout_local_es_3_min(self):

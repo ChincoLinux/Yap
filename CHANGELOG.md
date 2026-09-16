@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   o se pasa de ~1200 tokens, se consulta Gradio.
 
 ### Changed
+- Super Yap en modo auto usa Gradio **si hay internet** (sonda al host pin,
+  3 s, sin `socket`). Sin red, el Llama local. `YAP_SUPER_INTERNET=0/1` fuerza.
 - Yap local usa como techo **Llama 3.2 3B Instruct Q4_K_M**. Un `YAP_MODEL_PATH`
   con 8B se ignora y cae al 3B; el 1B sigue permitido.
 - Super Yap (#91) ya no corre un Llama 8B local (`super_yap.py`, GGUF,

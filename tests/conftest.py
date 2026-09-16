@@ -13,3 +13,5 @@ import pytest
 def _sin_super_nube_en_tests(monkeypatch):
     if os.environ.get("YAP_SUPER_ENABLED", "").strip() == "":
         monkeypatch.setenv("YAP_SUPER_ENABLED", "0")
+    if os.environ.get("YAP_SUPER_INTERNET", "").strip() == "":
+        monkeypatch.setenv("YAP_SUPER_INTERNET", "0")

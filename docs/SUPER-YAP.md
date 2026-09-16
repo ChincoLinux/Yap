@@ -4,9 +4,11 @@ El alumno sigue usando **Yap local** (Llama 3.2 1B/3B, CPU). Super Yap **no
 corre un Llama 8B local** ni hiperparámetros de `llama.cpp` en el PC del
 aula. El modelo grande vive en **Google Cloud Run** (Gradio 5 `/chat`).
 
-Si `llama-cli` **tarda 3 minutos**, se pasa del umbral de tokens (~1200) o
-el usuario escribe `super` / `nube`, Yap consulta esa nube y reenvía el
-historial. Abrir apps, Wikipedia y webfetch nunca salen del kernel local.
+Si hay **internet** (el host Gradio pin responde), Yap consulta esa nube
+y reenvía el historial. Sin red, usa el Llama local (techo 3B). También
+va a la nube si `llama-cli` tarda 3 minutos, se pasa de tokens o el
+usuario escribe `super` / `nube`. Abrir apps, Wikipedia y webfetch nunca
+salen del kernel local.
 
 ## Por qué no hay 8B local
 
@@ -23,9 +25,9 @@ del alumno no carga hiperparámetros de Super Yap (`YAP_SUPER_CTX`,
 
 ## Contrato local → Gradio (sin perder contexto)
 
-`yap.py` clasifica la intención **en local**. En modo `auto` la consulta
-corre en 1B/3B. Si `llama-cli` supera **180 s**, Yap hace el protocolo
-Gradio 5 y **append** del turno a `HISTORY`.
+`yap.py` clasifica la intención **en local**. En modo `auto`, si hay
+internet usa Gradio; si no, el 1B/3B. Si `llama-cli` supera **180 s**,
+también hace el protocolo Gradio 5 y **append** del turno a `HISTORY`.
 
 `super on` manda todas las consultas a la nube. `super <pregunta>` fuerza
 una. Si Gradio falla, se usa el LLM local y se muestra
@@ -57,6 +59,7 @@ aunque el endpoint no sea el pin Gradio (sigue exigiendo host permitido).
 | `YAP_SUPER_TOKEN_FILE` | `/etc/yap/super-token` | Alternativa al env |
 | `YAP_SUPER_TIMEOUT` | `90` | Segundos del POST JSON; SSE Gradio usa ≥180 s |
 | `YAP_LLAMA_TIMEOUT` | `180` | Timeout del llama-cli local. A los 3 min se consulta Gradio |
+| `YAP_SUPER_INTERNET` | auto | `1` asume red; `0` fuerza local. Vacío: GET corto al host Gradio |
 
 El token no va en el repo ni en `~/.config/yap/` del estudiante.
 
