@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   o se pasa de ~1200 tokens, se consulta Gradio.
 
 ### Changed
+- Yap local usa como techo **Llama 3.2 3B Instruct Q4_K_M**. Un `YAP_MODEL_PATH`
+  con 8B se ignora y cae al 3B; el 1B sigue permitido.
 - Super Yap (#91) ya no corre un Llama 8B local (`super_yap.py`, GGUF,
   `YAP_SUPER_CTX` / `YAP_SUPER_THREADS`, umbral de 7 GB). El alumno sigue
   en 1B/3B; si `llama-cli` tarda **3 minutos** (180 s) o se pasa de tokens,
@@ -26,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - `super_yap.py`: servidor HTTP 8B local y sus hiperparámetros llama.cpp.
+- Nombre de modelo `Llama-3.1-8B-Instruct-Q4_K_M` en Super Yap (estado,
+  payload y constante): no se usa; la nube es Gradio, no ese GGUF.
 
 ### Fixed
 

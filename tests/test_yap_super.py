@@ -150,7 +150,8 @@ class TestSanitizarYPayload(SuperTestBase):
         blob = json.dumps(payload)
         assert "token-aula" not in blob
         assert "/home/juan" not in blob
-        assert payload["model"] == "Llama-3.1-8B-Instruct-Q4_K_M"
+        assert "Llama-3.1-8B" not in blob
+        assert "model" not in payload
         assert payload["intent"] == "query"
         assert payload["request_id"].startswith("yap-")
         assert payload["historial"][0]["rol"] == "user"
@@ -243,7 +244,6 @@ class TestCmdQuerySuper(SuperTestBase):
         yap.HISTORY.append(("que es un mientras", "Un ciclo con condicion."))
         mock_urlopen.return_value = _urlopen_json({
             "texto": "Algoritmo Ejemplo...",
-            "modelo": "Llama-3.1-8B-Instruct-Q4_K_M",
         })
         out = yap.cmd_query_super("ahora un ejemplo", store_history=True)
         assert "Algoritmo Ejemplo" in out
@@ -340,17 +340,23 @@ class TestCmdSuperStatus(SuperTestBase):
         self.habilitar(token="supersecreto")
         out = yap.cmd_super_status()
         assert "supersecreto" not in out
-        assert "Llama-3.1-8B" in out
+        assert "Llama-3.1-8B" not in out
         assert "presente" in out
         assert "Timeout:" in out
         assert "180" in out
         assert "Modo:" in out
-        assert "sin 8B local" in out
+        assert "Modelo:" not in out
 
     def test_timeout_local_es_3_min(self):
         assert yap.SUPER_LOCAL_TIMEOUT == 180
         assert yap.SUPER_GRADIO_SSE_TIMEOUT == 180
         assert yap._local_llama_timeout() == 180
+
+    def test_familia_modelo_llama_u_otro(self):
+        assert yap.etiqueta_familia_modelo() == "Llama"
+        self.habilitar()
+        yap._SUPER_ESTADO = "super"
+        assert yap.etiqueta_familia_modelo() == "otro modelo"
 
 
 def _gradio_html():
@@ -495,6 +501,8 @@ class TestNoImportsPeligrososSuper:
             source = f.read()
         assert "import requests" not in source
         assert "super_yap.py" not in source
+        assert "Llama-3.1-8B" not in source
+        assert "SUPER_MODEL_NAME" not in source
         for line in source.split("\n"):
             if line.startswith("import ") or line.startswith("from "):
                 for peligroso in ("socket", "ctypes", "pickle", "base64", "codecs"):

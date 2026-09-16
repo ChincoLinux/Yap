@@ -78,7 +78,27 @@ def display_box(text, color="CYAN"):
     lines.append(f"{c}└{'─' * w}┘{C['RESET']}")
     return "\n".join(lines)
 
-MODEL_PATH = os.environ.get("YAP_MODEL_PATH", "/opt/yap/models/Llama-3.2-1B-Instruct-Q4_K_M.gguf")
+MODEL_DIR = "/opt/yap/models"
+MODEL_3B_NAME = "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+MODEL_1B_NAME = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+MODEL_3B_PATH = f"{MODEL_DIR}/{MODEL_3B_NAME}"
+MODEL_1B_PATH = f"{MODEL_DIR}/{MODEL_1B_NAME}"
+
+
+def _modelo_local_path(raw=""):
+    """Llama 3.2 Instruct Q4_K_M, techo 3B. Nunca 8B."""
+    t = (raw or "").strip() or MODEL_3B_PATH
+    base = os.path.basename(t.replace("\\", "/")).lower()
+    if "8b" in base:
+        return MODEL_3B_PATH
+    if "llama-3.2-1b-instruct-q4_k_m" in base:
+        return t if ("/" in t or "\\" in t) else MODEL_1B_PATH
+    if "llama-3.2-3b-instruct-q4_k_m" in base:
+        return t if ("/" in t or "\\" in t) else MODEL_3B_PATH
+    return MODEL_3B_PATH
+
+
+MODEL_PATH = _modelo_local_path(os.environ.get("YAP_MODEL_PATH", MODEL_3B_PATH))
 MAX_CTX = 2048
 MAX_HISTORY = 6
 LLAMA_THREADS = int(os.environ.get("YAP_LLAMA_THREADS", "2"))
@@ -86,12 +106,10 @@ LLAMA_TEMP_QUERY = float(os.environ.get("YAP_LLAMA_TEMP_QUERY", "0.7"))
 LLAMA_TEMP_PSEINT = float(os.environ.get("YAP_LLAMA_TEMP_PSEINT", "0.5"))
 LLAMA_TEMP_CLASSIFY = float(os.environ.get("YAP_LLAMA_TEMP_CLASSIFY", "0.1"))
 
-# ── Super Yap (#91) — Gradio Cloud Run, sin 8B local ─────────
-# El PC del alumno sigue en Llama 3.2 1B/3B. No hay llama.cpp 8B
-# ni hiperparametros de Super Yap local. Si llama-cli tarda 3 min,
-# o el usuario pide 'super'/'nube', Yap habla Gradio 5 en Cloud Run
-# (GET / → POST /gradio_api/queue/join → GET /queue/data SSE).
-SUPER_MODEL_NAME = os.environ.get("YAP_SUPER_MODEL", "Llama-3.1-8B-Instruct-Q4_K_M")
+# ── Super Yap (#91) — Gradio Cloud Run ──────────────────────
+# El PC del alumno usa Llama 3.2 Instruct Q4_K_M (techo 3B, nunca 8B).
+# Si llama-cli tarda 3 min, o el usuario pide 'super'/'nube', Yap habla
+# Gradio 5 en Cloud Run (GET / → POST /gradio_api/queue/join → GET /queue/data SSE).
 # Host Gradio en Cloud Run (chat publico /chat). Pin exacto, sin DNS.
 # La IP 137.184.146.113 sigue permitida para el contrato HTTP /v1/query.
 SUPER_GRADIO_HOST = (
@@ -2768,7 +2786,7 @@ def cmd_webfetch(url, feed_to_llm=False):
 
 
 def _super_habilitado():
-    """Env on/off, or auto: Gradio Cloud Run (sin 8B local)."""
+    """Env on/off, or auto: Gradio Cloud Run."""
     raw = os.environ.get("YAP_SUPER_ENABLED", "").strip().lower()
     if raw in ("0", "false", "no", "off"):
         return False
@@ -2939,7 +2957,6 @@ def _payload_super(prompt, context=None):
     meta = _session_meta_super()
     return {
         "intent": "query",
-        "model": SUPER_MODEL_NAME,
         "prompt": mensaje,
         "message": mensaje,
         "historial": historial,
@@ -2986,6 +3003,13 @@ def etiqueta_motor():
     if _SUPER_ESTADO == "super":
         return "SUPER"
     return "LOCAL"
+
+
+def etiqueta_familia_modelo():
+    """Llama (Yap local) u otro modelo (Super Yap / Gradio)."""
+    if etiqueta_motor() == "SUPER":
+        return "otro modelo"
+    return "Llama"
 
 
 def super_configurada():
@@ -3220,7 +3244,7 @@ def _post_super_gradio(payload):
         texto = _extraer_texto_gradio(data)
         if not texto:
             return None, "respuesta vacia"
-        return {"texto": texto[:SUPER_RESPUESTA_MAX], "modelo": SUPER_MODEL_NAME}, None
+        return {"texto": texto[:SUPER_RESPUESTA_MAX]}, None
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError) as err:
         _gradio_reset_cache()
         return None, str(err)
@@ -3265,7 +3289,6 @@ def cmd_super_status():
         f"  Estado:     {etiqueta_motor()}",
         f"  Modo:       {modo_txt}",
         f"  Habilitada: {'si' if habilitada else 'no'} (env o Gradio Cloud Run)",
-        f"  Modelo:     {SUPER_MODEL_NAME} (nube; sin 8B local)",
         f"  Host:       {parsed.hostname or '(vacio)'}:{port}",
         f"  Protocolo:  {proto}",
         f"  Nube:       {'si' if _host_es_super_nube(url) else 'no'}",
@@ -3795,6 +3818,7 @@ def main():
 
             "Telemetria — ver tu uso de Yap (100% local)",
             "Super / nube — Gradio Cloud Run; si el local tarda 3 min, se usa la nube",
+            f"Modelo: {etiqueta_familia_modelo()}",
             "Ayuda — lista de comandos",
             "Salir — Ctrl+C o 'salir'",
         ]))
