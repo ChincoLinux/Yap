@@ -480,6 +480,32 @@ class TestArchitecture:
     def test_interpret_existe(self):
         assert hasattr(yap, "interpret") and callable(yap.interpret)
 
+    def test_interpret_numero_de_menu_ejecuta_la_opcion(self):
+        assert yap.interpret("6") == ("perfil", "")
+        assert yap.interpret("7") == ("historial", "historial")
+        assert yap.interpret("11") == ("super", "")
+        assert yap.interpret("13") == ("menu", "")
+        assert yap.interpret("menu") == ("menu", "")
+        assert yap.interpret("14") == ("help", "ayuda")
+        action, param = yap.interpret("1")
+        assert action == "menu_opcion"
+        assert "consulta" in param.lower()
+        action, param = yap.interpret("99")
+        assert action == "menu_opcion"
+        assert "no existe" in param.lower()
+
+    def test_cmd_menu_vuelve_a_listar_opciones(self):
+        out = yap.cmd_menu()
+        assert "[1]" in out
+        assert "Menu — ver de nuevo las opciones" in out
+        assert "Ayuda" in out
+
+    def test_interpret_salir_por_numero_del_menu(self):
+        import pytest
+        n = str(len(yap._menu_principal()))
+        with pytest.raises(SystemExit):
+            yap.interpret(n)
+
     def test_load_whitelist_existe(self):
         assert hasattr(yap, "load_whitelist") and callable(yap.load_whitelist)
 

@@ -66,6 +66,34 @@ def display_menu(title, options):
         lines.append(f"  {C['GREEN']}[{i}]{C['RESET']} {opt}")
     return "\n".join(lines) + "\n"
 
+
+def _menu_principal():
+    """Opciones del menu interactivo: (etiqueta, comando para interpret)."""
+    return [
+        ("Cualquier consulta directa al AI", ""),
+        ("Abre [app] — abrir aplicacion permitida", ""),
+        ("Busca [tema] — buscar en Wikipedia", ""),
+        ("Tutor PSeInt — preguntas de programacion", ""),
+        ("Curso FPY1101 — plan de estudio", "curso FPY1101"),
+        ("Perfil — ver o actualizar tu perfil", "perfil"),
+        ("Historial — ver sesiones anteriores", "historial"),
+        ("Historial --ultimo — retomar ultima sesion", "historial --ultimo"),
+        ("Sesion — estado, pausar, retomar o cerrar sesion", "sesion"),
+        ("Telemetria — ver tu uso de Yap (100% local)", "telemetria"),
+        ("Super / nube — Gradio Cloud Run; si el local tarda 3 min, se usa la nube", "super"),
+        (f"Modelo: {etiqueta_familia_modelo()}", ""),
+        ("Menu — ver de nuevo las opciones", "menu"),
+        ("Ayuda — lista de comandos", "ayuda"),
+        ("Salir — Ctrl+C o 'salir'", "salir"),
+    ]
+
+
+def cmd_menu():
+    """Volver a mostrar el menu numerado de opciones."""
+    return display_menu("Comandos", [
+        etiqueta for etiqueta, _cmd in _menu_principal()
+    ])
+
 def display_box(text, color="CYAN"):
     """Return text wrapped in a colored box. Returns string."""
     w = max(3, min(shutil.get_terminal_size().columns - 2, 78))  # ponytail: min 3 avoids textwrap crash on narrow/non-TTY
@@ -1151,6 +1179,7 @@ ACCIONES_CONOCIDAS = (
     "open_app", "search", "webfetch", "pseint", "introduccion_pseint",
     "curso", "guia", "progreso", "historial", "apparmor_status",
     "telemetria", "help", "query", "super", "super_query", "super_modo",
+    "menu_opcion", "menu",
 )
 
 # Nombres legibles para el resumen
@@ -1168,6 +1197,8 @@ ACCIONES_NOMBRES = {
     "telemetria": "Telemetria",
     "help": "Ayuda",
     "query": "Consulta directa al AI",
+    "menu_opcion": "Opcion del menu",
+    "menu": "Ver menu de opciones",
     "super": "Estado de Super Yap",
     "super_query": "Consulta a Super Yap (Gradio Cloud Run)",
     "super_modo": "Cambiar a Super Yap o al Yap local",
@@ -3675,6 +3706,16 @@ def interpret(user_input):
     """Keyword router before LLM classifier for known commands."""
     stripped = user_input.strip().lower()
 
+    if stripped.isdigit():
+        n = int(stripped)
+        menu = _menu_principal()
+        if 1 <= n <= len(menu):
+            _etiqueta, cmd = menu[n - 1]
+            if cmd:
+                return interpret(cmd)
+            return "menu_opcion", _etiqueta
+        return "menu_opcion", f"[ERROR] Opcion {n} no existe. Elige 1-{len(menu)}."
+
     # Exact/prefix keyword routing (bypasses LLM for speed & reliability)
     if stripped in ("guia", "guia rapida", "tutorial", "como usar", "--tutorial"):
         return "guia", "guia"
@@ -3717,6 +3758,8 @@ def interpret(user_input):
         if pregunta:
             return "super_query", pregunta
         return "super", ""
+    if stripped in ("menu", "menú", "opciones"):
+        return "menu", ""
     if stripped in ("ayuda", "help", "--help", "-h", "comandos", "ayuda yap"):
         return "help", "ayuda"
     if stripped in ("--apparmor-status", "apparmor-status", "apparmor status"):
@@ -3804,24 +3847,7 @@ def main():
             sys.stdout.write(f"{C['GRAY']}Escribe 'retomar' para continuar donde quedaste, o 'ayuda' para ver comandos.{C['RESET']}\n\n")
         sys.stdout.write(render_art(CHINCO_ART, C['CYAN']) + "\n")
         sys.stdout.write(f"  {C['GRAY']}{'─' * 50}{C['RESET']}\n")
-        sys.stdout.write(display_menu("Comandos", [
-            "Cualquier consulta directa al AI",
-            "Abre [app] — abrir aplicacion permitida",
-            "Busca [tema] — buscar en Wikipedia",
-            "Tutor PSeInt — preguntas de programacion",
-            "Curso FPY1101 — plan de estudio",
-            "Perfil — ver o actualizar tu perfil",
-            "Historial — ver sesiones anteriores",
-            "Historial --ultimo — retomar ultima sesion",
-
-            "Sesion — estado, pausar, retomar o cerrar sesion",
-
-            "Telemetria — ver tu uso de Yap (100% local)",
-            "Super / nube — Gradio Cloud Run; si el local tarda 3 min, se usa la nube",
-            f"Modelo: {etiqueta_familia_modelo()}",
-            "Ayuda — lista de comandos",
-            "Salir — Ctrl+C o 'salir'",
-        ]))
+        sys.stdout.write(cmd_menu())
         banner = session_banner()
         if banner:
             sys.stdout.write(f"  {C['CYAN']}{banner}{C['RESET']}\n")
@@ -3956,6 +3982,12 @@ def handle_action(action, param, original_input):
     elif action == "apparmor_status":
         print(cmd_apparmor_status())
 
+    elif action == "menu_opcion":
+        print(param)
+
+    elif action == "menu":
+        print(cmd_menu())
+
     elif action == "help":
         print()
         print("  Preguntar:     Cualquier pregunta directa al AI")
@@ -3973,6 +4005,7 @@ def handle_action(action, param, original_input):
         print("                 'sesion nueva|pausar|retomar|cerrar|listar'")
 
         print("  Telemetria:    'telemetria' — resumen local de tu uso")
+        print("  Menu:          'menu' — ver de nuevo las opciones numeradas")
         print("  Super Yap:     'super' — estado de Gradio Cloud Run (opt-in)")
         print("                 'super on' / 'super off' — usar Super Yap o volver al local")
         print("                 'super <pregunta>' — forzar Super Yap; si cae, LLM local")
