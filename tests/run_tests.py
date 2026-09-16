@@ -37,7 +37,7 @@ REQUISITOS = {
     "FUN-07": "Notificaciones graficas via notify-send",
     "FUN-08": "Modo interactivo (loop while True) y modo comando directo",
     "FUN-11": "Evaluacion automatica de actividades con feedback del LLM",
-    "FUN-12": "Super Yap 8B con historial compartido (opt-in, host privado)",
+    "FUN-12": "Super Yap Gradio Cloud Run con historial (opt-in, timeout 3 min)",
     "CFG-01": "Archivos de configuracion existen y son validos",
     "CFG-02": "Symlink /usr/local/bin/yap apunta al repositorio",
     "CFG-03": "llama-cli compilado con enlace estatico",

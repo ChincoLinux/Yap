@@ -11,6 +11,7 @@ import glob
 import urllib.request
 import urllib.parse
 import urllib.error
+import http.cookiejar
 import re
 import atexit
 
@@ -85,9 +86,11 @@ LLAMA_TEMP_QUERY = float(os.environ.get("YAP_LLAMA_TEMP_QUERY", "0.7"))
 LLAMA_TEMP_PSEINT = float(os.environ.get("YAP_LLAMA_TEMP_PSEINT", "0.5"))
 LLAMA_TEMP_CLASSIFY = float(os.environ.get("YAP_LLAMA_TEMP_CLASSIFY", "0.1"))
 
-# ── Super Yap (#91) — Llama 8B en host de 8 GB, opt-in ────────
-# Llama 3.2 texto maximo es 3B. Super Yap usa Llama 3.1 8B Instruct
-# Q4_K_M (misma plantilla de chat) que cabe en ~7 GB con ctx 4096.
+# ── Super Yap (#91) — Gradio Cloud Run, sin 8B local ─────────
+# El PC del alumno sigue en Llama 3.2 1B/3B. No hay llama.cpp 8B
+# ni hiperparametros de Super Yap local. Si llama-cli tarda 3 min,
+# o el usuario pide 'super'/'nube', Yap habla Gradio 5 en Cloud Run
+# (GET / → POST /gradio_api/queue/join → GET /queue/data SSE).
 SUPER_MODEL_NAME = os.environ.get("YAP_SUPER_MODEL", "Llama-3.1-8B-Instruct-Q4_K_M")
 # Host Gradio en Cloud Run (chat publico /chat). Pin exacto, sin DNS.
 # La IP 137.184.146.113 sigue permitida para el contrato HTTP /v1/query.
@@ -108,11 +111,12 @@ SUPER_TOKEN_FILE = f"{CONFIG_DIR}/super-token"
 SUPER_HISTORY_MAX = 8
 SUPER_PROMPT_MAX = 4000
 SUPER_RESPUESTA_MAX = 8000
-SUPER_RAM_MIN_MB = 7000
 # Estimacion grosera (chars/4). El local usa ctx 2048 y -n 384.
 SUPER_TOKEN_LOCAL_MAX = 1200
-SUPER_LOCAL_TIMEOUT = 120
-SUPER_LOCAL_TIMEOUT_NUBE = 40
+SUPER_LOCAL_TIMEOUT = 180  # 3 min; luego Gradio Cloud Run
+SUPER_GRADIO_HTML_TIMEOUT = 30
+SUPER_GRADIO_JOIN_TIMEOUT = 30
+SUPER_GRADIO_SSE_TIMEOUT = 180
 SUPER_GRADIO_HTML_MAX = 2 * 1024 * 1024
 SUPER_HINTS = (
     "explica", "explique", "diferencia", "compara", "genera", "rubrica",
@@ -124,6 +128,8 @@ _RE_SUPER_EMAIL = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
 _SUPER_ESTADO = "local"  # local | super | degradado
 _SUPER_MODO = "auto"     # auto | super | local  (menu: super on / super off)
 _GRADIO_CACHE = {}
+_GRADIO_COOKIEJAR = http.cookiejar.CookieJar()
+_GRADIO_OPENER = None
 
 BOS = "<|begin_of_text|>"
 HEADER = "<|start_header_id|>"
@@ -1145,7 +1151,7 @@ ACCIONES_NOMBRES = {
     "help": "Ayuda",
     "query": "Consulta directa al AI",
     "super": "Estado de Super Yap",
-    "super_query": "Consulta a Super Yap (8B)",
+    "super_query": "Consulta a Super Yap (Gradio Cloud Run)",
     "super_modo": "Cambiar a Super Yap o al Yap local",
 }
 
@@ -2761,102 +2767,14 @@ def cmd_webfetch(url, feed_to_llm=False):
     return f"Contenido obtenido ({len(text)} chars):\n{text[:1000]}..."
 
 
-def _super_flag(nombre):
-    return os.environ.get(nombre, "").strip().lower() in (
-        "1", "true", "si", "sí", "yes", "on",
-    )
-
-
 def _super_habilitado():
-    """Env on/off, or auto: Gradio nube, or ≥7 GB + host Super Yap pin."""
+    """Env on/off, or auto: Gradio Cloud Run (sin 8B local)."""
     raw = os.environ.get("YAP_SUPER_ENABLED", "").strip().lower()
     if raw in ("0", "false", "no", "off"):
         return False
     if raw in ("1", "true", "si", "sí", "yes", "on"):
         return True
-    url = _super_endpoint()
-    # El 8B de Gradio vive en Cloud Run: el PC del alumno no necesita 7 GB.
-    if _host_es_super_gradio(url):
-        return True
-    return ram_suficiente_super() and _host_es_super_nube(url)
-
-
-def _parse_meminfo_disponible_mb(texto):
-    """MemAvailable (kB) from /proc/meminfo → MB. None if missing."""
-    for line in (texto or "").splitlines():
-        if line.startswith("MemAvailable:"):
-            try:
-                return int(line.split()[1]) // 1024
-            except (IndexError, ValueError):
-                return None
-    return None
-
-
-def _parse_wmic_free_mb(texto):
-    """wmic OS get FreePhysicalMemory /Value → MB."""
-    for line in (texto or "").splitlines():
-        if line.lower().startswith("freephysicalmemory"):
-            try:
-                return int(line.split("=", 1)[1].strip()) // 1024
-            except (IndexError, ValueError):
-                return None
-    return None
-
-
-def _ram_windows_mb():
-    """Free physical RAM on Windows. subprocess + timeout, no ctypes."""
-    ps = [
-        "powershell", "-NoProfile", "-NonInteractive", "-Command",
-        "(Get-CimInstance -ClassName Win32_OperatingSystem).FreePhysicalMemory",
-    ]
-    try:
-        result = subprocess.run(ps, capture_output=True, text=True, timeout=5)
-        if result.returncode == 0:
-            raw = (result.stdout or "").strip().split()
-            if raw:
-                return int(raw[-1]) // 1024
-    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, OSError):
-        pass
-    try:
-        result = subprocess.run(
-            ["wmic", "OS", "get", "FreePhysicalMemory", "/Value"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0:
-            return _parse_wmic_free_mb(result.stdout)
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        pass
-    return None
-
-
-def ram_disponible_mb():
-    """MB de RAM libre. Override de tests/lab: YAP_SUPER_RAM_MB."""
-    raw = os.environ.get("YAP_SUPER_RAM_MB", "").strip()
-    if raw:
-        try:
-            return int(raw)
-        except ValueError:
-            pass
-    try:
-        with open("/proc/meminfo") as f:
-            mb = _parse_meminfo_disponible_mb(f.read())
-        if mb is not None:
-            return mb
-    except OSError:
-        pass
-    if os.name == "nt":
-        return _ram_windows_mb()
-    return None
-
-
-def ram_suficiente_super():
-    """True si hay ≥7 GB libres (o YAP_SUPER_FORCE=1)."""
-    if _super_flag("YAP_SUPER_FORCE"):
-        return True
-    ram = ram_disponible_mb()
-    if ram is None:
-        return False
-    return ram >= SUPER_RAM_MIN_MB
+    return _host_es_super_gradio(_super_endpoint())
 
 
 def _super_endpoint():
@@ -3076,10 +2994,6 @@ def super_configurada():
     url = _super_endpoint()
     if not _host_super_permitido(url):
         return False
-    # El 8B se carga en el host Super Yap. En loopback este PC ES ese host:
-    # sin ≥7 GB libres no se usa Super Yap (el 1B/3B local sigue).
-    if _host_es_loopback(url) and not ram_suficiente_super():
-        return False
     if _host_es_loopback(url) or _host_es_super_nube(url):
         return True
     return bool(_super_token())
@@ -3090,11 +3004,12 @@ def _super_disponible():
 
 
 def debe_delegar_super(texto, context=None):
+    """En auto no adelanta a la nube: cmd_query espera 3 min y luego Gradio."""
     if not _super_disponible():
         return False
     if _SUPER_MODO == "super":
         return True
-    return consulta_para_super(texto, context=context)
+    return False
 
 
 def _local_llama_timeout():
@@ -3104,13 +3019,26 @@ def _local_llama_timeout():
             return max(1, int(raw))
         except ValueError:
             pass
-    if _super_disponible():
-        return SUPER_LOCAL_TIMEOUT_NUBE
     return SUPER_LOCAL_TIMEOUT
 
 
 def _gradio_reset_cache():
     _GRADIO_CACHE.clear()
+    _GRADIO_COOKIEJAR.clear()
+
+
+def _gradio_opener():
+    """Opener stdlib con cookies de sesion (equivalente a requests.Session)."""
+    global _GRADIO_OPENER
+    if _GRADIO_OPENER is None:
+        _GRADIO_OPENER = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(_GRADIO_COOKIEJAR)
+        )
+    return _GRADIO_OPENER
+
+
+def _gradio_urlopen(req, timeout=30):
+    return _gradio_opener().open(req, timeout=timeout)
 
 
 def _gradio_query_params():
@@ -3252,7 +3180,7 @@ def _post_super_gradio(payload):
         fn_index = _GRADIO_CACHE.get("fn_index")
         if not root_url or api_prefix is None or fn_index is None:
             req = urllib.request.Request(_gradio_url(base, "/"), headers=headers)
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with _gradio_urlopen(req, timeout=SUPER_GRADIO_HTML_TIMEOUT) as resp:
                 html = resp.read(SUPER_GRADIO_HTML_MAX).decode("utf-8", errors="replace")
             root_url, api_prefix, fn_index, err = _descubrir_gradio(html, base)
             if err:
@@ -3274,9 +3202,9 @@ def _post_super_gradio(payload):
             method="POST",
             headers=join_headers,
         )
-        with urllib.request.urlopen(join_req, timeout=_super_timeout()) as join_resp:
+        with _gradio_urlopen(join_req, timeout=SUPER_GRADIO_JOIN_TIMEOUT) as join_resp:
             join_resp.read(4096)
-        sse_timeout = max(180, _super_timeout())
+        sse_timeout = max(SUPER_GRADIO_SSE_TIMEOUT, _super_timeout())
         sse_req = urllib.request.Request(
             _gradio_url(
                 root_url,
@@ -3285,7 +3213,7 @@ def _post_super_gradio(payload):
             ),
             headers={**headers, "Accept": "text/event-stream"},
         )
-        with urllib.request.urlopen(sse_req, timeout=sse_timeout) as sse:
+        with _gradio_urlopen(sse_req, timeout=sse_timeout) as sse:
             data, err = _leer_sse_gradio(sse)
         if err:
             return None, err
@@ -3324,24 +3252,11 @@ def cmd_super_status():
     url = _super_endpoint()
     host_ok = _host_super_permitido(url) if habilitada else False
     token_ok = bool(_super_token())
-    ram = ram_disponible_mb()
-    ram_ok = ram_suficiente_super()
-    loopback = _host_es_loopback(url)
     parsed = urllib.parse.urlparse(url)
-    if ram is None:
-        ram_txt = "no se pudo medir"
-    else:
-        ram_txt = f"{ram} MB ({ram / 1024:.1f} GB)"
-    if _host_es_super_gradio(url):
-        ram_veredicto = "no aplica (8B en Cloud Run)"
-    else:
-        ram_veredicto = "si — se puede usar Super Yap" if ram_ok else (
-            f"no — se necesitan ≥{SUPER_RAM_MIN_MB} MB libres"
-        )
     modo_txt = {
         "super": "super (todas las consultas)",
         "local": "local (sin Super Yap)",
-        "auto": "auto (largo / tokens / timeout)",
+        "auto": "auto (local; Gradio si tarda 3 min o se pasa de tokens)",
     }.get(_SUPER_MODO, _SUPER_MODO)
     proto = "Gradio /chat" if _host_es_super_gradio(url) else "HTTP /v1/query"
     port = parsed.port or (443 if parsed.scheme == "https" else SUPER_NUBE_PORT_LEGACY)
@@ -3349,23 +3264,19 @@ def cmd_super_status():
         display_header("Super Yap"),
         f"  Estado:     {etiqueta_motor()}",
         f"  Modo:       {modo_txt}",
-        f"  Habilitada: {'si' if habilitada else 'no'} (env, Gradio nube o auto 7 GB)",
-        f"  Modelo:     {SUPER_MODEL_NAME}",
+        f"  Habilitada: {'si' if habilitada else 'no'} (env o Gradio Cloud Run)",
+        f"  Modelo:     {SUPER_MODEL_NAME} (nube; sin 8B local)",
         f"  Host:       {parsed.hostname or '(vacio)'}:{port}",
         f"  Protocolo:  {proto}",
         f"  Nube:       {'si' if _host_es_super_nube(url) else 'no'}",
         f"  Permitido:  {'si' if host_ok else 'no'} (loopback / LAN / host nube)",
-        f"  RAM libre:  {ram_txt}",
-        f"  RAM 7 GB:   {ram_veredicto}",
+        f"  Timeout:    {_local_llama_timeout()} s locales; luego Gradio "
+        f"({SUPER_GRADIO_SSE_TIMEOUT} s SSE)",
         f"  Token:      {'presente' if token_ok else 'no'}",
         f"  Historial:  {len(HISTORY)} turnos locales se reenvian (max {SUPER_HISTORY_MAX})",
         f"  {C['GRAY']}'super on' usa Super Yap; 'super off' vuelve al local.{C['RESET']}",
         f"  {C['GRAY']}El token nunca se imprime. Ver docs/SUPER-YAP.md{C['RESET']}",
     ]
-    if loopback and habilitada and not ram_ok:
-        lines.append(
-            f"  {C['YELLOW']}Super Yap no se usara: este PC no tiene 7 GB libres.{C['RESET']}"
-        )
     return "\n".join(lines)
 
 
@@ -3389,7 +3300,7 @@ def cmd_super_modo(valor):
         _actualizar_estado_super(False)
         return (
             f"{C['GREEN']}Yap local activado.{C['RESET']} "
-            "Super Yap solo en consultas largas, muchos tokens, timeout o 'super <pregunta>'."
+            "Super Yap solo si el local tarda 3 min, se pasa de tokens o 'super <pregunta>'."
         )
     return cmd_super_status()
 
@@ -3400,24 +3311,10 @@ def cmd_query_super(prompt, context=None, store_history=True, skip_local=False):
         _actualizar_estado_super(False)
         if skip_local:
             return "[WARN] Super Yap no disponible."
-        local = cmd_query(
+        return cmd_query(
             prompt, context=context, store_history=store_history,
             allow_super_fallback=False,
         )
-        url = _super_endpoint()
-        if (
-            _super_habilitado()
-            and _host_es_loopback(url)
-            and _host_super_permitido(url)
-            and not ram_suficiente_super()
-        ):
-            ram = ram_disponible_mb()
-            medido = f"{ram} MB libres" if ram is not None else "RAM no medida"
-            return (
-                f"[WARN] RAM insuficiente para Super Yap ({medido}, "
-                f"se necesitan ≥{SUPER_RAM_MIN_MB} MB). Usando LLM local.\n{local}"
-            )
-        return local
     payload = _payload_super(prompt, context=context)
     data, err = _post_super(payload)
     texto = _texto_respuesta_super(data) if data is not None else None
@@ -3897,7 +3794,7 @@ def main():
             "Sesion — estado, pausar, retomar o cerrar sesion",
 
             "Telemetria — ver tu uso de Yap (100% local)",
-            "Super / nube — estado; 'super on' usa Super Yap; 'super off' vuelve al local",
+            "Super / nube — Gradio Cloud Run; si el local tarda 3 min, se usa la nube",
             "Ayuda — lista de comandos",
             "Salir — Ctrl+C o 'salir'",
         ]))
@@ -4052,10 +3949,10 @@ def handle_action(action, param, original_input):
         print("                 'sesion nueva|pausar|retomar|cerrar|listar'")
 
         print("  Telemetria:    'telemetria' — resumen local de tu uso")
-        print("  Super Yap:     'super' — estado del modelo 8B (opt-in)")
+        print("  Super Yap:     'super' — estado de Gradio Cloud Run (opt-in)")
         print("                 'super on' / 'super off' — usar Super Yap o volver al local")
         print("                 'super <pregunta>' — forzar Super Yap; si cae, LLM local")
-        print("                 Si el local tarda, se pasa de tokens o hay timeout, usa Super Yap")
+        print("                 Si el local tarda 3 min o se pasa de tokens, usa Gradio")
         print("  Perfil:        'perfil' — ver tu perfil")
         print("  Actualizar:    'perfil nombre Maria' | 'perfil nivel basico' | 'perfil idioma es'")
         print()

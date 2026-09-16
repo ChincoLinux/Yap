@@ -1,7 +1,9 @@
 """
-test_yap_super.py — Super Yap (#91): Llama 8B en host de 8 GB + contexto
+test_yap_super.py — Super Yap (#91): Gradio Cloud Run + contexto
 
 Sin Internet, sin LLM, sin llama-cli. Todo mockeado.
+El 8B local (super_yap.py / hiperparametros llama.cpp) ya no existe:
+si el modelo local tarda 3 min, Yap consulta Gradio en Cloud Run.
 """
 
 import json
@@ -11,7 +13,6 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import yap
-import super_yap
 
 
 def _json_endpoint():
@@ -26,7 +27,6 @@ class SuperTestBase:
         yap._SUPER_ESTADO = "local"
         yap._SUPER_MODO = "auto"
         yap._gradio_reset_cache()
-        super_yap.SESIONES.clear()
         self._env_backup = {
             k: os.environ.get(k)
             for k in list(os.environ)
@@ -35,8 +35,6 @@ class SuperTestBase:
         for k in list(os.environ):
             if k.startswith("YAP_SUPER"):
                 del os.environ[k]
-        # ponytail: tests no dependen de la RAM real del runner (CI ~7 GB totales)
-        os.environ["YAP_SUPER_RAM_MB"] = "8192"
 
     def teardown_method(self):
         for k in list(os.environ):
@@ -51,7 +49,6 @@ class SuperTestBase:
         yap._SUPER_ESTADO = "local"
         yap._SUPER_MODO = "auto"
         yap._gradio_reset_cache()
-        super_yap.SESIONES.clear()
 
     def habilitar(self, endpoint=None, token=""):
         os.environ["YAP_SUPER_ENABLED"] = "1"
@@ -171,28 +168,26 @@ class TestDelegacion(SuperTestBase):
         os.environ["YAP_SUPER_ENABLED"] = "0"
         assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
 
-    def test_auto_con_7gb_y_host_nube_delega(self):
-        """Gradio Cloud Run activa Super Yap sin YAP_SUPER_ENABLED ni 7 GB locales."""
-        os.environ["YAP_SUPER_RAM_MB"] = "1800"
+    def test_auto_gradio_no_adelanta_a_la_nube(self):
+        """Gradio esta on, pero auto espera 3 min de llama-cli local."""
         assert yap._super_habilitado() is True
         assert yap.super_configurada() is True
-        assert yap.debe_delegar_super("explica la diferencia entre while y for") is True
+        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        assert yap.debe_delegar_super("hola") is False
 
-    def test_auto_sin_7gb_en_ip_legacy_no_delega(self):
-        os.environ["YAP_SUPER_RAM_MB"] = "3000"
+    def test_auto_ip_legacy_sin_env_no_delega(self):
         os.environ["YAP_SUPER_ENDPOINT"] = _json_endpoint()
         assert yap._super_habilitado() is False
         assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
 
-    def test_auto_con_7gb_pero_otro_host_no_delega(self):
-        os.environ["YAP_SUPER_RAM_MB"] = "8192"
+    def test_auto_loopback_sin_env_no_delega(self):
         os.environ["YAP_SUPER_ENDPOINT"] = "http://127.0.0.1:8742/v1/query"
         assert yap._super_habilitado() is False
         assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
 
-    def test_habilitada_y_compleja_delega(self):
+    def test_habilitada_compleja_tampoco_adelanta(self):
         self.habilitar()
-        assert yap.debe_delegar_super("explica la diferencia entre while y for") is True
+        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
 
     def test_habilitada_corta_no_delega(self):
         self.habilitar()
@@ -213,37 +208,13 @@ class TestDelegacion(SuperTestBase):
         self.habilitar()
         assert yap.super_configurada() is True
 
-    def test_loopback_sin_7gb_no_configurada(self):
+    def test_loopback_no_exige_7gb(self):
+        """Ya no hay 8B local: loopback no pide 7 GB de RAM."""
         self.habilitar(endpoint="http://127.0.0.1:8742/v1/query")
-        os.environ["YAP_SUPER_RAM_MB"] = "3000"
-        assert yap.super_configurada() is False
-        assert yap.ram_suficiente_super() is False
-
-    def test_loopback_con_7gb_si_configurada(self):
-        self.habilitar(endpoint="http://127.0.0.1:8742/v1/query")
-        os.environ["YAP_SUPER_RAM_MB"] = "7000"
-        assert yap.ram_suficiente_super() is True
         assert yap.super_configurada() is True
 
-    def test_nube_con_poca_ram_local_si_env_sigue_configurada(self):
-        """El 8B está en 137.184.146.113; el alumno no necesita 7 GB si lo fuerza."""
-        self.habilitar()
-        os.environ["YAP_SUPER_RAM_MB"] = "1800"
-        assert yap.super_configurada() is True
-
-    def test_lan_con_poca_ram_local_sigue_configurada(self):
-        """El 8B vive en el servidor del aula, no en el PC del alumno."""
-        os.environ["YAP_SUPER_ENABLED"] = "1"
-        os.environ["YAP_SUPER_ENDPOINT"] = "http://10.40.0.10:8742/v1/query"
-        os.environ["YAP_SUPER_TOKEN"] = "aula"
-        os.environ["YAP_SUPER_RAM_MB"] = "1800"
-        assert yap.super_configurada() is True
-
-    def test_force_omite_el_umbral(self):
-        self.habilitar(endpoint="http://127.0.0.1:8742/v1/query")
-        os.environ["YAP_SUPER_RAM_MB"] = "512"
-        os.environ["YAP_SUPER_FORCE"] = "1"
-        assert yap.ram_suficiente_super() is True
+    def test_gradio_configurada_sin_env(self):
+        assert yap._host_es_super_gradio(yap._super_endpoint()) is True
         assert yap.super_configurada() is True
 
 
@@ -257,18 +228,6 @@ class TestCmdQuerySuper(SuperTestBase):
         mock_local.assert_called_once()
         assert out == "local-ok"
         assert yap.etiqueta_motor() == "LOCAL"
-
-    @patch("yap.cmd_query", return_value="local-ok")
-    def test_sin_7gb_en_loopback_cae_a_local(self, mock_local):
-        self.habilitar(endpoint="http://127.0.0.1:8742/v1/query")
-        os.environ["YAP_SUPER_RAM_MB"] = "4096"
-        with patch("urllib.request.urlopen") as red:
-            out = yap.cmd_query_super("explica listas", store_history=False)
-        red.assert_not_called()
-        mock_local.assert_called_once()
-        assert "[WARN] RAM insuficiente para Super Yap" in out
-        assert "4096 MB" in out
-        assert "local-ok" in out
 
     @patch("yap.cmd_query", return_value="local-ok")
     def test_endpoint_publico_no_abre_conexion(self, mock_local):
@@ -335,10 +294,10 @@ class TestInterpretSuper(SuperTestBase):
         assert "explica while" in param
 
     @patch.object(yap, "classify_intent", return_value=("query", "explica while"))
-    def test_query_compleja_se_reescribe_si_hay_super(self, _cls):
+    def test_query_compleja_en_auto_sigue_local(self, _cls):
         self.habilitar()
         action, param = yap.interpret("explica la diferencia entre while y for")
-        assert action == "super_query"
+        assert action == "query"
 
     @patch.object(yap, "classify_intent", return_value=("open_app", "firefox"))
     def test_open_app_nunca_se_va_a_super(self, _cls):
@@ -383,135 +342,15 @@ class TestCmdSuperStatus(SuperTestBase):
         assert "supersecreto" not in out
         assert "Llama-3.1-8B" in out
         assert "presente" in out
-        assert "RAM libre" in out
-        assert "se puede usar Super Yap" in out
+        assert "Timeout:" in out
+        assert "180" in out
         assert "Modo:" in out
+        assert "sin 8B local" in out
 
-    def test_status_avisa_si_faltan_7gb(self):
-        self.habilitar(endpoint="http://127.0.0.1:8742/v1/query")
-        os.environ["YAP_SUPER_RAM_MB"] = "2048"
-        out = yap.cmd_super_status()
-        assert "2048 MB" in out
-        assert "no — se necesitan" in out
-        assert "no tiene 7 GB libres" in out
-
-
-class TestFusionarContextoSuperYap(SuperTestBase):
-    def test_cliente_sufijo_conserva_prefijo_del_servidor(self):
-        super_yap.SESIONES["S1"] = [
-            ("t0", "a0"),
-            ("t1", "a1"),
-            ("t2", "a2"),
-        ]
-        payload = [
-            {"rol": "user", "texto": "t1"},
-            {"rol": "assistant", "texto": "a1"},
-            {"rol": "user", "texto": "t2"},
-            {"rol": "assistant", "texto": "a2"},
-        ]
-        merged = super_yap.fusionar_historial("S1", payload)
-        assert merged[0] == ("t0", "a0")
-        assert merged[-1] == ("t2", "a2")
-        assert len(merged) == 3
-
-    def test_divergencia_gana_el_cliente_local(self):
-        super_yap.SESIONES["S1"] = [("viejo", "resp")]
-        payload = [
-            {"rol": "user", "texto": "nuevo"},
-            {"rol": "assistant", "texto": "otra"},
-        ]
-        merged = super_yap.fusionar_historial("S1", payload)
-        assert merged == [("nuevo", "otra")]
-
-    def test_recordar_turno_no_pierde_el_hilo(self):
-        super_yap.fusionar_historial("S3", [
-            {"rol": "user", "texto": "hola"},
-            {"rol": "assistant", "texto": "hola de vuelta"},
-        ])
-        super_yap.recordar_turno("S3", "y un ejemplo", "Aqui va")
-        assert super_yap.SESIONES["S3"][-1] == ("y un ejemplo", "Aqui va")
-        assert super_yap.SESIONES["S3"][0][0] == "hola"
-
-
-class TestModeloOchoGigas(SuperTestBase):
-    def test_perfil_ram_cabe_en_8gb(self):
-        perfil = super_yap.perfil_ram()
-        assert perfil["total_estimado_mb"] < 8192
-        assert perfil["host_recomendado_mb"] == 8192
-        assert perfil["pesos_gguf_mb"] > 4000
-
-    def test_candidatos_empiezan_por_8b(self):
-        paths = super_yap.modelo_candidato_paths()
-        assert any("8B" in p for p in paths)
-        assert any("Llama-3.2-3B" in p for p in paths)
-
-    def test_handler_health_sin_llm(self):
-        handler = super_yap.SuperYapHandler()
-        code, body = handler.manejar("GET", "/health", b"")
-        assert code == 200
-        assert body["ok"] is True
-        assert body["ram_ok"] is True
-        assert body["ram_min_mb"] == 7000
-        assert body["ram_mb"] == 8192
-        assert "8B" in body["modelo"] or "3B" in body["modelo"]
-
-    def test_handler_post_sin_prompt_es_400(self):
-        handler = super_yap.SuperYapHandler()
-        code, body = handler.manejar("POST", "/v1/query", b"{}")
-        assert code == 400
-        assert body.get("error") == "Falta prompt"
-
-    @patch.object(super_yap, "generar", return_value="While itera con condicion.")
-    def test_handler_post_devuelve_texto_y_modelo(self, _gen):
-        handler = super_yap.SuperYapHandler()
-        payload = json.dumps({
-            "prompt": "explica while",
-            "historial": [
-                {"rol": "user", "texto": "hola"},
-                {"rol": "assistant", "texto": "hola"},
-            ],
-            "session_id": "S9",
-        }).encode("utf-8")
-        code, body = handler.manejar("POST", "/v1/query", payload)
-        assert code == 200
-        assert "While itera" in body["texto"]
-        assert body["session_id"] == "S9"
-        assert super_yap.SESIONES["S9"][-1][0] == "explica while"
-
-
-class TestDeteccionRam(SuperTestBase):
-    def test_parse_meminfo(self):
-        texto = "MemTotal: 8192000 kB\nMemAvailable: 7340032 kB\n"
-        assert yap._parse_meminfo_disponible_mb(texto) == 7168
-        assert super_yap._parse_meminfo_disponible_mb(texto) == 7168
-
-    def test_parse_wmic(self):
-        texto = "FreePhysicalMemory=7340032\n"
-        assert yap._parse_wmic_free_mb(texto) == 7168
-        assert super_yap._parse_wmic_free_mb(texto) == 7168
-
-    def test_umbral_es_7000(self):
-        assert yap.SUPER_RAM_MIN_MB == 7000
-        assert super_yap.RAM_MIN_MB == 7000
-
-    def test_generar_bloquea_sin_7gb(self):
-        os.environ["YAP_SUPER_RAM_MB"] = "5000"
-        with patch.object(super_yap, "llamar_llama_cli") as cli:
-            out = super_yap.generar("explica while", [])
-        cli.assert_not_called()
-        assert "[ERROR] RAM insuficiente" in out
-        assert "5000 MB" in out
-
-    def test_servir_sale_sin_7gb(self):
-        os.environ["YAP_SUPER_RAM_MB"] = "1024"
-        with patch("http.server.ThreadingHTTPServer") as srv:
-            try:
-                super_yap.servir()
-            except SystemExit as exc:
-                assert "RAM insuficiente" in str(exc)
-            else:
-                raise AssertionError("servir() debio salir sin 7 GB libres")
-        srv.assert_not_called()
+    def test_timeout_local_es_3_min(self):
+        assert yap.SUPER_LOCAL_TIMEOUT == 180
+        assert yap.SUPER_GRADIO_SSE_TIMEOUT == 180
+        assert yap._local_llama_timeout() == 180
 
 
 def _gradio_html():
@@ -567,7 +406,7 @@ class TestGradioNube(SuperTestBase):
         assert fn == 6
         assert yap.SUPER_GRADIO_HOST in root
 
-    @patch("urllib.request.urlopen")
+    @patch("yap._gradio_urlopen")
     def test_chat_gradio_join_y_sse(self, mock_urlopen):
         self.habilitar(endpoint=yap.SUPER_DEFAULT_ENDPOINT)
         mock_urlopen.side_effect = [
@@ -591,7 +430,7 @@ class TestGradioNube(SuperTestBase):
         assert yap.etiqueta_motor() == "SUPER"
         assert yap.HISTORY[-1][0] == "explica while"
 
-    @patch("urllib.request.urlopen")
+    @patch("yap._gradio_urlopen")
     def test_clave_no_va_en_json_ni_en_historial(self, mock_urlopen):
         self.habilitar(endpoint=yap.SUPER_DEFAULT_ENDPOINT)
         mock_urlopen.side_effect = [
@@ -618,11 +457,12 @@ class TestFallbackLocalASuper(SuperTestBase):
     def test_timeout_local_usa_super(self, mock_run, mock_super):
         self.habilitar()
         from subprocess import TimeoutExpired
-        mock_run.side_effect = TimeoutExpired("llama-cli", 40)
+        mock_run.side_effect = TimeoutExpired("llama-cli", 180)
         out = yap.cmd_query("hola", store_history=False)
         mock_super.assert_called_once()
         assert "desde-nube" in out
         assert "modelo local tardo demasiado" in out.lower() or "tardo demasiado" in out
+        assert mock_run.call_args.kwargs.get("timeout") == 180
 
     @patch("yap.cmd_query_super", return_value="desde-nube")
     @patch("subprocess.run")
@@ -654,14 +494,12 @@ class TestNoImportsPeligrososSuper:
         with open(yap.__file__, encoding="utf-8") as f:
             source = f.read()
         assert "import requests" not in source
+        assert "super_yap.py" not in source
         for line in source.split("\n"):
             if line.startswith("import ") or line.startswith("from "):
                 for peligroso in ("socket", "ctypes", "pickle", "base64", "codecs"):
                     assert peligroso not in line
 
-    def test_super_yap_sin_shell_eval_system(self):
-        with open(super_yap.__file__, encoding="utf-8") as f:
-            source = f.read()
-        assert "shell=True" not in source
-        assert "os.system(" not in source
-        assert "eval(" not in source
+    def test_no_existe_super_yap_local(self):
+        ruta = os.path.join(os.path.dirname(yap.__file__), "super_yap.py")
+        assert not os.path.isfile(ruta)

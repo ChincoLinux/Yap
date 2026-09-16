@@ -8,21 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Super Yap (#91): proceso `super_yap.py` con Llama 3.1 8B Instruct Q4_K_M
-  (~7 GB, host de 8 GB) y puente HTTP con el Yap local. Cada consulta envía
-  el historial vivo (`HISTORY` + `session_id`) para no perder contexto; si
-  Super Yap cae, se usa el LLM local. Opt-in `YAP_SUPER_ENABLED=1`. Comandos
-  `super` / `nube`. Solo loopback o LAN privada; sin `socket` en `yap.py`.
-  Super Yap se activa solo si hay **≥7000 MB de RAM libre** y el destino es
-  `137.184.146.113:8742` (host nube pin). Cualquier otra IP pública sigue
-  bloqueada. `YAP_SUPER_ENABLED=0` fuerza el Yap local.
-- Super Yap en Cloud Run (Gradio 5 `/chat`): el Yap local usa `urllib`
-  (sin `requests`) contra el host pin `*.southamerica-west1.run.app`.
-  `super on` / `super off` cambian el motor desde el menú. Si el LLM local
-  tarda (>40 s), se pasa de ~1200 tokens o hay timeout, se consulta Super
-  Yap. Fallback local si la nube no responde.
+- Super Yap (#91): cliente Gradio 5 en Cloud Run (`urllib` + cookies, sin
+  `requests`) contra el host pin `*.southamerica-west1.run.app`. Cada
+  consulta reenvía el historial vivo (`HISTORY`) para no perder contexto;
+  si Super Yap cae, se usa el LLM local. Opt-in `YAP_SUPER_ENABLED=1` o
+  auto si el endpoint es Gradio. Comandos `super` / `nube`. Solo loopback,
+  LAN privada o hosts pin; sin `socket` en `yap.py`.
+  `YAP_SUPER_ENABLED=0` fuerza el Yap local. Si `llama-cli` tarda 3 min
+  o se pasa de ~1200 tokens, se consulta Gradio.
 
 ### Changed
+- Super Yap (#91) ya no corre un Llama 8B local (`super_yap.py`, GGUF,
+  `YAP_SUPER_CTX` / `YAP_SUPER_THREADS`, umbral de 7 GB). El alumno sigue
+  en 1B/3B; si `llama-cli` tarda **3 minutos** (180 s) o se pasa de tokens,
+  Yap consulta Gradio 5 en Cloud Run (`GET /` → `queue/join` → SSE).
+  `super on` / `super <pregunta>` siguen forzando la nube.
+
+### Removed
+- `super_yap.py`: servidor HTTP 8B local y sus hiperparámetros llama.cpp.
 
 ### Fixed
 
