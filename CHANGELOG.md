@@ -8,8 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Super Yap (#91): cliente Gradio 5 en Cloud Run (`urllib` + cookies, sin
+  `requests`) contra el host pin `*.southamerica-west1.run.app`. Cada
+  consulta reenvía el historial vivo (`HISTORY`) para no perder contexto;
+  si Super Yap cae, se usa el LLM local. Opt-in `YAP_SUPER_ENABLED=1` o
+  auto si el endpoint es Gradio. Comandos `super` / `nube`. Solo loopback,
+  LAN privada o hosts pin; sin `socket` en `yap.py`.
+  `YAP_SUPER_ENABLED=0` fuerza el Yap local. Si `llama-cli` tarda 3 min
+  o se pasa de ~1200 tokens, se consulta Gradio.
 
 ### Changed
+- Yap local usa como techo **Llama 3.2 3B Instruct Q4_K_M**. Un `YAP_MODEL_PATH`
+  con 8B se ignora y cae al 3B; el 1B sigue permitido.
+- Super Yap (#91)(`super_yap.py`, GGUF,
+  `YAP_SUPER_CTX` / `YAP_SUPER_THREADS`, umbral de 7 GB). El alumno sigue
+  en 1B/3B; si `llama-cli` tarda **3 minutos** (180 s) o se pasa de tokens,
+  Yap consulta Gradio 5 en Cloud Run (`GET /` → `queue/join` → SSE).
+  `super on` / `super <pregunta>` siguen forzando la nube.
 
 ### Fixed
 
