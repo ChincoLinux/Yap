@@ -61,6 +61,13 @@ jobs:
           echo "═══════════════════════════════════════════════"
           python -m pytest tests/test_yap_evaluacion.py -v --tb=short
 
+      - name: Ejecutar pruebas de Super Yap
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "  PRUEBAS DE SUPER YAP (#91)"
+          echo "═══════════════════════════════════════════════"
+          python -m pytest tests/test_yap_super.py -v --tb=short
+
       - name: Verificar ausencia de vulnerabilidades
         run: |
           echo "═══════════════════════════════════════════════"

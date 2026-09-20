@@ -165,6 +165,14 @@ class TestSetupDescargaModelo:
         matches = re.findall(self.GGUF_RE, leer(os.path.join(RAIZ, "yap.py")))
         assert matches, "yap.py debe declarar un GGUF Llama-3.2 Q4_K_M"
         assert not matches[0].endswith(")")
+        assert matches[0] == "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+
+    def test_techo_local_es_3b_nunca_8b(self):
+        assert yap.MODEL_PATH.endswith("Llama-3.2-3B-Instruct-Q4_K_M.gguf")
+        ocho = "/opt/yap/models/Llama-3.1-8B-Instruct-Q4_K_M.gguf"
+        assert yap._modelo_local_path(ocho).endswith("Llama-3.2-3B-Instruct-Q4_K_M.gguf")
+        uno = "/opt/yap/models/Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+        assert yap._modelo_local_path(uno) == uno
 
     def test_setup_extrae_el_gguf_con_regex_no_sed(self):
         """B1: sed sobre os.environ.get(...) dejaba un ')' en el nombre."""
