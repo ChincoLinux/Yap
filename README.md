@@ -263,6 +263,8 @@ El proyecto mantiene **tres ramas** con distintos perfiles de consumo de RAM y c
 | **lowmem** | 3B Q4_K_M (2.0 GB) | 2048 | Q8_0 | ~3.1 GB | 6 GB RAM |
 | **ultra-lowmem** | 1B Q4_K_M (0.81 GB) | 2048 | Q8_0 | ~1.8 GB | 3-4 GB RAM |
 
+**Super Yap** (opt-in, issue #91) consulta Gradio `/chat` en Cloud Run si el Yap local (1B/3B) **tarda 3 minutos** o se pasa de tokens, **sin perder el historial**. No hay modelo 8B local. `super on` / `super off` cambian el motor. Ver [docs/SUPER-YAP.md](docs/SUPER-YAP.md).
+
 ### 7.1 Cambio entre ramas
 
 ```bash
