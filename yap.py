@@ -181,6 +181,16 @@ _GRADIO_COOKIEJAR = http.cookiejar.CookieJar()
 _GRADIO_OPENER = None
 _INTERNET_CACHE = {"ok": None, "ts": 0.0}
 
+# ── Timeout extendido y delegacion a la nube (#94) ─────────────
+# Hardware de escasos recursos: el modelo local puede tardar mas de 120 s.
+# Todo esto es SOLO interfaz: no se consumen credenciales ni se delega de true.
+LLM_TIMEOUT = SUPER_LOCAL_TIMEOUT          # 180 s (>= 120 s originales)
+LLM_TIMEOUT_CLASSIFY = 30                  # clasificacion de intenciones corto
+MSG_TIMEOUT_LLM = (
+    f"[WARN] El modelo local no pudo completar la solicitud dentro del "
+    f"limite de {LLM_TIMEOUT}s."
+)
+
 BOS = "<|begin_of_text|>"
 HEADER = "<|start_header_id|>"
 FOOTER = "<|end_header_id|>"
@@ -3461,6 +3471,37 @@ def _responder_super_por_fallback(prompt, context, store_history, motivo):
     if out and not out.startswith("[WARN]") and not out.startswith("[ERROR]"):
         return f"[INFO] {motivo} Respuesta de Super Yap:\n{out}"
     return None
+
+
+def preguntar_delegacion_cloud(prompt_arg):
+    """Solo interfaz (#94): si el LLM local no termino a tiempo, ofrece la nube.
+
+    No delega de verdad: si el usuario responde 's' se informa que el servicio
+    no esta disponible. La delegacion automatica a Cloud Run ya es fallback
+    involuntario de Super Yap y no se toca aqui.
+    """
+    print("[WARN] El modelo local no pudo terminar a tiempo.")
+    print("¿Deseas reintentar en la nube? [s/N]", end="")
+    opcion = input(" ").strip().lower()
+    if opcion == "s":
+        print("[INFO] Delegacion a la nube aceptada, pero el servicio no esta disponible.")
+        return "[INFO] La delegacion a la nube no esta disponible. Reintenta tu pedido."
+    print("[INFO] Volviendo al modelo local.")
+    return "[INFO] El modelo local no delego. Reintenta tu pedido."
+
+
+
+def manejar_timeout_local(respuesta, prompt):
+    """Passthrough normal; si es el marcador de timeout (#94), ofrece la nube.
+
+    Devuelve `respuesta` tal cual cuando la salida es normal; si la salida es
+    el marcador de timeout (MSG_TIMEOUT_LLM, comienza en '[WARN]'), pregunta
+    si el usuario desea reintentar en la nube.
+    """
+    if respuesta == MSG_TIMEOUT_LLM or respuesta.startswith("[WARN]"):
+        return preguntar_delegacion_cloud(prompt)
+    return respuesta
+
 
 
 def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=True):
