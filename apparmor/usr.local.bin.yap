@@ -32,6 +32,11 @@ profile yap /usr/local/bin/yap {
   # Read access to home (for readline history)
   owner @{HOME}/.config/yap/history.txt rw,
 
+  # Read access to user files for file opening (cmd_open_file).
+  # Los visores (xdg-open -> evince/libreoffice/...) heredan este perfil (rix)
+  # y necesitan lectura del archivo que se abre desde whitelist/dirs.conf.
+  owner @{HOME}/** r,
+
   # Execute llama-cli for LLM inference
   /usr/bin/llama-cli rix,
   /usr/local/bin/llama-cli rix,

@@ -84,6 +84,145 @@ class TestOpenApp:
         assert "firefox" in result.lower() or "libreoffice" in result.lower()
 
 
+class TestOpenFile:
+    """Requisito: El agente puede abrir archivos dentro de whitelist/dirs.conf."""
+
+    def setup_method(self):
+        self.base_dir = tempfile.mkdtemp()
+        self.other_dir = tempfile.mkdtemp()
+        self.fich = os.path.join(self.base_dir, "tarea.pdf")
+        with open(self.fich, "w") as f:
+            f.write("x")
+
+        self.dirs_path = os.path.join(self.base_dir, "dirs.conf")
+        with open(self.dirs_path, "w") as f:
+            f.write("# directorios permitidos\n")
+            f.write(self.base_dir + "\n")
+
+    def teardown_method(self):
+        import shutil
+        shutil.rmtree(self.base_dir, ignore_errors=True)
+        shutil.rmtree(self.other_dir, ignore_errors=True)
+
+    @patch.object(yap, "notify")
+    @patch("shutil.which")
+    @patch("subprocess.Popen")
+    def test_abrir_archivo_permitido(self, mock_popen, mock_which, mock_notify):
+        """Abrir un archivo dentro de un directorio permitido debe devolver [OK]."""
+        mock_which.return_value = "/usr/bin/xdg-open"
+
+        with patch.object(yap, "WHITELIST_DIRS", self.dirs_path):
+            result = yap.cmd_open_file(os.path.join(self.base_dir, "tarea.pdf"))
+
+        assert "[OK]" in result
+        assert "tarea.pdf" in result
+        mock_popen.assert_called_once_with(
+            ["/usr/bin/xdg-open", os.path.realpath(self.fich)],
+            stdout=ANY, stderr=ANY
+        )
+        # Nunca se usa shell
+        _, kwargs = mock_popen.call_args
+        assert "shell" not in kwargs
+
+    @patch("subprocess.Popen")
+    def test_abrir_archivo_fuera_de_whitelist(self, mock_popen):
+        """Un archivo fuera de dirs.conf NO debe abrirse ni ejecutarse."""
+        outer_file = os.path.join(self.other_dir, "secreto.txt")
+        with open(outer_file, "w") as f:
+            f.write("secreto")
+
+        with patch.object(yap, "WHITELIST_DIRS", self.dirs_path):
+            result = yap.cmd_open_file(outer_file)
+
+        assert "[ERROR]" in result
+        assert "Ruta no permitida" in result
+        mock_popen.assert_not_called()
+
+    def test_abrir_archivo_inexistente(self):
+        """Un archivo que no existe debe responder [ERROR] sin ejecutar nada."""
+        with patch.object(yap, "WHITELIST_DIRS", self.dirs_path):
+            result = yap.cmd_open_file(os.path.join(self.base_dir, "no_existe.pdf"))
+
+        assert "[ERROR]" in result
+        assert "no encontrado" in result.lower()
+
+    @patch.object(yap, "notify")
+    @patch("shutil.which")
+    @patch("subprocess.Popen")
+    def test_fallback_viewer_sin_xdg_open(self, mock_popen, mock_which, mock_notify):
+        """Sin xdg-open, usa un visor whitelistado segun la extension."""
+        def fake_which(cmd):
+            if cmd == "evince":
+                return "/usr/bin/evince"
+            return None
+        mock_which.side_effect = fake_which
+
+        apps_path = os.path.join(self.base_dir, "apps.conf")
+        with open(apps_path, "w") as f:
+            f.write("Evince:evince\n")
+
+        with patch.object(yap, "WHITELIST_DIRS", self.dirs_path):
+            with patch.object(yap, "WHITELIST_APPS", apps_path):
+                result = yap.cmd_open_file(os.path.join(self.base_dir, "tarea.pdf"))
+
+        assert "[OK]" in result
+        mock_popen.assert_called_once_with(
+            ["/usr/bin/evince", os.path.realpath(self.fich)],
+            stdout=ANY, stderr=ANY
+        )
+
+    def test_abrir_materiales_del_curso(self):
+        """En modo comando, una ruta con extension conocida se abre como archivo."""
+        informe = os.path.join(self.base_dir, "apuntes.odt")
+        with open(informe, "w") as f:
+            f.write("apuntes")
+        with patch.object(yap, "notify"):
+            with patch.object(yap, "WHITELIST_DIRS", self.dirs_path):
+                with patch("shutil.which", return_value="/usr/bin/xdg-open"):
+                    with patch("subprocess.Popen"):
+                        result = yap.cmd_open_file(informe)
+        assert "[OK]" in result
+
+
+class TestInterpretFileRouting:
+    """Requisito: interpret() distingue archivos de aplicaciones."""
+
+    def test_abre_app_va_a_open_app(self):
+        action, param = yap.interpret("abre firefox")
+        assert action == "open_app"
+        assert param == "firefox"
+
+    def test_abre_archivo_con_palabra_clave(self):
+        action, param = yap.interpret("abre archivo tarea.pdf")
+        assert action == "open_file"
+        assert param == "tarea.pdf"
+
+    def test_abre_archivo_con_documento(self):
+        action, param = yap.interpret("abrir documento informe.txt")
+        assert action == "open_file"
+        assert param == "informe.txt"
+
+    def test_abre_archivo_interpola_extension(self):
+        action, param = yap.interpret("abre guia.pdf")
+        assert action == "open_file"
+        assert param == "guia.pdf"
+
+    def test_abre_ruta_absoluta(self):
+        action, param = yap.interpret("abre /etc/yap/pseint/guia_ejercicios.pdf")
+        assert action == "open_file"
+        assert param == "/etc/yap/pseint/guia_ejercicios.pdf"
+
+    def test_abre_ruta_tilde(self):
+        action, param = yap.interpret("abre ~/Documentos/x.txt")
+        assert action == "open_file"
+        assert param == "~/Documentos/x.txt"
+
+    def test_abre_app_sin_extension(self):
+        action, param = yap.interpret("ejecuta micro")
+        assert action == "open_app"
+        assert param == "micro"
+
+
 # ============================================================
 # 2. WEBFETCH
 # ============================================================

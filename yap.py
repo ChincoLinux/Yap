@@ -19,6 +19,7 @@ import time
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
 WHITELIST_WEB = f"{CONFIG_DIR}/whitelist/web.conf"
+WHITELIST_DIRS = f"{CONFIG_DIR}/whitelist/dirs.conf"
 PSEINT_DIR = f"{CONFIG_DIR}/pseint"
 PSEINT_EXERCISES = f"{PSEINT_DIR}/ejercicios.conf"
 PSEINT_GUIA_PDF = f"{PSEINT_DIR}/guia_ejercicios.pdf"
@@ -199,6 +200,7 @@ HISTORY = []
 
 SENSITIVE_ACTIONS = {
     "open_app": "always",       # Abrir aplicaciones puede lanzar procesos con acceso a red
+    "open_file": "always",      # Abrir archivos lanza el visor del escritorio sobre una ruta
     "webfetch": "always",       # Fetch a URLs expone datos al exterior
 }
 
@@ -306,6 +308,37 @@ def load_domain_whitelist(path):
                 if line and not line.startswith("#"):
                     domains.append(line.lower())
     return domains
+
+
+def load_dir_whitelist(path=None):
+    """Carga los directorios permitidos para abrir archivos (whitelist/dirs.conf).
+
+    Formato: 1 ruta por linea; '~' se expande al HOME del usuario actual.
+    Si el archivo no existe, fallback seguro: HOME + directorio de configuracion.
+    """
+    path = path or WHITELIST_DIRS
+    dirs = []
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    dirs.append(os.path.expanduser(line))
+    else:
+        dirs = [os.path.expanduser("~"), CONFIG_DIR]
+    norm = []
+    for d in dirs:
+        if not d:
+            continue
+        real = os.path.realpath(d)
+        if real not in norm:
+            norm.append(real)
+    return norm
+
+
+def _dir_permitido(real_path, dirs):
+    """True si real_path esta dentro de algun directorio de la whitelist."""
+    return any(real_path == d or real_path.startswith(d + os.sep) for d in dirs)
 
 
 def cargar_ejercicios():
@@ -2824,6 +2857,114 @@ def cmd_open_app(app_name):
     return f"[OK] {app_title} abierta.\nInformacion: {version}"
 
 
+# ── Apertura de archivos (ChincoLinux / Debian 13) ─────────────
+# La apertura de documentos se hace con xdg-open (el visor por defecto del
+# escritorio). Seguridad: solo archivos regulares dentro de whitelist/dirs.conf.
+# Nunca se usa shell: subprocess siempre en lista de argumentos.
+
+VIEWERS_POR_EXT = {
+    ".pdf": ["Evince", "Firefox"],
+    ".odt": ["LibreOffice"],
+    ".ods": ["LibreOffice"],
+    ".odp": ["LibreOffice"],
+    ".doc": ["LibreOffice"],
+    ".docx": ["LibreOffice"],
+    ".xls": ["LibreOffice"],
+    ".xlsx": ["LibreOffice"],
+    ".ppt": ["LibreOffice"],
+    ".pptx": ["LibreOffice"],
+    ".txt": ["Micro", "Evince"],
+}
+
+EXT_ARCHIVO_POPULAR = {
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".bmp",
+    ".mp3", ".mp4", ".webm", ".ogv",
+    ".html", ".htm", ".csv", ".md",
+    ".py", ".c", ".cpp", ".java", ".js", ".json",
+}
+
+PREFIJOS_ARCHIVO = ("archivo ", "documento ", "el archivo ", "el documento ",
+                    "mi archivo ", "mi documento ", "un archivo ", "un documento ")
+
+
+def _extraer_ruta(arg):
+    """Devuelve la ruta de archivo contenida en el argumento del comando abrir."""
+    low = arg.lower()
+    for kw in PREFIJOS_ARCHIVO:
+        if low.startswith(kw):
+            rest = arg[len(kw):].strip()
+            if len(rest) >= 2 and rest[0] == rest[-1] and rest[0] in ('"', "'"):
+                return rest[1:-1]
+            return rest
+    if len(arg) >= 2 and arg[0] == arg[-1] and arg[0] in ('"', "'"):
+        return arg[1:-1]
+    return arg
+
+
+def _parece_archivo(arg):
+    """True si el argumento de 'abre X' apunta a un archivo y no a una app."""
+    low = arg.strip().lower()
+    if any(low.startswith(kw) for kw in PREFIJOS_ARCHIVO):
+        return True
+    if "/" in arg or arg.startswith((".", "~")):
+        return True
+    ext = os.path.splitext(arg)[1].lower()
+    return ext in VIEWERS_POR_EXT or ext in EXT_ARCHIVO_POPULAR
+
+
+def _viewer_para_extension(ext):
+    """Devuelve el binario de un visor whitelistado para la extension, o None."""
+    ext = ext.lower()
+    if ext not in VIEWERS_POR_EXT:
+        return None
+    apps = load_whitelist(WHITELIST_APPS)
+    for nombre in VIEWERS_POR_EXT[ext]:
+        for candidato in apps.get(nombre.lower(), []):
+            path = shutil.which(candidato)
+            if path:
+                return path
+    return None
+
+
+def cmd_open_file(file_arg):
+    """Abre un archivo con xdg-open (visor por defecto del escritorio).
+
+    Solo archivos regulares dentro de los directorios permitidos
+    (whitelist/dirs.conf). Bulk: subprocess en lista de argumentos, sin shell.
+    """
+    raw = file_arg.strip()
+    if not raw:
+        return "[ERROR] Indica un archivo, ej: 'abre archivo tarea.pdf'"
+
+    path = os.path.expanduser(raw)
+    if not os.path.isabs(path):
+        path = os.path.join(os.getcwd(), path)
+    real_path = os.path.realpath(path)
+
+    if not os.path.isfile(real_path):
+        return f"[ERROR] Archivo no encontrado: {raw}"
+
+    allowed = load_dir_whitelist()
+    if not _dir_permitido(real_path, allowed):
+        lista = ", ".join(sorted(allowed)) or "(sin directorios permitidos)"
+        return f"[ERROR] Ruta no permitida: {raw}\nDirectorios permitidos: {lista}"
+
+    opener = shutil.which("xdg-open")
+    if not opener:
+        viewer = _viewer_para_extension(os.path.splitext(real_path)[1])
+        if not viewer:
+            ext = os.path.splitext(real_path)[1] or "(sin extension)"
+            return (f"[ERROR] xdg-open no disponible y sin visor whitelistado "
+                    f"para '{ext}'.")
+        opener = viewer
+
+    subprocess.Popen([opener, real_path], stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL)
+    nombre = os.path.basename(real_path)
+    notify("Archivo abierto", nombre)
+    return f"[OK] Archivo abierto: {nombre}"
+
+
 def cmd_webfetch(url, feed_to_llm=False):
     domains = load_domain_whitelist(WHITELIST_WEB)
     parsed = urllib.parse.urlparse(url)
@@ -3742,13 +3883,15 @@ def classify_intent(user_input):
     prompt = (
         f"{BOS}{HEADER}system{FOOTER}\n\n"
         "Eres un clasificador de comandos. Responde SOLO con ACCION|PARAMETRO.\n"
-        "ACCION: open_app (abrir app), search (buscar en Wikipedia),\n"
+        "ACCION: open_app (abrir app), open_file (abrir archivo/documento),\n"
+        "search (buscar en Wikipedia),\n"
         "webfetch (obtener URL), pseint (tutor PSeInt/programacion),\n"
         "introduccion_pseint (tutorial interactivo con ejercicios),\n"
         "curso (ver o iniciar curso), guia (tutorial interactivo),\n"
         "progreso (ver avance), help (mostrar ayuda/opciones),\n"
         "query (preguntar al AI).\n"
         "Ejemplo: 'abre firefox' -> open_app|firefox\n"
+        "Ejemplo: 'abre el archivo tarea.pdf' -> open_file|tarea.pdf\n"
         "Ejemplo: 'busca quien es vegetta777 en wikipedia' -> search|vegetta777\n"
         "Ejemplo: 'busca linus torvalds' -> search|linus torvalds\n"
         "Ejemplo: 'fetch https://ejemplo.com' -> webfetch|https://ejemplo.com\n"
@@ -3795,7 +3938,7 @@ def classify_intent(user_input):
             # ponytail: 'sesion' se acepta como accion valida, pero no se
             # documenta en el prompt: interpret() la enruta por palabra clave
             # antes del LLM, y alargar este prompt degrada al modelo 1B.
-            if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "curso", "guia", "progreso", "sesion", "help", "query"):
+            if action in ("open_app", "open_file", "search", "webfetch", "pseint", "introduccion_pseint", "curso", "guia", "progreso", "sesion", "help", "query"):
                 return action, param
     except subprocess.TimeoutExpired:
         pass
@@ -3816,11 +3959,15 @@ def interpret(user_input):
             return "menu_opcion", _etiqueta
         return "menu_opcion", f"[ERROR] Opcion {n} no existe. Elige 1-{len(menu)}."
 
-    # abre|abrir|abra|open|ejecuta <app> → open_app (BYPASS LLM, case-insensitive)
+    # abre|abrir|abra|open|ejecuta <arg> → open_file|open_app (BYPASS LLM)
+    # Si el argumento apunta a un archivo/documento se abre el archivo;
+    # si es un nombre de app se lanza la aplicacion de la whitelist.
     if stripped.startswith(("abre ", "abrir ", "abra ", "open ", "ejecuta ")):
-        app = user_input.split(" ", 1)[1].strip()
-        if app:
-            return "open_app", app
+        arg = user_input.split(" ", 1)[1].strip()
+        if arg:
+            if _parece_archivo(arg):
+                return "open_file", _extraer_ruta(arg)
+            return "open_app", arg
 
     # Exact/prefix keyword routing (bypasses LLM for speed & reliability)
     if stripped in ("guia", "guia rapida", "tutorial", "como usar", "--tutorial"):
@@ -3984,6 +4131,12 @@ def handle_action(action, param, original_input):
     if action == "open_app":
         if confirm_action("open_app", param, f"Abrir aplicación '{param}'"):
             print(cmd_open_app(param))
+        else:
+            print(f"{C['YELLOW']}Acción cancelada.{C['RESET']}")
+
+    elif action == "open_file":
+        if confirm_action("open_file", param, f"Abrir archivo '{param}'"):
+            print(cmd_open_file(param))
         else:
             print(f"{C['YELLOW']}Acción cancelada.{C['RESET']}")
 

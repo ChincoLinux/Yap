@@ -194,9 +194,9 @@ deploy_one() {
     # 5. Empujar whitelists centralizadas si se solicitó
     if [ -n "$WHITELIST_DIR" ]; then
       if scp -q "${WHITELIST_DIR}/apps.conf" "${WHITELIST_DIR}/web.conf" \
-          "${ssh_target}:/tmp/" 2>/dev/null && \
+          "${WHITELIST_DIR}/dirs.conf" "${ssh_target}:/tmp/" 2>/dev/null && \
         ssh -o BatchMode=yes -o ConnectTimeout=30 "$ssh_target" \
-            "sudo mv /tmp/apps.conf /etc/yap/whitelist/apps.conf && sudo mv /tmp/web.conf /etc/yap/whitelist/web.conf" \
+            "sudo mv /tmp/apps.conf /etc/yap/whitelist/apps.conf && sudo mv /tmp/web.conf /etc/yap/whitelist/web.conf && sudo mv /tmp/dirs.conf /etc/yap/whitelist/dirs.conf" \
             >/dev/null 2>&1; then
         : # whitelists empujadas OK
       else

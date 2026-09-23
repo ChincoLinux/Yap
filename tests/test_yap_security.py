@@ -125,6 +125,92 @@ class TestDomainWhitelist:
 
 
 # ============================================================
+# 2b. APERTURA DE ARCHIVOS (WHITELIST DE DIRECTORIOS)
+# ============================================================
+
+class TestFileOpenSecurity:
+    """Requisito: Apertura de archivos solo dentro de whitelist/dirs.conf."""
+
+    def setup_method(self):
+        self.base_dir = tempfile.mkdtemp()
+        self.forbidden_dir = tempfile.mkdtemp()
+        self.dirs_path = os.path.join(self.base_dir, "dirs.conf")
+        with open(self.dirs_path, "w") as f:
+            f.write("# dirs permitidos\n")
+            f.write(self.base_dir + "\n")
+        self.fich = os.path.join(self.base_dir, "notas.txt")
+        with open(self.fich, "w") as f:
+            f.write("notas")
+
+    def teardown_method(self):
+        import shutil
+        shutil.rmtree(self.base_dir, ignore_errors=True)
+        shutil.rmtree(self.forbidden_dir, ignore_errors=True)
+
+    def test_load_dir_whitelist_expande_tilde(self):
+        """~ se expande al HOME al cargar la whitelist de directorios."""
+        dirs = yap.load_dir_whitelist(self.dirs_path)
+        assert os.path.realpath(self.base_dir) in dirs
+
+    def test_archivo_sensible_del_sistema_bloqueado(self):
+        """/etc/passwd no debe poder abrirse por defecto."""
+        with mock.patch.object(yap, "WHITELIST_DIRS", self.dirs_path):
+            with mock.patch("subprocess.Popen") as mock_popen:
+                result = yap.cmd_open_file("/etc/passwd")
+                mock_popen.assert_not_called()
+        assert "[ERROR]" in result
+        assert "no permitida" in result.lower() or "no encontrado" in result.lower()
+
+    def test_inyeccion_en_ruta_de_archivo(self):
+        """Meta-caracteres en la ruta deben fallar sin ejecutar nada."""
+        injections = [
+            "; rm -rf /",
+            "$(whoami)",
+            "`id`",
+            "| cat /etc/passwd",
+            "&& shutdown -h now",
+        ]
+        for injection in injections:
+            with mock.patch.object(yap, "WHITELIST_DIRS", self.dirs_path):
+                with mock.patch("subprocess.Popen") as mock_popen:
+                    result = yap.cmd_open_file(injection)
+                    mock_popen.assert_not_called()
+            assert "[ERROR]" in result, (
+                f"Inyeccion en ruta '{injection}' deberia ser bloqueada"
+            )
+
+    def test_cmd_open_file_nunca_fuerza_shell(self):
+        """cmd_open_file invoca Popen con lista de argumentos, sin shell."""
+        with mock.patch.object(yap, "notify"):
+            with mock.patch.object(yap, "WHITELIST_DIRS", self.dirs_path):
+                with mock.patch("shutil.which", return_value="/usr/bin/xdg-open"):
+                    with mock.patch("subprocess.Popen") as mock_popen:
+                        yap.cmd_open_file(self.fich)
+                        args, kwargs = mock_popen.call_args
+        assert isinstance(args[0], list)
+        assert args[0][0] == "/usr/bin/xdg-open"
+        assert "shell" not in kwargs
+
+    def test_archivo_fuera_de_whitelist_no_se_ejecuta(self):
+        """Archivo en directorio NO permitido nunca llega a Popen."""
+        forbidden = os.path.join(self.forbidden_dir, "fuera.txt")
+        with open(forbidden, "w") as f:
+            f.write("x")
+        with mock.patch.object(yap, "WHITELIST_DIRS", self.dirs_path):
+            with mock.patch("subprocess.Popen") as mock_popen:
+                result = yap.cmd_open_file(forbidden)
+                mock_popen.assert_not_called()
+        assert "[ERROR]" in result
+
+    def test_default_sin_dirs_conf_es_home_y_config(self):
+        """Sin dirs.conf, el fallback es HOME + directorio de configuracion."""
+        with mock.patch("os.path.exists", return_value=False):
+            dirs = yap.load_dir_whitelist("/no/existe/dirs.conf")
+        assert os.path.realpath(os.path.expanduser("~")) in dirs
+        assert os.path.realpath(yap.CONFIG_DIR) in dirs
+
+
+# ============================================================
 # 3. SEGURIDAD DE COMANDOS (INJECTION)
 # ============================================================
 
@@ -339,6 +425,11 @@ class TestRealConfig:
         path = os.path.join(os.path.dirname(yap.__file__), "whitelist", "web.conf")
         assert os.path.exists(path), f"No se encuentra: {path}"
 
+    def test_dirs_conf_existe(self):
+        """El archivo dirs.conf debe existir en el repo."""
+        path = os.path.join(os.path.dirname(yap.__file__), "whitelist", "dirs.conf")
+        assert os.path.exists(path), f"No se encuentra: {path}"
+
     def test_apps_conf_tiene_contenido(self):
         """apps.conf debe tener al menos una entrada valida."""
         path = os.path.join(os.path.dirname(yap.__file__), "whitelist", "apps.conf")
@@ -350,6 +441,12 @@ class TestRealConfig:
         path = os.path.join(os.path.dirname(yap.__file__), "whitelist", "web.conf")
         domains = yap.load_domain_whitelist(path)
         assert len(domains) > 0, "web.conf vacio o con solo comentarios"
+
+    def test_dirs_conf_tiene_contenido(self):
+        """dirs.conf debe tener al menos un directorio permitido."""
+        path = os.path.join(os.path.dirname(yap.__file__), "whitelist", "dirs.conf")
+        dirs = yap.load_dir_whitelist(path)
+        assert len(dirs) > 0, "dirs.conf vacio o con solo comentarios"
 
 
 # ============================================================

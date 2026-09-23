@@ -238,6 +238,8 @@ stage_yap() {
     "$staging/usr/share/yap/whitelist/apps.conf"
   install_file 0644 "$SCRIPT_DIR/whitelist/web.conf" \
     "$staging/usr/share/yap/whitelist/web.conf"
+  install_file 0644 "$SCRIPT_DIR/whitelist/dirs.conf" \
+    "$staging/usr/share/yap/whitelist/dirs.conf"
   install_file 0644 "$SCRIPT_DIR/whitelist/pseint/ejercicios.conf" \
     "$staging/usr/share/yap/pseint/ejercicios.conf"
   if [ -f "$SCRIPT_DIR/whitelist/pseint/guia_ejercicios.pdf" ]; then
