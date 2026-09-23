@@ -29,6 +29,9 @@ class TestSensitiveActions:
     def test_open_app_es_sensible(self):
         assert "open_app" in yap.SENSITIVE_ACTIONS
 
+    def test_open_file_es_sensible(self):
+        assert "open_file" in yap.SENSITIVE_ACTIONS
+
     def test_webfetch_es_sensible(self):
         assert "webfetch" in yap.SENSITIVE_ACTIONS
 
@@ -160,6 +163,19 @@ class TestHandleActionIntegration:
         with mock.patch.object(yap, "confirm_action", return_value=True):
             with mock.patch.object(yap, "cmd_open_app", return_value="[OK]"):
                 yap.handle_action("open_app", "firefox", "abre firefox")
+
+    def test_open_file_cancelado_no_ejecuta(self):
+        """Si confirm_action devuelve False, no se ejecuta cmd_open_file."""
+        with mock.patch.object(yap, "confirm_action", return_value=False):
+            with mock.patch.object(yap, "cmd_open_file") as mock_cmd:
+                yap.handle_action("open_file", "tarea.pdf", "abre tarea.pdf")
+                mock_cmd.assert_not_called()
+
+    def test_open_file_confirmado_ejecuta(self):
+        """Si confirm_action devuelve True, se ejecuta cmd_open_file."""
+        with mock.patch.object(yap, "confirm_action", return_value=True):
+            with mock.patch.object(yap, "cmd_open_file", return_value="[OK]"):
+                yap.handle_action("open_file", "tarea.pdf", "abre tarea.pdf")
 
     def test_webfetch_cancelado_no_ejecuta(self):
         """Si confirm_action devuelve False, no se ejecuta cmd_webfetch."""
