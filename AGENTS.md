@@ -147,7 +147,7 @@ Yap/
 ├── CLAUDE.md              # Arquitectura técnica detallada
 ├── CONTRIBUTING.md        # Guía de contribución
 ├── GOVERNANCE.md          # Gobernanza de la organización
-├── yap.py                 # Agente principal (~1253 líneas)
+├── yap.py                 # Agente principal + cliente Gradio Cloud Run (#91)
 ├── setup.sh               # Instalador de desarrollo (compila llama.cpp, descarga modelo)
 ├── build-deb.sh           # Genera paquetes .deb (issue #31)
 ├── packaging/             # Plantillas DEBIAN (yap, yap-models-1b/3b)

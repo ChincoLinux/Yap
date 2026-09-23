@@ -209,11 +209,13 @@ class TestQuery:
         assert "Linux" in result
         assert "sistema operativo" in result
 
+    @patch("yap._gradio_urlopen", side_effect=OSError("sin red"))
+    @patch("urllib.request.urlopen", side_effect=OSError("sin red"))
     @patch("subprocess.run")
-    def test_cmd_query_timeout(self, mock_run):
-        """Timeout debe devolver mensaje de advertencia."""
+    def test_cmd_query_timeout(self, mock_run, _red, _gradio):
+        """Timeout debe devolver mensaje de advertencia (Super Yap no disponible)."""
         from subprocess import TimeoutExpired
-        mock_run.side_effect = TimeoutExpired("llama-cli", 120)
+        mock_run.side_effect = TimeoutExpired("llama-cli", 180)
         result = yap.cmd_query("test", store_history=False)
         assert "[WARN]" in result
         assert "Tiempo de espera" in result
@@ -477,6 +479,32 @@ class TestArchitecture:
 
     def test_interpret_existe(self):
         assert hasattr(yap, "interpret") and callable(yap.interpret)
+
+    def test_interpret_numero_de_menu_ejecuta_la_opcion(self):
+        assert yap.interpret("6") == ("perfil", "")
+        assert yap.interpret("7") == ("historial", "historial")
+        assert yap.interpret("11") == ("super", "")
+        assert yap.interpret("13") == ("menu", "")
+        assert yap.interpret("menu") == ("menu", "")
+        assert yap.interpret("14") == ("help", "ayuda")
+        action, param = yap.interpret("1")
+        assert action == "menu_opcion"
+        assert "consulta" in param.lower()
+        action, param = yap.interpret("99")
+        assert action == "menu_opcion"
+        assert "no existe" in param.lower()
+
+    def test_cmd_menu_vuelve_a_listar_opciones(self):
+        out = yap.cmd_menu()
+        assert "[1]" in out
+        assert "Menu — ver de nuevo las opciones" in out
+        assert "Ayuda" in out
+
+    def test_interpret_salir_por_numero_del_menu(self):
+        import pytest
+        n = str(len(yap._menu_principal()))
+        with pytest.raises(SystemExit):
+            yap.interpret(n)
 
     def test_load_whitelist_existe(self):
         assert hasattr(yap, "load_whitelist") and callable(yap.load_whitelist)
