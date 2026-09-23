@@ -66,7 +66,33 @@
             "Define que es un algoritmo",
             "Menciona al menos dos componentes (entrada, proceso o salida)",
             "Incluye un ejemplo cotidiano"
-          ]
+          ],
+          "variantes": {
+            "facil": {
+              "enunciado": "Explica con tus palabras que es un algoritmo y nombra sus tres componentes (entrada, proceso, salida).",
+              "criterios_evaluacion": [
+                "Define que es un algoritmo",
+                "Menciona los tres componentes (entrada, proceso y salida)"
+              ]
+            },
+            "normal": {
+              "enunciado": "Explica con tus palabras que es un algoritmo, nombra sus componentes y da un ejemplo de la vida diaria (por ejemplo, una receta).",
+              "criterios_evaluacion": [
+                "Define que es un algoritmo",
+                "Menciona al menos dos componentes (entrada, proceso o salida)",
+                "Incluye un ejemplo cotidiano"
+              ]
+            },
+            "desafiante": {
+              "enunciado": "Explica que es un algoritmo usando un problema cotidiano, senala sus componentes (entrada, proceso, salida) y propone una mejora del algoritmo que podria aplicarse a otro contexto.",
+              "criterios_evaluacion": [
+                "Define que es un algoritmo",
+                "Menciona los tres componentes (entrada, proceso y salida)",
+                "Incluye un ejemplo cotidiano",
+                "Propone una mejora o reutilizacion del algoritmo en otro contexto"
+              ]
+            }
+          }
         },
         {
           "orden": 2,
@@ -151,7 +177,34 @@
           "respuesta_correcta": "A",
           "criterios_evaluacion": [
             "Identifica que se ejecuta la primera condicion verdadera"
-          ]
+          ],
+          "variantes": {
+            "facil": {
+              "enunciado": "Que imprime este codigo? x=2; if x<1: print('A') else: print('B')",
+              "opciones": ["A", "B", "No imprime nada"],
+              "respuesta_correcta": "B",
+              "criterios_evaluacion": [
+                "Identifica cual rama se ejecuta segun la condicion"
+              ]
+            },
+            "normal": {
+              "enunciado": "Que imprime este codigo? x=5; if x>3: print('A'); elif x>10: print('B'); else: print('C')",
+              "opciones": ["A", "B", "C", "A y B"],
+              "respuesta_correcta": "A",
+              "criterios_evaluacion": [
+                "Identifica que se ejecuta la primera condicion verdadera"
+              ]
+            },
+            "desafiante": {
+              "enunciado": "Que imprime este codigo? x=15; if x>10: print('A'); elif x>3: print('B'); else: print('C')",
+              "opciones": ["A", "B", "C", "A y B"],
+              "respuesta_correcta": "A",
+              "criterios_evaluacion": [
+                "Identifica que se ejecuta la primera condicion verdadera",
+                "Distingue elif de if separados"
+              ]
+            }
+          }
         },
         {
           "orden": 4,
