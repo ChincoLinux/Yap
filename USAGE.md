@@ -46,6 +46,7 @@ yap --tutorial
 | `yap sesion retomar 3` | Retomar una sesion pausada. |
 
 | `yap telemetria` | Resumen local de tu uso de Yap. |
+| `yap profesor` | Panel de monitoreo de la clase (requiere rol y PIN). |
 | `yap super` | Estado de Super Yap (Gradio Cloud Run, opt-in, ver [docs/SUPER-YAP.md](docs/SUPER-YAP.md)). |
 | `yap super on` / `yap super off` | Usar Super Yap en todas las consultas, o volver al local. |
 | `yap super <pregunta>` | Forzar Super Yap; si no está, usa el LLM local. |
@@ -402,6 +403,97 @@ git checkout lowmem
 - URLs de Wikipedia validadas contra `*.wikipedia.org`.
 - Contenido limitado a 3000 caracteres.
 - Timeout de 30s en subprocess.
+
+## Modo profesor
+
+Un docente no ve el progreso de su clase: cada estudiante lo tiene en su
+propio equipo. El modo profesor importa esos `progress.json` y los agrega en
+un panel.
+
+La sincronizacion por red queda fuera a proposito. En el aula el traspaso
+real es una llave USB, y montar un servidor para esto seria desproporcionado.
+
+### Activarlo
+
+Hacen falta dos cosas, en este orden:
+
+```bash
+yap perfil rol profesor      # el rol vive en el perfil del equipo del docente
+yap profesor pin             # PIN de 4 a 12 digitos
+```
+
+El PIN no protege secretos: evita que un estudiante abra el panel desde el
+equipo del docente si lo deja desatendido. Se guarda derivado con sal, nunca
+en claro, y el panel no se abre sin terminal interactiva.
+
+### Importar el progreso de la clase
+
+```bash
+yap profesor importar /media/usb              # carpeta con varios JSON
+yap profesor importar /media/usb/maria.json   # un archivo suelto
+```
+
+Acepta tres formas, que son las que aparecen en la practica:
+
+| En la ruta hay | Yap hace |
+|---|---|
+| Un `.json` suelto | Lo importa; el nombre sale del archivo |
+| Varios `.json` en la carpeta | Importa todos |
+| Una carpeta por estudiante con `progress.json` | Importa cada una |
+
+Si junto al `progress.json` hay un `profile.json`, el nombre del estudiante
+sale de ahi. Si no, se usa el nombre del archivo o de su carpeta.
+
+Reimportar a la misma persona actualiza sus datos, no la duplica.
+
+### El panel
+
+```
+  Estudiante                Avance    Nota       Ultima
+  ─────────────────────────────────────────────────────
+  Ana Rivas                    0/6       —            —
+  Maria Gonzalez               2/6     5.7   2026-09-19
+  Pedro Soto                   1/6     2.8            —
+  ─────────────────────────────────────────────────────
+  3 estudiante(s)
+  Promedio del curso: 4.2
+  Bajo 4.0: 1 de 2
+  Sin actividades evaluadas: 1
+```
+
+*Avance* son actividades evaluadas sobre el total de la EA. *Nota* es el
+promedio ponderado en la escala chilena, con la misma regla que `yap
+progreso`. *Ultima* es la fecha de la ultima actividad aprobada.
+
+### Comandos
+
+| Comando | Descripcion |
+|---------|-------------|
+| `yap profesor` | Panel de la clase. |
+| `yap profesor importar <ruta>` | Importar progreso desde archivo o carpeta. |
+| `yap profesor listar` | Estudiantes importados y cuando. |
+| `yap profesor estudiante <nombre>` | Ficha individual, desglosada por curso y EA. |
+| `yap profesor curso <codigo>` | Filtrar el panel por curso. |
+| `yap profesor exportar [ruta]` | Reporte CSV. |
+| `yap profesor pin` | Definir o cambiar el PIN. |
+
+### Exportar
+
+```bash
+yap profesor exportar ~/reporte-3roA.csv
+```
+
+Una fila por estudiante, con nombre, actividades evaluadas y totales,
+porcentaje, nota, si aprueba y la fecha de la ultima actividad. Se abre
+directamente en LibreOffice Calc.
+
+### Donde quedan los datos
+
+En `~/.config/yap/aula/`, un JSON por estudiante, en el equipo del docente.
+No se envia nada a ninguna parte.
+
+La opcion del panel solo aparece en el menu numerado de quien tiene el rol de
+profesor, asi que la numeracion que usa el estudiante no cambia.
 
 ## Solucion de problemas
 

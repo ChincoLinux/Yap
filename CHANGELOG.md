@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Modo profesor (#25): `yap profesor` abre un panel con el progreso de la
+  clase. El docente importa los `progress.json` de sus estudiantes desde una
+  carpeta o una llave USB (`yap profesor importar`), y el panel muestra avance,
+  nota ponderada en escala chilena y fecha de la ultima actividad, con filtros
+  por curso y por EA, ficha individual y exportacion a CSV. Requiere
+  `yap perfil rol profesor` y un PIN, que se guarda derivado con sal. El rol
+  `estudiante`/`profesor` es nuevo en el perfil (#24). La opcion solo aparece
+  en el menu de quien tiene el rol, de modo que la numeracion del estudiante no
+  cambia. Todo local: nada se envia a ninguna parte
 - Super Yap (#91): cliente Gradio 5 en Cloud Run (`urllib` + cookies, sin
   `requests`) contra el host pin `*.southamerica-west1.run.app`. Cada
   consulta reenvía el historial vivo (`HISTORY`) para no perder contexto;

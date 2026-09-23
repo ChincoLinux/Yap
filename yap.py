@@ -8,6 +8,10 @@ import shutil
 import textwrap
 import json
 import glob
+import csv
+import getpass
+import hashlib
+import hmac
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -69,8 +73,13 @@ def display_menu(title, options):
 
 
 def _menu_principal():
-    """Opciones del menu interactivo: (etiqueta, comando para interpret)."""
-    return [
+    """Opciones del menu interactivo: (etiqueta, comando para interpret).
+
+    La entrada del docente solo se lista para quien tiene el rol, de modo que
+    la numeracion del estudiante no cambia y el menu del aula no se llena de
+    opciones que no le sirven.
+    """
+    opciones = [
         ("Cualquier consulta directa al AI", ""),
         ("Abre [app] — abrir aplicacion permitida", ""),
         ("Busca [tema] — buscar en Wikipedia", ""),
@@ -83,10 +92,19 @@ def _menu_principal():
         ("Telemetria — ver tu uso de Yap (100% local)", "telemetria"),
         ("Super / nube — Gradio Cloud Run; si el local tarda 3 min, se usa la nube", "super"),
         (f"Modelo: {etiqueta_familia_modelo()}", ""),
+    ]
+    try:
+        if es_profesor():
+            opciones.append(
+                ("Profesor — panel de monitoreo de la clase", "profesor"))
+    except (OSError, ValueError):
+        pass
+    opciones.extend([
         ("Menu — ver de nuevo las opciones", "menu"),
         ("Ayuda — lista de comandos", "ayuda"),
         ("Salir — Ctrl+C o 'salir'", "salir"),
-    ]
+    ])
+    return opciones
 
 
 def cmd_menu():
@@ -459,6 +477,7 @@ PROFILE_FILE = os.path.join(_config_dir(), "profile.json")
 
 NIVELES_VALIDOS = ("basico", "intermedio", "avanzado")
 IDIOMAS_VALIDOS = ("es", "en")
+ROLES_VALIDOS = ("estudiante", "profesor")
 
 
 def _perfil_por_defecto():
@@ -467,6 +486,7 @@ def _perfil_por_defecto():
         "nombre": "",
         "fecha_primer_uso": _now_iso(),
         "nivel": "basico",
+        "rol": "estudiante",
         "cursos_inscritos": [],
         "curso_activo": None,
         "preferencias": {
@@ -490,8 +510,8 @@ def _normalizar_perfil(data):
     if not isinstance(data, dict):
         return perfil
 
-    for clave in ("nombre", "fecha_primer_uso", "nivel", "cursos_inscritos",
-                  "curso_activo", "onboarding_completed"):
+    for clave in ("nombre", "fecha_primer_uso", "nivel", "rol",
+                  "cursos_inscritos", "curso_activo", "onboarding_completed"):
         valor = data.get(clave)
         if valor is not None:
             perfil[clave] = valor
@@ -501,6 +521,10 @@ def _normalizar_perfil(data):
         for clave in list(perfil["preferencias"]):
             if clave in prefs_data:
                 perfil["preferencias"][clave] = prefs_data[clave]
+
+    datos_profesor = data.get("profesor")
+    if isinstance(datos_profesor, dict):
+        perfil["profesor"] = datos_profesor
 
     stats_data = data.get("estadisticas")
     if isinstance(stats_data, dict):
@@ -513,6 +537,8 @@ def _normalizar_perfil(data):
         perfil["nombre"] = ""
     if perfil["nivel"] not in NIVELES_VALIDOS:
         perfil["nivel"] = "basico"
+    if perfil["rol"] not in ROLES_VALIDOS:
+        perfil["rol"] = "estudiante"
     if not isinstance(perfil["cursos_inscritos"], list):
         perfil["cursos_inscritos"] = []
     if perfil["curso_activo"] is not None and not isinstance(perfil["curso_activo"], str):
@@ -580,6 +606,18 @@ def actualizar_idioma(idioma):
     return perfil
 
 
+def actualizar_rol(rol):
+    """Set the profile role. Only estudiante/profesor accepted."""
+    rol = str(rol).strip().lower()
+    if rol not in ROLES_VALIDOS:
+        raise ValueError(
+            f"Rol no válido: '{rol}'. Opciones: {', '.join(ROLES_VALIDOS)}")
+    perfil = cargar_perfil()
+    perfil["rol"] = rol
+    guardar_perfil(perfil)
+    return perfil
+
+
 def _system_prompt():
     """SYSTEM_PROMPT + light profile context (#24).
 
@@ -607,6 +645,7 @@ def _formatar_perfil(perfil):
     lines = [display_header("Mi Perfil")]
     lines.append(f"\n  {C['BOLD']}Nombre:{C['RESET']} {perfil['nombre'] or '(sin definir)'}")
     lines.append(f"  {C['BOLD']}Nivel:{C['RESET']} {perfil['nivel']}")
+    lines.append(f"  {C['BOLD']}Rol:{C['RESET']} {perfil.get('rol', 'estudiante')}")
     lines.append(f"  {C['BOLD']}Curso activo:{C['RESET']} {perfil['curso_activo'] or '(ninguno)'}")
     lines.append(f"  {C['BOLD']}Cursos inscritos:{C['RESET']} "
                  f"{', '.join(perfil['cursos_inscritos']) or '(ninguno)'}")
@@ -623,7 +662,7 @@ def _formatar_perfil(perfil):
                  f"Preguntas: {stats['preguntas_totales']} | "
                  f"Tiempo total: {stats['tiempo_total_minutos']} min")
     lines.append(f"\n  {C['GRAY']}Perfil guardado en: {PROFILE_FILE}{C['RESET']}")
-    lines.append(f"  {C['GRAY']}Actualizar: yap perfil nombre|nivel|idioma <valor>{C['RESET']}")
+    lines.append(f"  {C['GRAY']}Actualizar: yap perfil nombre|nivel|idioma|rol <valor>{C['RESET']}")
     return "\n".join(lines)
 
 
@@ -635,6 +674,7 @@ def cmd_perfil(args=""):
       nombre <valor>         — actualiza el nombre
       nivel <basico|...>     — actualiza el nivel
       idioma <es|en>         — actualiza preferencias.idioma
+      rol <estudiante|profesor> — actualiza el rol (#25)
     """
     partes = args.strip().split(None, 1) if args.strip() else []
     if not partes or partes[0].lower() in ("ver", "mostrar"):
@@ -652,9 +692,11 @@ def cmd_perfil(args=""):
             actualizar_nivel(valor)
         elif campo == "idioma":
             actualizar_idioma(valor)
+        elif campo == "rol":
+            actualizar_rol(valor)
         else:
             return (f"[ERROR] Campo desconocido: '{campo}'. "
-                    "Campos disponibles: nombre, nivel, idioma")
+                    "Campos disponibles: nombre, nivel, idioma, rol")
     except ValueError as e:
         return f"[ERROR] {e}"
     except OSError as e:
@@ -1182,6 +1224,7 @@ TELEMETRY_VERSION = 1
 ACCIONES_CONOCIDAS = (
     "open_app", "search", "webfetch", "pseint", "introduccion_pseint",
     "curso", "guia", "progreso", "historial", "apparmor_status",
+    "profesor",
     "telemetria", "help", "query", "super", "super_query", "super_modo",
     "menu_opcion", "menu",
 )
@@ -1198,6 +1241,7 @@ ACCIONES_NOMBRES = {
     "progreso": "Ver progreso",
     "historial": "Historial de sesiones",
     "apparmor_status": "Estado de AppArmor",
+    "profesor": "Panel del docente",
     "telemetria": "Telemetria",
     "help": "Ayuda",
     "query": "Consulta directa al AI",
@@ -2641,6 +2685,502 @@ def cmd_mostrar_progreso():
     return "\n".join(lines)
 
 
+# ── Modo profesor: panel de monitoreo (#25) ─────────────────
+# El progreso de cada estudiante vive en su equipo. El docente importa esos
+# progress.json a un directorio propio y Yap los agrega en un panel.
+#
+# La sincronizacion por red queda fuera a proposito: el issue la marca como
+# futura y en el aula el traspaso real es una llave USB.
+#
+# El PIN no protege secretos, evita que un estudiante entre al panel desde el
+# equipo del docente. Se guarda derivado con sal, nunca en claro.
+
+AULA_DIR = os.path.join(os.path.dirname(PROGRESS_FILE), "aula")
+PIN_LARGO_MIN = 4
+PIN_LARGO_MAX = 12
+PIN_ITERACIONES = 120000
+
+
+def _slug(nombre):
+    """Filesystem-safe name. Never yields a path separator or a traversal."""
+    limpio = re.sub(r"[^a-z0-9]+", "-", str(nombre).strip().lower()).strip("-")
+    return limpio[:48] or "sin-nombre"
+
+
+# ── PIN del docente ─────────────────────────────────────────
+
+def _derivar_pin(pin, sal):
+    """Derive the stored PIN verifier. Slow on purpose: a 4-digit PIN has
+    only 10.000 combinations, so the derivation is what makes it costly."""
+    return hashlib.pbkdf2_hmac(
+        "sha256", str(pin).encode("utf-8"), bytes.fromhex(sal), PIN_ITERACIONES
+    ).hex()
+
+
+def pin_configurado(perfil=None):
+    """True when the teacher already set a PIN."""
+    perfil = perfil if perfil is not None else cargar_perfil()
+    datos = perfil.get("profesor") or {}
+    return bool(datos.get("pin_hash") and datos.get("pin_sal"))
+
+
+def _validar_pin(pin):
+    """Return an error message, or None when the PIN is acceptable."""
+    pin = str(pin or "").strip()
+    if not pin.isdigit():
+        return "El PIN debe ser solo numeros."
+    if not PIN_LARGO_MIN <= len(pin) <= PIN_LARGO_MAX:
+        return f"El PIN debe tener entre {PIN_LARGO_MIN} y {PIN_LARGO_MAX} digitos."
+    return None
+
+
+def definir_pin(pin):
+    """Store the teacher PIN. Raises ValueError when it is not acceptable."""
+    error = _validar_pin(pin)
+    if error:
+        raise ValueError(error)
+    sal = os.urandom(16).hex()
+    perfil = cargar_perfil()
+    perfil["profesor"] = {"pin_sal": sal, "pin_hash": _derivar_pin(pin, sal)}
+    guardar_perfil(perfil)
+    return perfil
+
+
+def verificar_pin(pin):
+    """Check a PIN against the stored verifier."""
+    perfil = cargar_perfil()
+    if not pin_configurado(perfil):
+        return False
+    datos = perfil["profesor"]
+    try:
+        calculado = _derivar_pin(pin, datos["pin_sal"])
+    except (ValueError, TypeError):
+        return False
+    # ponytail: comparacion en tiempo constante; el PIN es corto y el panel
+    # puede quedar accesible en el equipo del aula
+    return hmac.compare_digest(calculado, str(datos["pin_hash"]))
+
+
+def es_profesor(perfil=None):
+    """True when the profile declares the teacher role."""
+    perfil = perfil if perfil is not None else cargar_perfil()
+    return perfil.get("rol") == "profesor"
+
+
+def _pedir_pin():
+    """Ask for the PIN. Denies by default when there is no terminal."""
+    if not sys.stdin.isatty():
+        return ""
+    try:
+        return getpass.getpass("  PIN del docente: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return ""
+
+
+def _autorizado(pin=""):
+    """Gate for every teacher command. Returns (ok, mensaje)."""
+    perfil = cargar_perfil()
+    if not es_profesor(perfil):
+        return False, display_box(
+            "El modo profesor requiere el rol correspondiente.\n\n"
+            "  yap perfil rol profesor\n\n"
+            "Despues define un PIN con 'yap profesor pin'.",
+            color="YELLOW")
+    if not pin_configurado(perfil):
+        return False, display_box(
+            "Todavia no hay PIN configurado.\n\n"
+            "  yap profesor pin\n\n"
+            "Sin PIN el panel no se abre.",
+            color="YELLOW")
+    if not verificar_pin(pin or _pedir_pin()):
+        return False, f"{C['YELLOW']}PIN incorrecto.{C['RESET']}"
+    return True, ""
+
+
+# ── Importacion de progreso ─────────────────────────────────
+
+def _parece_progreso(data):
+    """A progress file has a 'cursos' mapping. Anything else is rejected."""
+    return isinstance(data, dict) and isinstance(data.get("cursos"), dict)
+
+
+def _nombre_desde_origen(path):
+    """Student name: the sibling profile.json if there is one, else the
+    file or folder name, which is what a USB copy usually carries."""
+    vecino = os.path.join(os.path.dirname(path), "profile.json")
+    if os.path.exists(vecino):
+        try:
+            with open(vecino, encoding="utf-8") as f:
+                nombre = (json.load(f) or {}).get("nombre")
+            if isinstance(nombre, str) and nombre.strip():
+                return nombre.strip()
+        except (json.JSONDecodeError, OSError, AttributeError):
+            pass
+    base = os.path.splitext(os.path.basename(path))[0]
+    if base.lower() in ("progress", "progreso"):
+        base = os.path.basename(os.path.dirname(path)) or base
+    return base or "sin-nombre"
+
+
+def _escribir_alumno(registro):
+    """Persist one imported student inside AULA_DIR, atomically."""
+    os.makedirs(AULA_DIR, exist_ok=True)
+    destino = os.path.join(AULA_DIR, _slug(registro["nombre"]) + ".json")
+    tmp = destino + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(registro, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, destino)
+    return destino
+
+
+def _archivos_de_progreso(origen):
+    """Expand an import path into candidate progress files."""
+    if os.path.isfile(origen):
+        return [origen]
+    if os.path.isdir(origen):
+        directos = sorted(glob.glob(os.path.join(origen, "*.json")))
+        anidados = sorted(glob.glob(os.path.join(origen, "*", "progress.json")))
+        return directos + anidados
+    return []
+
+
+def importar_progreso(origen):
+    """Import one file or a whole directory. Returns (importados, errores)."""
+    candidatos = _archivos_de_progreso(origen)
+    if not candidatos:
+        return [], [f"No hay archivos JSON en '{origen}'."]
+
+    importados, errores = [], []
+    for path in candidatos:
+        if os.path.basename(path) == "profile.json":
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            errores.append(f"{os.path.basename(path)}: no se pudo leer ({e.__class__.__name__})")
+            continue
+        if not _parece_progreso(data):
+            errores.append(f"{os.path.basename(path)}: no parece un progress.json")
+            continue
+        registro = {
+            "nombre": _nombre_desde_origen(path),
+            "origen": os.path.abspath(path),
+            "importado": _now_iso(),
+            "progreso": data,
+        }
+        try:
+            _escribir_alumno(registro)
+        except OSError as e:
+            errores.append(f"{registro['nombre']}: no se pudo guardar ({e})")
+            continue
+        importados.append(registro["nombre"])
+    return importados, errores
+
+
+def cargar_alumnos():
+    """Every student imported so far, sorted by name."""
+    if not os.path.isdir(AULA_DIR):
+        return []
+    alumnos = []
+    for path in sorted(glob.glob(os.path.join(AULA_DIR, "*.json"))):
+        try:
+            with open(path, encoding="utf-8") as f:
+                registro = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+        if isinstance(registro, dict) and _parece_progreso(registro.get("progreso")):
+            alumnos.append(registro)
+    return sorted(alumnos, key=lambda r: str(r.get("nombre", "")).lower())
+
+
+# ── Metricas ────────────────────────────────────────────────
+
+def _ultima_actividad(progreso):
+    """Most recent approval date across every activity, or None."""
+    fechas = []
+    for eas in (progreso.get("cursos") or {}).values():
+        if not isinstance(eas, dict):
+            continue
+        for ea in eas.values():
+            if not isinstance(ea, dict):
+                continue
+            for rec in (ea.get("actividades") or {}).values():
+                if isinstance(rec, dict) and rec.get("fecha_aprobacion"):
+                    fechas.append(str(rec["fecha_aprobacion"]))
+    return max(fechas) if fechas else None
+
+
+def metricas_alumno(registro, curso=None, ea=None):
+    """Aggregate one student's progress, optionally filtered.
+
+    `evaluadas` counts activities with a score; `total` uses the course
+    definition when it is available and falls back to what was recorded, so
+    the panel still works on a machine without the course JSON.
+    """
+    progreso = registro.get("progreso") or {}
+    evaluadas = total = 0
+    notas, pesos = [], []
+
+    for codigo, eas in (progreso.get("cursos") or {}).items():
+        if curso and codigo.upper() != curso.upper():
+            continue
+        if not isinstance(eas, dict):
+            continue
+        for ea_id, estado in eas.items():
+            if ea and ea_id.upper() != ea.upper():
+                continue
+            if not isinstance(estado, dict):
+                continue
+            actividades = estado.get("actividades") or {}
+            evaluadas += sum(
+                1 for r in actividades.values()
+                if isinstance(r, dict) and r.get("puntaje") is not None
+            )
+            declarado = _total_actividades_ea(codigo, ea_id)
+            total += declarado or estado.get("total_actividades") or len(actividades)
+
+            puntajes = _puntajes_ea(estado)
+            if puntajes:
+                notas.append(nota_chilena(sum(puntajes) / len(puntajes)))
+                pesos.append(_ponderacion_ea(codigo, ea_id) or 1.0)
+
+    if notas:
+        w = sum(pesos) or 1.0
+        promedio = round(sum(n * p for n, p in zip(notas, pesos)) / w, 1)
+    else:
+        promedio = None
+
+    return {
+        "nombre": registro.get("nombre", "sin-nombre"),
+        "evaluadas": evaluadas,
+        "total": total,
+        "porcentaje": round(100.0 * evaluadas / total, 1) if total else 0.0,
+        "nota": promedio,
+        "aprobado": promedio is not None and promedio >= NOTA_APROBACION,
+        "ultima": _ultima_actividad(progreso),
+        "importado": registro.get("importado"),
+    }
+
+
+def _fecha_corta(iso):
+    """YYYY-MM-DD from an ISO timestamp, or a dash."""
+    if not iso:
+        return "—"
+    return str(iso)[:10]
+
+
+# ── Presentacion ────────────────────────────────────────────
+
+def panel_aula(curso=None, ea=None):
+    """The teacher panel: one row per student."""
+    alumnos = cargar_alumnos()
+    if not alumnos:
+        return display_box(
+            "Todavia no hay estudiantes importados.\n\n"
+            "  yap profesor importar /media/usb\n"
+            "  yap profesor importar ~/progresos/maria.json\n\n"
+            "Acepta un archivo, un directorio con varios JSON, o un\n"
+            "directorio con una carpeta por estudiante.",
+            color="YELLOW")
+
+    filas = [metricas_alumno(a, curso=curso, ea=ea) for a in alumnos]
+    titulo = "Panel del docente"
+    if curso:
+        titulo += f" — {curso.upper()}"
+    if ea:
+        titulo += f" / {ea.upper()}"
+
+    lineas = [display_header(titulo)]
+    lineas.append(
+        f"\n  {C['BOLD']}{'Estudiante':<22}{'Avance':>10}{'Nota':>8}"
+        f"{'Ultima':>13}{C['RESET']}")
+    lineas.append(f"  {C['GRAY']}{'─' * 53}{C['RESET']}")
+
+    con_nota = []
+    for m in filas:
+        if m["nota"] is None:
+            color, nota = C["GRAY"], "—"
+        else:
+            color = C["GREEN"] if m["aprobado"] else C["YELLOW"]
+            nota = f"{m['nota']:.1f}"
+            con_nota.append(m["nota"])
+        avance = f"{m['evaluadas']}/{m['total']}" if m["total"] else "—"
+        lineas.append(
+            f"  {m['nombre'][:22]:<22}{avance:>10}{color}{nota:>8}{C['RESET']}"
+            f"{_fecha_corta(m['ultima']):>13}")
+
+    lineas.append(f"  {C['GRAY']}{'─' * 53}{C['RESET']}")
+    lineas.append(f"  {len(filas)} estudiante(s)")
+    if con_nota:
+        promedio = round(sum(con_nota) / len(con_nota), 1)
+        reprobados = sum(1 for n in con_nota if n < NOTA_APROBACION)
+        lineas.append(f"  Promedio del curso: {promedio}")
+        lineas.append(f"  Bajo {NOTA_APROBACION}: {reprobados} de {len(con_nota)}")
+    sin_datos = len(filas) - len(con_nota)
+    if sin_datos:
+        lineas.append(f"  Sin actividades evaluadas: {sin_datos}")
+    lineas.append(f"\n  {C['GRAY']}Datos importados en {AULA_DIR}{C['RESET']}")
+    return "\n".join(lineas)
+
+
+def ficha_alumno(nombre):
+    """Per-student detail, broken down by course and EA."""
+    objetivo = _slug(nombre)
+    for registro in cargar_alumnos():
+        if _slug(registro.get("nombre")) != objetivo:
+            continue
+        m = metricas_alumno(registro)
+        lineas = [display_header(m["nombre"])]
+        lineas.append(f"\n  Avance:   {m['evaluadas']}/{m['total']} actividades "
+                      f"({m['porcentaje']}%)")
+        lineas.append(f"  Nota:     {m['nota'] if m['nota'] is not None else '—'}")
+        lineas.append(f"  Ultima:   {_fecha_corta(m['ultima'])}")
+        lineas.append(f"  Importado:{_fecha_corta(m['importado']):>11}")
+
+        for codigo, eas in (registro["progreso"].get("cursos") or {}).items():
+            lineas.append(f"\n  {C['BOLD']}{C['GREEN']}{codigo}{C['RESET']}")
+            if not isinstance(eas, dict):
+                continue
+            for ea_id, estado in eas.items():
+                sub = metricas_alumno(registro, curso=codigo, ea=ea_id)
+                estado_txt = "completada" if (
+                    isinstance(estado, dict) and estado.get("completada")
+                ) else "en curso"
+                nota = sub["nota"] if sub["nota"] is not None else "—"
+                lineas.append(
+                    f"    {ea_id:<8} {sub['evaluadas']}/{sub['total']:<6} "
+                    f"nota {nota:<5} {estado_txt}")
+        return "\n".join(lineas)
+
+    return (f"[ERROR] No hay ningun estudiante llamado '{nombre}'. "
+            "Usa 'yap profesor listar' para ver los importados.")
+
+
+# ── Exportacion ─────────────────────────────────────────────
+
+def exportar_csv(destino=None, curso=None, ea=None):
+    """Write one row per student. Returns the path, or an [ERROR] string."""
+    alumnos = cargar_alumnos()
+    if not alumnos:
+        return "[ERROR] No hay estudiantes importados; no se exporta nada."
+
+    destino = destino or os.path.join(AULA_DIR, "reporte.csv")
+    tmp = destino + ".tmp"
+    columnas = ["nombre", "actividades_evaluadas", "actividades_totales",
+                "porcentaje", "nota", "aprobado", "ultima_actividad"]
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(destino)), exist_ok=True)
+        with open(tmp, "w", encoding="utf-8", newline="") as f:
+            escritor = csv.writer(f)
+            escritor.writerow(columnas)
+            for registro in alumnos:
+                m = metricas_alumno(registro, curso=curso, ea=ea)
+                escritor.writerow([
+                    m["nombre"], m["evaluadas"], m["total"], m["porcentaje"],
+                    "" if m["nota"] is None else m["nota"],
+                    "si" if m["aprobado"] else "no",
+                    m["ultima"] or "",
+                ])
+        os.replace(tmp, destino)
+    except OSError as e:
+        return f"[ERROR] No se pudo escribir el CSV: {e}"
+    return destino
+
+
+# ── Comando ─────────────────────────────────────────────────
+
+AYUDA_PROFESOR = (
+    "Modo profesor\n\n"
+    "  yap profesor                      Panel de la clase\n"
+    "  yap profesor importar <ruta>      Importar progreso (archivo o carpeta)\n"
+    "  yap profesor listar               Estudiantes importados\n"
+    "  yap profesor estudiante <nombre>  Ficha individual\n"
+    "  yap profesor curso <codigo>       Filtrar el panel por curso\n"
+    "  yap profesor exportar [ruta]      Reporte CSV\n"
+    "  yap profesor pin                  Definir o cambiar el PIN\n"
+)
+
+
+def _cmd_pin(param):
+    """Set or change the PIN. Asks when nothing was passed."""
+    pin = (param or "").strip()
+    perfil = cargar_perfil()
+    if not es_profesor(perfil):
+        return display_box(
+            "Primero asigna el rol:\n\n  yap perfil rol profesor",
+            color="YELLOW")
+    if pin_configurado(perfil):
+        if not verificar_pin(_pedir_pin()):
+            return f"{C['YELLOW']}PIN actual incorrecto.{C['RESET']}"
+    if not pin:
+        if not sys.stdin.isatty():
+            return "[ERROR] Indica el PIN nuevo: yap profesor pin <digitos>"
+        try:
+            pin = getpass.getpass("  PIN nuevo: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return f"{C['YELLOW']}Cancelado.{C['RESET']}"
+    try:
+        definir_pin(pin)
+    except ValueError as e:
+        return f"[ERROR] {e}"
+    except OSError as e:
+        return f"[ERROR] No se pudo guardar el perfil: {e}"
+    return "[OK] PIN del docente actualizado."
+
+
+def cmd_profesor(sub="", param=""):
+    """Entry point for `yap profesor [subcomando] [parametro]`."""
+    sub = (sub or "").strip().lower()
+    param = (param or "").strip()
+
+    if sub in ("ayuda", "help", "--help"):
+        return display_box(AYUDA_PROFESOR, color="CYAN")
+    if sub == "pin":
+        return _cmd_pin(param)
+
+    ok, mensaje = _autorizado()
+    if not ok:
+        return mensaje
+
+    if sub in ("", "panel"):
+        return panel_aula()
+    if sub == "importar":
+        if not param:
+            return "[ERROR] Indica la ruta: yap profesor importar /media/usb"
+        importados, errores = importar_progreso(param)
+        lineas = []
+        if importados:
+            lineas.append(f"[OK] Importados: {', '.join(importados)}")
+        for e in errores:
+            lineas.append(f"[WARN] {e}")
+        if not lineas:
+            lineas.append("[WARN] No se importo nada.")
+        return "\n".join(lineas)
+    if sub == "listar":
+        alumnos = cargar_alumnos()
+        if not alumnos:
+            return "No hay estudiantes importados."
+        return "\n".join(
+            f"  {a.get('nombre')}  ({_fecha_corta(a.get('importado'))})"
+            for a in alumnos)
+    if sub == "estudiante":
+        if not param:
+            return "[ERROR] Indica el nombre: yap profesor estudiante Maria"
+        return ficha_alumno(param)
+    if sub == "curso":
+        if not param:
+            return "[ERROR] Indica el curso: yap profesor curso FPY1101"
+        return panel_aula(curso=param)
+    if sub == "exportar":
+        resultado = exportar_csv(param or None)
+        if resultado.startswith("[ERROR]"):
+            return resultado
+        return f"[OK] Reporte escrito en {resultado}"
+
+    return display_box(AYUDA_PROFESOR, color="CYAN")
+
+
 def notify(title, msg, urgency="normal"):
     try:
         subprocess.run(
@@ -3820,6 +4360,15 @@ def interpret(user_input):
         return "super", ""
     if stripped in ("menu", "menú", "opciones"):
         return "menu", ""
+    # profesor | profesor importar /media/usb  -> ("profesor", "importar ...")
+    if stripped in ("profesor", "modo profesor", "docente"):
+        return "profesor", ""
+    for prefijo in ("profesor ", "docente "):
+        if stripped.startswith(prefijo):
+            # ponytail: se corta sobre el texto original, no sobre el
+            # normalizado, porque el nombre del estudiante lleva mayusculas
+            return "profesor", user_input.strip()[len(prefijo):].strip()
+
     if stripped in ("ayuda", "help", "--help", "-h", "comandos", "ayuda yap"):
         return "help", "ayuda"
     if stripped in ("--apparmor-status", "apparmor-status", "apparmor status"):
@@ -4026,6 +4575,12 @@ def handle_action(action, param, original_input):
         arg = partes[1] if len(partes) > 1 else ""
         print(cmd_sesion(sub_cmd, arg))
 
+    elif action == "profesor":
+        partes = param.split(None, 1)
+        sub = partes[0] if partes else ""
+        arg = partes[1] if len(partes) > 1 else ""
+        print(cmd_profesor(sub, arg))
+
     elif action == "telemetria":
         print(cmd_telemetria(param))
 
@@ -4065,6 +4620,8 @@ def handle_action(action, param, original_input):
         print("                 'sesion nueva|pausar|retomar|cerrar|listar'")
 
         print("  Telemetria:    'telemetria' — resumen local de tu uso")
+        print("  Profesor:      'profesor' — panel de monitoreo de la clase")
+        print("                 requiere 'yap perfil rol profesor' y un PIN")
         print("  Menu:          'menu' — ver de nuevo las opciones numeradas")
         print("  Super Yap:     'super' — estado de Gradio Cloud Run (opt-in)")
         print("                 'super on' / 'super off' — usar Super Yap o volver al local")
