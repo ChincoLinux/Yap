@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `super on` / `super <pregunta>` siguen forzando la nube.
 
 ### Fixed
+- Consultas invisibles a partir de la segunda pregunta (#99): los procesos
+  hijos heredaban la terminal del estudiante. `llama-cli` hace `tcsetattr`
+  sobre el stdin que recibe y apaga el eco; al no restaurarlo siempre, lo
+  escrito dejaba de verse aunque Enter siguiera enviando la consulta. Las
+  nueve llamadas a `subprocess` pasan ahora `stdin=subprocess.DEVNULL`,
+  incluido el lanzador de aplicaciones de la whitelist, que vivía más que
+  la llamada y competía por la misma terminal
 
 ## [1.0.0] - 2026-09-06
 ### Added

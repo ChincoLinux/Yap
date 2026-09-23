@@ -1876,6 +1876,7 @@ def _llamar_llm_evaluacion(prompt):
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
             text=True,
         )
         stdout, stderr = proc.communicate(timeout=120)
@@ -2647,6 +2648,7 @@ def notify(title, msg, urgency="normal"):
             ["notify-send", "-u", urgency, title, msg],
             check=False, timeout=3,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
         )
     except FileNotFoundError:
         pass
@@ -2678,6 +2680,7 @@ def apparmor_status():
         result = subprocess.run(
             ["aa-status", "--json"],
             capture_output=True, text=True, timeout=5,
+            stdin=subprocess.DEVNULL,
         )
         if result.returncode == 0:
             data = json.loads(result.stdout)
@@ -2768,12 +2771,16 @@ def cmd_open_app(app_name):
         candidates_str = ", ".join(candidates)
         return f"[ERROR] Ningun binario encontrado: {candidates_str}"
 
-    subprocess.Popen([bin_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # ponytail: stdin al vacio. La aplicacion vive mas que la llamada y, con
+    # la terminal heredada, compite por ella con el REPL de Yap
+    subprocess.Popen([bin_path], stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
 
     try:
         result = subprocess.run(
             [chosen, "--version"],
             capture_output=True, text=True, timeout=5,
+            stdin=subprocess.DEVNULL,
         )
         version = result.stdout.strip() or result.stderr.strip() or "(sin version)"
     except Exception:
@@ -3517,7 +3524,13 @@ def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=Tru
     ]
     timeout_s = _local_llama_timeout()
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+        # ponytail: stdin al vacio. llama-cli hace tcsetattr sobre la terminal
+        # que hereda y apaga el eco; si no sale limpio, se queda apagado y el
+        # estudiante escribe a ciegas la consulta siguiente (#99)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout_s,
+            stdin=subprocess.DEVNULL,
+        )
         out = _clean_output(result)
         if store_history and out not in ("(sin respuesta)", ""):
             HISTORY.append((prompt, out))
@@ -3570,7 +3583,10 @@ def cmd_pseint(query):
         "--no-display-prompt",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=120,
+            stdin=subprocess.DEVNULL,
+        )
         return _clean_output(result)
     except subprocess.TimeoutExpired:
         return "[WARN] Tiempo de espera agotado (120s)"
@@ -3591,7 +3607,9 @@ def cmd_intro_pseint():
     if os.path.exists(PSEINT_GUIA_PDF):
         try:
             subprocess.Popen(["xdg-open", PSEINT_GUIA_PDF],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             stdin=subprocess.DEVNULL)
             print(f"[OK] Guia de ejercicios abierta")
         except FileNotFoundError:
             print(f"[INFO] PDF disponible en: {PSEINT_GUIA_PDF}")
@@ -3742,7 +3760,10 @@ def classify_intent(user_input):
         "-no-cnv", "--no-display-prompt",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=30,
+            stdin=subprocess.DEVNULL,
+        )
         out = result.stdout.strip()
         for tok in [BOS, HEADER, FOOTER, EOT, "[end of text]"]:
             out = out.replace(tok, "")
