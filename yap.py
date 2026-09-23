@@ -2746,6 +2746,37 @@ def cmd_apparmor_status():
     )
 
 
+def _auto_instalar_habilitado():
+    """Solo instala si YAP_AUTO_INSTALL no esta en off (default: on)."""
+    return os.environ.get("YAP_AUTO_INSTALL", "1").strip().lower() not in (
+        "0", "false", "no", "off"
+    )
+
+
+def _instalar_app(candidates):
+    """Instala automaticamente el primer paquete apt de la whitelist (ChincoLinux/Debian).
+
+    Solo se instalan binarios ya listados en apps.conf, con subprocess en lista
+    de argumentos (sin shell).
+    """
+    if not shutil.which("apt-get"):
+        return "apt-get no disponible"
+    for candidate in candidates:
+        pkg = candidate.strip()
+        if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9+_.-]*", pkg):
+            continue
+        try:
+            res = subprocess.run(
+                ["sudo", "apt-get", "install", "-y", pkg],
+                capture_output=True, text=True, timeout=600,
+            )
+        except (subprocess.SubprocessError, OSError):
+            continue
+        if res.returncode == 0 and shutil.which(pkg):
+            return f"Instalado '{pkg}'"
+    return "No se pudo instalar"
+
+
 def cmd_open_app(app_name):
     apps = load_whitelist(WHITELIST_APPS)
     key = app_name.strip().lower()
@@ -2763,6 +2794,15 @@ def cmd_open_app(app_name):
             bin_path = path
             chosen = candidate
             break
+
+    if not bin_path and _auto_instalar_habilitado():
+        _instalar_app(candidates)
+        for candidate in candidates:
+            path = shutil.which(candidate.strip())
+            if path:
+                bin_path = path
+                chosen = candidate.strip()
+                break
 
     if not bin_path:
         candidates_str = ", ".join(candidates)
@@ -3775,6 +3815,12 @@ def interpret(user_input):
                 return interpret(cmd)
             return "menu_opcion", _etiqueta
         return "menu_opcion", f"[ERROR] Opcion {n} no existe. Elige 1-{len(menu)}."
+
+    # abre|abrir|abra|open|ejecuta <app> → open_app (BYPASS LLM, case-insensitive)
+    if stripped.startswith(("abre ", "abrir ", "abra ", "open ", "ejecuta ")):
+        app = user_input.split(" ", 1)[1].strip()
+        if app:
+            return "open_app", app
 
     # Exact/prefix keyword routing (bypasses LLM for speed & reliability)
     if stripped in ("guia", "guia rapida", "tutorial", "como usar", "--tutorial"):
