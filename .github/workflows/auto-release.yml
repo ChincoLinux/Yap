@@ -158,7 +158,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PROJECT_PAT }}
 
-      - name: Bump version for next release
+      - name: Create PR to bump version for next release
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_PAT }}
         run: |
           RELEASE_VERSION="${{ steps.release.outputs.version }}"
           MAJOR=$(echo "$RELEASE_VERSION" | cut -d. -f1)
@@ -168,9 +170,21 @@ jobs:
           echo "$NEXT_VERSION" > VERSION
           echo "Next version: $NEXT_VERSION"
 
+          BRANCH="chore/bump-v${NEXT_VERSION}"
+          git checkout -b "$BRANCH"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add VERSION CHANGELOG.md
           git commit -m "chore: release v${RELEASE_VERSION} + bump to v${NEXT_VERSION}"
-          git push origin main
-          echo "Pushed: v${RELEASE_VERSION} released, VERSION bumped to ${NEXT_VERSION}"
+          git push -u origin "$BRANCH" --force
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: release v${RELEASE_VERSION} + bump to v${NEXT_VERSION}" \
+            --body "Automated version bump and CHANGELOG update following release v${RELEASE_VERSION}.
+
+Complies with A-Dev Rules 2, 48, 49 and HD-YAP-BRANCH-001 (no direct push to main)." \
+            --label "platform-maintenance" || echo "PR already exists or created"
+          echo "Pushed to $BRANCH and opened PR for v${NEXT_VERSION}"
+
