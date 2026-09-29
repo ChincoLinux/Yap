@@ -98,7 +98,15 @@ SAMPLE_CURSO = {
             "evaluaciones": [],
         },
     ],
-    "evaluaciones": [],
+    "evaluaciones": [
+        {
+            "nombre": "Evaluacion Final Transversal",
+            "tipo": "transversal",
+            "descripcion": "Resolucion de problemas de programacion modularizada.",
+            "ponderacion": 40,
+            "horas": 7,
+        }
+    ],
 }
 
 SAMPLE_MD = """# Guia de uso
@@ -225,8 +233,8 @@ class TestRagTokenize:
 
     def test_removes_punctuation(self):
         tokens = yap._rag_tokenize("¿Cómo estás? ¡Bien!")
-        assert "cómo" in tokens
-        assert "estás" in tokens
+        assert "como" in tokens
+        assert "estas" in tokens
         assert "bien" in tokens
         # Punctuation not in tokens
         assert "?" not in tokens
@@ -237,10 +245,15 @@ class TestRagTokenize:
 
     def test_spanish_accents(self):
         tokens = yap._rag_tokenize("programación algoritmo diseño función")
-        assert "programación" in tokens
+        assert "programacion" in tokens
         assert "algoritmo" in tokens
         assert "diseño" in tokens
-        assert "función" in tokens
+        assert "funcion" in tokens
+
+    def test_accent_folding(self):
+        t1 = yap._rag_tokenize("programación algoritmo función")
+        t2 = yap._rag_tokenize("programacion algoritmo funcion")
+        assert t1 == t2
 
 
 # ── 2. Chunking de texto ───────────────────────────────────────
@@ -316,6 +329,13 @@ class TestRagChunkJsonCurso:
     def test_source_attribute(self):
         chunks = yap._rag_chunk_json_curso(SAMPLE_CURSO, "FPY1101.json")
         assert all(c["source"] == "FPY1101.json" for c in chunks)
+
+    def test_evaluacion_chunks(self):
+        chunks = yap._rag_chunk_json_curso(SAMPLE_CURSO, "FPY1101.json")
+        ev_chunks = [c for c in chunks if "Evaluacion" in c["text"][:15]]
+        assert len(ev_chunks) >= 1
+        assert "Transversal" in ev_chunks[0]["text"]
+        assert "40%" in ev_chunks[0]["text"]
 
 
 # ── 4. BM25 Index ──────────────────────────────────────────────
