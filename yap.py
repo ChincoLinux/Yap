@@ -16,6 +16,8 @@ import http.cookiejar
 import re
 import atexit
 import time
+import math
+import hashlib
 
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
@@ -1769,7 +1771,7 @@ ACCIONES_CONOCIDAS = (
     "open_app", "search", "webfetch", "pseint", "introduccion_pseint",
     "curso", "guia", "progreso", "historial", "apparmor_status",
     "telemetria", "help", "query", "super", "super_query", "super_modo",
-    "menu_opcion", "menu",
+    "menu_opcion", "menu", "rag",
 )
 
 # Nombres legibles para el resumen
@@ -1792,6 +1794,7 @@ ACCIONES_NOMBRES = {
     "super": "Estado de Super Yap",
     "super_query": "Consulta a Super Yap (Gradio Cloud Run)",
     "super_modo": "Cambiar a Super Yap o al Yap local",
+    "rag": "RAG local (recuperacion contextual)",
 }
 
 
@@ -2036,6 +2039,396 @@ def guardar_progreso(progress):
         json.dump(progress, f, indent=2, ensure_ascii=False)
     os.replace(tmp, path)  # atomic on Linux
 
+# ── RAG local — BM25 CPU-only (#118) ─────────────────────────
+# Retrieval-Augmented Generation sobre recursos locales.
+# Corpus: cursos/*.json, docs/*.md, whitelist/*.conf, USAGE.md, AGENTS.md
+# Índice: ~/.config/yap/index/ (JSON, incremental por hash SHA-256)
+# Flag: YAP_RAG_ENABLED (default 1, set 0 to disable)
+
+RAG_INDEX_DIR = os.path.expanduser("~/.config/yap/index")
+RAG_ENABLED = os.environ.get("YAP_RAG_ENABLED", "1") != "0"
+RAG_TOP_K = int(os.environ.get("YAP_RAG_TOP_K", "5"))
+RAG_MAX_CONTEXT_TOKENS = int(os.environ.get("YAP_RAG_MAX_TOKENS", "512"))
+RAG_CHUNK_SIZE = 300  # max words per chunk
+
+_RAG_INDEX = None
+
+def _rag_tokenize(text):
+    """Simple word tokenizer."""
+    return re.findall(r'\b[a-záéíóúñü0-9]+\b', text.lower())
+
+def _rag_corpus_paths():
+    """Enumerate all files in the RAG corpus."""
+    paths = []
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # CURSOS_DIR/*.json
+    for p in glob.glob(os.path.join(CURSOS_DIR, "*.json")):
+        if os.path.realpath(p).startswith(os.path.realpath(CURSOS_DIR)):
+            paths.append(os.path.realpath(p))
+            
+    # docs/*.md
+    docs_dir = os.path.join(base_dir, "docs")
+    if os.path.isdir(docs_dir):
+        for p in glob.glob(os.path.join(docs_dir, "*.md")):
+            if os.path.realpath(p).startswith(os.path.realpath(docs_dir)):
+                paths.append(os.path.realpath(p))
+                
+    # whitelist/*.conf
+    wl_dir = os.path.join(base_dir, "whitelist")
+    if os.path.isdir(wl_dir):
+        for p in glob.glob(os.path.join(wl_dir, "*.conf")):
+            if os.path.realpath(p).startswith(os.path.realpath(wl_dir)):
+                paths.append(os.path.realpath(p))
+                
+    # USAGE.md
+    usage = os.path.join(base_dir, "USAGE.md")
+    if os.path.isfile(usage) and os.path.realpath(usage).startswith(os.path.realpath(base_dir)):
+        paths.append(os.path.realpath(usage))
+        
+    # AGENTS.md
+    agents = os.path.join(base_dir, "AGENTS.md")
+    if os.path.isfile(agents) and os.path.realpath(agents).startswith(os.path.realpath(base_dir)):
+        paths.append(os.path.realpath(agents))
+        
+    return sorted(list(set(paths)))
+
+def _rag_chunk_text(text, source, chunk_size=RAG_CHUNK_SIZE):
+    """Split text by markdown headers or double newlines, group into chunks."""
+    chunks = []
+    # Split by header or double newline
+    parts = re.split(r'\n#{1,4} |\n\n+', text)
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        words = part.split()
+        for i in range(0, len(words), chunk_size):
+            chunk_words = words[i:i+chunk_size]
+            chunks.append({"text": " ".join(chunk_words), "source": source})
+    return chunks
+
+def _rag_chunk_json_curso(data, source):
+    """Chunk a course JSON into semantic pieces."""
+    chunks = []
+    codigo = data.get("codigo", "")
+    nombre = data.get("nombre", "")
+    desc = data.get("descripcion", "")
+    horas = data.get("horas", 0)
+    semanas = data.get("semanas", 0)
+
+    overview = f"Curso {codigo}: {nombre}. {desc}. {horas} horas, {semanas} semanas."
+    chunks.append({"text": overview, "source": source})
+
+    ras = data.get("ras") or data.get("resultados_aprendizaje", [])
+    for ra in ras:
+        ra_id = ra.get("id", "")
+        ra_desc = ra.get("descripcion", "")
+        inds = ra.get("indicadores", [])
+        inds_str = ", ".join(inds) if isinstance(inds, list) else str(inds)
+        text = f"RA {ra_id}: {ra_desc}. Indicadores: {inds_str}."
+        chunks.append({"text": text, "source": source})
+
+    eas = data.get("eas") or data.get("experiencias_aprendizaje", [])
+    for ea in eas:
+        ea_id = ea.get("id", "")
+        ea_nombre = ea.get("nombre", "")
+        ea_desc = ea.get("descripcion", "")
+        ea_horas = ea.get("horas", 0)
+        herramientas = ea.get("herramientas", [])
+        herrs_str = ", ".join(herramientas) if isinstance(herramientas, list) else str(herramientas)
+        text = f"EA {ea_id}: {ea_nombre}. {ea_desc}. {ea_horas} horas. Herramientas: {herrs_str}."
+        chunks.append({"text": text, "source": source})
+
+        for act in ea.get("actividades", []):
+            orden = act.get("orden", "")
+            tipo = act.get("tipo", "")
+            act_nombre = act.get("nombre", "")
+            act_desc = act.get("descripcion", "")
+            enunciado = act.get("enunciado", "")
+            criterios = act.get("criterios_evaluacion", [])
+            crit_str = f" Criterios: {', '.join(criterios)}." if criterios else ""
+
+            act_text = f"Actividad {orden} ({tipo}): {act_nombre}. {act_desc}. Enunciado: {enunciado}.{crit_str}"
+
+            variantes = act.get("variantes", {})
+            if isinstance(variantes, dict):
+                for nivel, var_info in variantes.items():
+                    if isinstance(var_info, dict):
+                        var_enun = var_info.get("enunciado", "")
+                        act_text += f" Variante {nivel}: {var_enun}."
+                    else:
+                        act_text += f" Variante {nivel}: {var_info}."
+            elif isinstance(variantes, list):
+                for var in variantes:
+                    if isinstance(var, dict):
+                        nivel = var.get("nivel", "")
+                        var_enun = var.get("enunciado", "")
+                        act_text += f" Variante {nivel}: {var_enun}."
+
+            chunks.append({"text": act_text, "source": source})
+
+    return chunks
+
+def _rag_build_chunks():
+    """Build chunks from all corpus files."""
+    chunks = []
+    for path in _rag_corpus_paths():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            if path.endswith(".json"):
+                try:
+                    data = json.loads(content)
+                    chunks.extend(_rag_chunk_json_curso(data, path))
+                except json.JSONDecodeError:
+                    chunks.extend(_rag_chunk_text(content, path))
+            else:
+                chunks.extend(_rag_chunk_text(content, path))
+        except (OSError, UnicodeDecodeError):
+            pass
+    return chunks
+
+class RagBM25Index:
+    """Okapi BM25 index class."""
+    def __init__(self, k1=1.5, b=0.75):
+        self.k1 = k1
+        self.b = b
+        self.doc_freqs = {} # term -> count of docs containing term
+        self.doc_lens = []  # doc_idx -> length of doc
+        self.avg_dl = 0
+        self.doc_tokens = [] # doc_idx -> list of tokens
+        self.chunks = [] # doc_idx -> chunk dict
+        self.N = 0
+        self.corpus_hash = ""
+        
+    def build(self, chunks):
+        self.chunks = chunks
+        self.N = len(chunks)
+        self.doc_lens = []
+        self.doc_tokens = []
+        self.doc_freqs = {}
+        
+        total_len = 0
+        for i, chunk in enumerate(chunks):
+            tokens = _rag_tokenize(chunk.get("text", ""))
+            self.doc_tokens.append(tokens)
+            l = len(tokens)
+            self.doc_lens.append(l)
+            total_len += l
+            
+            seen = set(tokens)
+            for t in seen:
+                self.doc_freqs[t] = self.doc_freqs.get(t, 0) + 1
+                
+        self.avg_dl = total_len / max(1, self.N)
+        
+    def score(self, query_tokens, doc_idx):
+        score = 0.0
+        doc_len = self.doc_lens[doc_idx]
+        tokens = self.doc_tokens[doc_idx]
+        
+        # Count term frequencies in this document
+        term_counts = {}
+        for t in tokens:
+            term_counts[t] = term_counts.get(t, 0) + 1
+            
+        for q in query_tokens:
+            if q not in self.doc_freqs:
+                continue
+            df = self.doc_freqs[q]
+            idf = math.log((self.N - df + 0.5) / (df + 0.5) + 1.0)
+            tf = term_counts.get(q, 0)
+            
+            numerator = tf * (self.k1 + 1)
+            denominator = tf + self.k1 * (1 - self.b + self.b * (doc_len / self.avg_dl))
+            score += idf * (numerator / denominator)
+        return score
+        
+    def query(self, text, top_k=RAG_TOP_K):
+        query_tokens = _rag_tokenize(text)
+        if not query_tokens or self.N == 0:
+            return []
+            
+        scores = []
+        for i in range(self.N):
+            s = self.score(query_tokens, i)
+            if s > 0:
+                scores.append((s, i))
+                
+        scores.sort(key=lambda x: x[0], reverse=True)
+        
+        results = []
+        for s, i in scores[:top_k]:
+            res = dict(self.chunks[i])
+            res["score"] = s
+            results.append(res)
+        return results
+        
+    def to_dict(self):
+        return {
+            "k1": self.k1,
+            "b": self.b,
+            "doc_freqs": self.doc_freqs,
+            "doc_lens": self.doc_lens,
+            "avg_dl": self.avg_dl,
+            "doc_tokens": self.doc_tokens,
+            "chunks": self.chunks,
+            "N": self.N,
+            "corpus_hash": self.corpus_hash
+        }
+        
+    @classmethod
+    def from_dict(cls, d):
+        idx = cls(k1=d.get("k1", 1.5), b=d.get("b", 0.75))
+        idx.doc_freqs = d.get("doc_freqs", {})
+        idx.doc_lens = d.get("doc_lens", [])
+        idx.avg_dl = d.get("avg_dl", 0)
+        idx.doc_tokens = d.get("doc_tokens", [])
+        idx.chunks = d.get("chunks", [])
+        idx.N = d.get("N", 0)
+        idx.corpus_hash = d.get("corpus_hash", "")
+        return idx
+
+def _rag_corpus_hash():
+    """Hash corpus file path, mtime, and size."""
+    items = []
+    for p in _rag_corpus_paths():
+        try:
+            st = os.stat(p)
+            items.append(f"{p}:{st.st_mtime}:{st.st_size}")
+        except OSError:
+            pass
+    h = hashlib.sha256(",".join(items).encode("utf-8")).hexdigest()
+    return h[:16]
+
+def _rag_index_path():
+    """Path to the index file."""
+    return os.path.join(RAG_INDEX_DIR, "bm25_index.json")
+
+def _rag_load_or_build():
+    """Lazy load or build index."""
+    global _RAG_INDEX
+    if _RAG_INDEX is not None:
+        return _RAG_INDEX
+        
+    curr_hash = _rag_corpus_hash()
+    idx_path = _rag_index_path()
+    
+    if os.path.isfile(idx_path):
+        try:
+            with open(idx_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("corpus_hash") == curr_hash:
+                _RAG_INDEX = RagBM25Index.from_dict(data)
+                return _RAG_INDEX
+        except (OSError, json.JSONDecodeError):
+            pass
+            
+    # Need to build
+    chunks = _rag_build_chunks()
+    idx = RagBM25Index()
+    idx.build(chunks)
+    idx.corpus_hash = curr_hash
+    
+    try:
+        os.makedirs(RAG_INDEX_DIR, exist_ok=True)
+        tmp = idx_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(idx.to_dict(), f, ensure_ascii=False)
+        os.replace(tmp, idx_path)
+    except OSError:
+        pass
+        
+    _RAG_INDEX = idx
+    return idx
+
+def rag_rebuild():
+    """Force rebuild index."""
+    global _RAG_INDEX
+    t0 = time.time()
+    _RAG_INDEX = None
+    curr_hash = _rag_corpus_hash()
+    idx_path = _rag_index_path()
+    chunks = _rag_build_chunks()
+    idx = RagBM25Index()
+    idx.build(chunks)
+    idx.corpus_hash = curr_hash
+    try:
+        os.makedirs(RAG_INDEX_DIR, exist_ok=True)
+        tmp = idx_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(idx.to_dict(), f, ensure_ascii=False)
+        os.replace(tmp, idx_path)
+    except OSError:
+        pass
+    _RAG_INDEX = idx
+    t1 = time.time()
+    return idx.N, int((t1 - t0) * 1000)
+
+def rag_retrieve(query, top_k=RAG_TOP_K, max_tokens=RAG_MAX_CONTEXT_TOKENS):
+    """Retrieve fragments matching query."""
+    if not RAG_ENABLED:
+        return []
+    idx = _rag_load_or_build()
+    results = idx.query(query, top_k=top_k)
+    
+    # Trim to budget
+    total_tokens = 0
+    trimmed = []
+    for r in results:
+        text = r.get("text", "")
+        est_tokens = len(text.split()) / 0.75
+        if total_tokens + est_tokens > max_tokens:
+            break
+        trimmed.append(r)
+        total_tokens += est_tokens
+    return trimmed
+
+def _rag_context_for_query(prompt):
+    """Build string context for prompt."""
+    res = rag_retrieve(prompt)
+    if not res:
+        return None
+    lines = ["[Contexto recuperado por RAG local]"]
+    for r in res:
+        src = os.path.basename(r.get("source", ""))
+        txt = r.get("text", "")
+        lines.append(f"— [{src}] {txt}")
+    return "\n".join(lines)
+
+def cmd_rag(sub=""):
+    """Handle rag commands."""
+    sub = sub.strip()
+    if sub == "rebuild" or sub == "reconstruir":
+        n, ms = rag_rebuild()
+        return f"Indice reconstruido: {n} fragmentos en {ms} ms."
+        
+    if sub.startswith("buscar ") or sub.startswith("query "):
+        q = sub.split(" ", 1)[1]
+        res = rag_retrieve(q)
+        if not res:
+            return "Sin resultados."
+        out = [f"Resultados para '{q}':"]
+        for r in res:
+            src = os.path.basename(r.get("source", ""))
+            sc = r.get("score", 0.0)
+            txt = r.get("text", "")[:100] + "..."
+            out.append(f"[score: {sc:.2f}] {src}: {txt}")
+        return "\n".join(out)
+        
+    # Status
+    en = "Activado" if RAG_ENABLED else "Desactivado"
+    idx = _rag_load_or_build() if RAG_ENABLED else None
+    n = idx.N if idx else 0
+    c_count = len(_rag_corpus_paths())
+    return (
+        f"RAG local: {en}\n"
+        f"Ruta indice: {_rag_index_path()}\n"
+        f"Corpus: {c_count} archivos\n"
+        f"Fragmentos: {n}\n"
+        f"Top-K: {RAG_TOP_K}, Max Tokens: {RAG_MAX_CONTEXT_TOKENS}"
+    )
 
 # ── Evaluación automática de actividades (#23) ──────────────
 
@@ -4381,6 +4774,10 @@ def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=Tru
         parts.append(f"{HEADER}user{FOOTER}\n\n{user_msg}{EOT}")
         parts.append(f"{HEADER}assistant{FOOTER}\n\n{assistant_msg}{EOT}")
 
+    # RAG: inyectar contexto recuperado automaticamente
+    rag_ctx = _rag_context_for_query(prompt)
+    if rag_ctx:
+        parts.append(f"{HEADER}user{FOOTER}\n\n{rag_ctx}{EOT}")
     if context:
         parts.append(f"{HEADER}user{FOOTER}\n\nContexto:\n{context}{EOT}")
     parts.append(f"{HEADER}user{FOOTER}\n\n{prompt}{EOT}")
@@ -4706,6 +5103,11 @@ def interpret(user_input):
     if stripped in ("telemetria", "telemetría") or stripped.startswith(("telemetria ", "telemetría ")):
         partes = stripped.split(" ", 1)
         return "telemetria", partes[1].strip() if len(partes) > 1 else ""
+
+    # rag | rag rebuild | rag buscar X  -> ("rag", "rebuild")
+    if stripped in ("rag",) or stripped.startswith("rag "):
+        partes = stripped.split(" ", 1)
+        return "rag", partes[1].strip() if len(partes) > 1 else ""
     # super | nube | super on | super explica while
     if stripped in ("super", "nube", "super yap", "superyap"):
         return "super", ""
@@ -4983,6 +5385,9 @@ def handle_action(action, param, original_input):
     elif action == "menu_opcion":
         print(param)
 
+    elif action == "rag":
+        print(cmd_rag(param))
+
     elif action == "menu":
         print(cmd_menu())
 
@@ -5008,6 +5413,9 @@ def handle_action(action, param, original_input):
         print("                 'super on' / 'super off' — usar Super Yap o volver al local")
         print("                 'super <pregunta>' — forzar Super Yap; si cae, LLM local")
         print("                 Si el local tarda 3 min o se pasa de tokens, usa Gradio")
+        print("  RAG:           'rag' — estado del indice de recuperacion local")
+        print("                 'rag rebuild' — reconstruir indice")
+        print("                 'rag buscar <tema>' — buscar en el corpus local")
         print("  Perfil:        'perfil' — ver tu perfil")
         print("  Actualizar:    'perfil nombre Maria' | 'perfil nivel basico' | 'perfil idioma es'")
         print("  Accesibilidad: 'perfil accesibilidad' — ver opciones")
