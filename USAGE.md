@@ -56,6 +56,27 @@ yap --tutorial
 | `yap busca <tema>` | Buscar en Wikipedia y resumir con AI. |
 | `yap abre firefox` | Abrir aplicacion permitida. |
 
+## Ordenes directas
+
+Estas ordenes se resuelven sin consultar al clasificador, asi que responden
+siempre igual y al instante:
+
+| Escribe | Hace |
+|---------|------|
+| `abre firefox` | Abre una aplicacion de la whitelist (`abrir` tambien vale). |
+| `busca que es un algoritmo` | Busca en Wikipedia y resume (`buscar` tambien). |
+| `pseint como hago un ciclo` | Pregunta al tutor (`tutor pseint` tambien). |
+| `aprender pseint` | Abre el tutorial interactivo. |
+
+Lo que escribas despues de la orden se respeta tal cual, con sus mayusculas:
+`busca Linus Torvalds` busca exactamente eso.
+
+Si escribes solo `abre`, sin nada mas, Yap se lo pasa al modelo para que
+interprete que querias.
+
+En el menu numerado, elegir una opcion que necesita datos —como «Abre [app]»—
+te responde con un ejemplo de como escribirla.
+
 ## Modo interactivo
 
 Ejecuta `yap` sin argumentos para abrir la TUI interactiva (curses, 0 dependencias externas). Pantalla dividida con output arriba e input abajo, prompt "Chinco > ", historial con flechas.

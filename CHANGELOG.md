@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Rutas de teclado para las ordenes que el menu anuncia (#59): `abre`,
+  `abrir`, `busca`, `buscar`, `pseint`, `tutor pseint` y `aprender pseint`
+  se resuelven en `interpret()` sin pasar por el clasificador, que con el
+  modelo 1B acierta poco. El parametro conserva las mayusculas que escribe
+  el usuario. Elegir por numero una opcion que necesita datos muestra ahora
+  una pista de uso con un ejemplo, en vez de repetir su propia etiqueta
 - Super Yap (#91): cliente Gradio 5 en Cloud Run (`urllib` + cookies, sin
   `requests`) contra el host pin `*.southamerica-west1.run.app`. Cada
   consulta reenvía el historial vivo (`HISTORY`) para no perder contexto;
