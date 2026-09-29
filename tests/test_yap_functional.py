@@ -70,7 +70,7 @@ class TestOpenApp:
 
         mock_popen.assert_called_once_with(
             ["/usr/bin/firefox"],
-            stdout=ANY, stderr=ANY
+            stdout=ANY, stderr=ANY, stdin=ANY
         )
 
     def test_app_no_encontrada_mensaje_graceful(self):

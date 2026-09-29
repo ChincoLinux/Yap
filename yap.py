@@ -69,30 +69,39 @@ def display_menu(title, options):
 
 
 def _menu_principal():
-    """Opciones del menu interactivo: (etiqueta, comando para interpret)."""
+    """Opciones del menu interactivo: (etiqueta, comando, pista).
+
+    Una opcion que no puede ejecutarse sola --porque necesita que el usuario
+    escriba algo-- lleva `comando` vacio y explica como usarse en `pista`.
+    Sin eso, elegir su numero solo repetia la etiqueta.
+    """
     return [
-        ("Cualquier consulta directa al AI", ""),
-        ("Abre [app] — abrir aplicacion permitida", ""),
-        ("Busca [tema] — buscar en Wikipedia", ""),
-        ("Tutor PSeInt — preguntas de programacion", ""),
-        ("Curso FPY1101 — plan de estudio", "curso FPY1101"),
-        ("Perfil — ver o actualizar tu perfil", "perfil"),
-        ("Historial — ver sesiones anteriores", "historial"),
-        ("Historial --ultimo — retomar ultima sesion", "historial --ultimo"),
-        ("Sesion — estado, pausar, retomar o cerrar sesion", "sesion"),
-        ("Telemetria — ver tu uso de Yap (100% local)", "telemetria"),
-        ("Super / nube — Gradio Cloud Run; si el local tarda 3 min, se usa la nube", "super"),
-        (f"Modelo: {etiqueta_familia_modelo()}", ""),
-        ("Menu — ver de nuevo las opciones", "menu"),
-        ("Ayuda — lista de comandos", "ayuda"),
-        ("Salir — Ctrl+C o 'salir'", "salir"),
+        ("Cualquier consulta directa al AI", "",
+         "Escribe tu consulta tal cual y Yap te respondera."),
+        ("Abre [app] — abrir aplicacion permitida", "",
+         "Escribe 'abre' y el nombre. Por ejemplo: abre firefox"),
+        ("Busca [tema] — buscar en Wikipedia", "",
+         "Escribe 'busca' y el tema. Por ejemplo: busca que es un algoritmo"),
+        ("Tutor PSeInt — preguntas de programacion", "",
+         "Escribe 'pseint' y tu duda. Por ejemplo: pseint como hago un ciclo"),
+        ("Curso FPY1101 — plan de estudio", "curso FPY1101", ""),
+        ("Perfil — ver o actualizar tu perfil", "perfil", ""),
+        ("Historial — ver sesiones anteriores", "historial", ""),
+        ("Historial --ultimo — retomar ultima sesion", "historial --ultimo", ""),
+        ("Sesion — estado, pausar, retomar o cerrar sesion", "sesion", ""),
+        ("Telemetria — ver tu uso de Yap (100% local)", "telemetria", ""),
+        ("Super / nube — Gradio Cloud Run; si el local tarda 3 min, se usa la nube", "super", ""),
+        (f"Modelo: {etiqueta_familia_modelo()}", "", ""),
+        ("Menu — ver de nuevo las opciones", "menu", ""),
+        ("Ayuda — lista de comandos", "ayuda", ""),
+        ("Salir — Ctrl+C o 'salir'", "salir", ""),
     ]
 
 
 def cmd_menu():
     """Volver a mostrar el menu numerado de opciones."""
     return display_menu("Comandos", [
-        etiqueta for etiqueta, _cmd in _menu_principal()
+        etiqueta for etiqueta, _cmd, _pista in _menu_principal()
     ])
 
 def display_box(text, color="CYAN"):
@@ -2427,6 +2436,7 @@ def _llamar_llm_evaluacion(prompt):
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
             text=True,
         )
         stdout, stderr = proc.communicate(timeout=120)
@@ -3198,6 +3208,7 @@ def notify(title, msg, urgency="normal"):
             ["notify-send", "-u", urgency, title, msg],
             check=False, timeout=3,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
         )
     except FileNotFoundError:
         pass
@@ -3229,6 +3240,7 @@ def apparmor_status():
         result = subprocess.run(
             ["aa-status", "--json"],
             capture_output=True, text=True, timeout=5,
+            stdin=subprocess.DEVNULL,
         )
         if result.returncode == 0:
             data = json.loads(result.stdout)
@@ -3319,12 +3331,16 @@ def cmd_open_app(app_name):
         candidates_str = ", ".join(candidates)
         return f"[ERROR] Ningun binario encontrado: {candidates_str}"
 
-    subprocess.Popen([bin_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # ponytail: stdin al vacio. La aplicacion vive mas que la llamada y, con
+    # la terminal heredada, compite por ella con el REPL de Yap
+    subprocess.Popen([bin_path], stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
 
     try:
         result = subprocess.run(
             [chosen, "--version"],
             capture_output=True, text=True, timeout=5,
+            stdin=subprocess.DEVNULL,
         )
         version = result.stdout.strip() or result.stderr.strip() or "(sin version)"
     except Exception:
@@ -4068,7 +4084,13 @@ def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=Tru
     ]
     timeout_s = _local_llama_timeout()
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+        # ponytail: stdin al vacio. llama-cli hace tcsetattr sobre la terminal
+        # que hereda y apaga el eco; si no sale limpio, se queda apagado y el
+        # estudiante escribe a ciegas la consulta siguiente (#99)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout_s,
+            stdin=subprocess.DEVNULL,
+        )
         out = _clean_output(result)
         if store_history and out not in ("(sin respuesta)", ""):
             HISTORY.append((prompt, out))
@@ -4121,7 +4143,10 @@ def cmd_pseint(query):
         "--no-display-prompt",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=120,
+            stdin=subprocess.DEVNULL,
+        )
         return _clean_output(result)
     except subprocess.TimeoutExpired:
         return "[WARN] Tiempo de espera agotado (120s)"
@@ -4142,7 +4167,9 @@ def cmd_intro_pseint():
     if os.path.exists(PSEINT_GUIA_PDF):
         try:
             subprocess.Popen(["xdg-open", PSEINT_GUIA_PDF],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             stdin=subprocess.DEVNULL)
             print(f"[OK] Guia de ejercicios abierta")
         except FileNotFoundError:
             print(f"[INFO] PDF disponible en: {PSEINT_GUIA_PDF}")
@@ -4293,7 +4320,10 @@ def classify_intent(user_input):
         "-no-cnv", "--no-display-prompt",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=30,
+            stdin=subprocess.DEVNULL,
+        )
         out = result.stdout.strip()
         for tok in [BOS, HEADER, FOOTER, EOT, "[end of text]"]:
             out = out.replace(tok, "")
@@ -4321,10 +4351,11 @@ def interpret(user_input):
         n = int(stripped)
         menu = _menu_principal()
         if 1 <= n <= len(menu):
-            _etiqueta, cmd = menu[n - 1]
+            _etiqueta, cmd, pista = menu[n - 1]
             if cmd:
                 return interpret(cmd)
-            return "menu_opcion", _etiqueta
+            # Las informativas no traen pista: ahi la etiqueta ya es la respuesta
+            return "menu_opcion", pista or _etiqueta
         return "menu_opcion", f"[ERROR] Opcion {n} no existe. Elige 1-{len(menu)}."
 
     # Exact/prefix keyword routing (bypasses LLM for speed & reliability)
@@ -4383,6 +4414,33 @@ def interpret(user_input):
         return "apparmor_status", "status"
     if stripped in ("salir", "exit", "quit", "q"):
         sys.exit(0)
+
+    # Rutas de teclado para las acciones que hasta ahora dependian del
+    # clasificador. Con el modelo 1B acierta poco, y estas son las ordenes
+    # que el menu anuncia, asi que tienen que responder siempre.
+    for prefijo in ("abre ", "abrir "):
+        if stripped.startswith(prefijo):
+            # ponytail: se corta sobre el texto original, no sobre el
+            # normalizado, porque el parametro es del usuario
+            param = user_input.strip()[len(prefijo):].strip()
+            if param:
+                return "open_app", param
+
+    for prefijo in ("busca ", "buscar "):
+        if stripped.startswith(prefijo):
+            param = user_input.strip()[len(prefijo):].strip()
+            if param:
+                return "search", param
+
+    if stripped in ("aprender pseint", "quiero aprender pseint",
+                    "ejercicios pseint", "tutorial pseint"):
+        return "introduccion_pseint", "inicio"
+
+    for prefijo in ("pseint ", "tutor pseint "):
+        if stripped.startswith(prefijo):
+            param = user_input.strip()[len(prefijo):].strip()
+            if param:
+                return "pseint", param
 
     # curso FPY1101 → ("curso", "FPY1101")
     # iniciar EA1   → ("curso", "FPY1101:EA1")  — needs context, hands to LLM
