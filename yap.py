@@ -889,6 +889,7 @@ def detectar_orca():
         result = subprocess.run(
             ["ps", "-eo", "comm"],
             capture_output=True, text=True, timeout=5,
+            stdin=subprocess.DEVNULL,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return True  # no se pudo verificar → asumir activo (fail-safe)
