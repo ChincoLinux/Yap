@@ -3420,7 +3420,8 @@ def resumen_ejercicios(progress=None):
             try:
                 puntajes.append(float(rec["puntaje"]))
             except (TypeError, ValueError):
-                pass
+                # Ignore malformed/non-numeric scores and continue summarizing.
+                continue
     promedio = round(sum(puntajes) / len(puntajes), 1) if puntajes else 0
     nota = nota_chilena(promedio) if puntajes else None
     return {
