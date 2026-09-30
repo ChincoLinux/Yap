@@ -12,7 +12,7 @@
 
 #include <tunables/global>
 
-profile yap /usr/local/bin/yap {
+profile yap /{usr/local/bin/yap,opt/yap/yap.py} {
   #include <abstractions/base>
   #include <abstractions/python>
 
@@ -59,7 +59,7 @@ profile yap /usr/local/bin/yap {
 
   # System info for terminal size
   /proc/sys/kernel/osrelease r,
-  sys kernel.osrelease r,
+  owner /proc/[0-9]*/attr/current r,
 
   # Python interpreter
   /usr/bin/python3 rix,

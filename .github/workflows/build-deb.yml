@@ -1,6 +1,6 @@
 # Yap — Build de paquetes .deb (issue #31)
 #
-# PR:     construye .deb con llama-cli stub + instalacion en Debian 12
+# PR:     construye .deb con llama-cli stub + instalacion en Debian 12/13
 # Release: compila llama.cpp estatico y adjunta .deb al GitHub Release
 # Manual:  workflow_dispatch (compile real; opcional --embed-models)
 
@@ -39,10 +39,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: pytest tests/test_yap_deb.py
+      - name: Instalar herramientas de validacion
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq apparmor systemd dpkg-dev
+
+      - name: Tests de post-install, AppArmor y whitelists
         run: |
           pip install pytest
-          python -m pytest tests/test_yap_deb.py -v --tb=short
+          python -m pytest tests/test_yap_deb.py tests/test_yap_apparmor.py tests/test_yap_config_escolar.py -v --tb=short
 
   build-stub:
     name: Build .deb (stub llama-cli)
@@ -70,11 +75,14 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  install-debian12:
-    name: Instalacion limpia (Debian 12)
+  install-debian:
+    name: Instalacion (${{ matrix.debian }})
     needs: [build-stub]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      matrix:
+        debian: [bookworm, trixie]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,13 +93,13 @@ jobs:
           name: yap-deb-stub
           path: debs
 
-      - name: apt install yap en debian:bookworm
+      - name: Instalar, reinstalar y purgar yap
         run: |
           set -euo pipefail
           docker run --rm \
             -v "$PWD/debs:/debs:ro" \
             -v "$PWD/packaging/test-install-debian.sh:/test-install-debian.sh:ro" \
-            debian:bookworm \
+            debian:${{ matrix.debian }} \
             sh /test-install-debian.sh /debs
 
   build-release:

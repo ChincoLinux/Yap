@@ -252,6 +252,10 @@ stage_yap() {
 
   install_file 0644 "$SCRIPT_DIR/apparmor/usr.local.bin.yap" \
     "$staging/usr/share/yap/apparmor/usr.local.bin.yap"
+  install_file 0644 "$SCRIPT_DIR/apparmor/usr.local.bin.yap" \
+    "$staging/etc/apparmor.d/usr.local.bin.yap"
+  install_file 0644 "$PACKAGING_DIR/yap/user-tmpfiles.d/yap.conf" \
+    "$staging/usr/share/user-tmpfiles.d/yap.conf"
 
   if [ -f "$SCRIPT_DIR/yap-agent.md" ]; then
     install_file 0644 "$SCRIPT_DIR/yap-agent.md" "$staging/opt/yap/agent/yap.md"
@@ -274,6 +278,7 @@ stage_yap() {
   install_file 0755 "$PACKAGING_DIR/yap/DEBIAN/postinst" "$staging/DEBIAN/postinst"
   install_file 0755 "$PACKAGING_DIR/yap/DEBIAN/prerm" "$staging/DEBIAN/prerm"
   install_file 0755 "$PACKAGING_DIR/yap/DEBIAN/postrm" "$staging/DEBIAN/postrm"
+  install_file 0644 "$PACKAGING_DIR/yap/DEBIAN/conffiles" "$staging/DEBIAN/conffiles"
 
   local out="$OUTDIR/yap_${VERSION}_amd64.deb"
   build_deb_from_staging "$staging" "$out"

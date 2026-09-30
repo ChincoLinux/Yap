@@ -1,6 +1,6 @@
 # Empaquetado .deb de Yap
 
-Guia para construir, instalar y publicar los paquetes Debian de Yap (issue #31).
+Guia para construir, instalar y publicar los paquetes Debian de Yap (issues #31 y #33).
 
 ## Paquetes
 
@@ -28,8 +28,69 @@ sudo apt install ./yap-models-3b_1.0.0_all.deb    # equipos ~3.5 GB RAM
 El `postinst` de `yap`:
 
 1. Copia whitelists, PSeInt y cursos a `/etc/yap/` **solo si no existen** (no pisa cambios del admin).
-2. Instala el perfil AppArmor en `/etc/apparmor.d/usr.local.bin.yap` y lo carga con `apparmor_parser`.
+2. Valida el perfil AppArmor instalado por `dpkg` en `/etc/apparmor.d/usr.local.bin.yap` y lo carga si el kernel permite AppArmor.
 3. Crea el symlink `/usr/local/bin/yap` → `/opt/yap/yap.py`.
+
+El paquete instala ademas `/usr/share/user-tmpfiles.d/yap.conf`. Al iniciar
+la siguiente sesion de usuario con systemd, `systemd-tmpfiles-setup.service`
+crea `~/.config/yap/` con permisos `0700` y propietario del usuario. No se
+recorren los directorios personales ni se ejecuta tmpfiles como root en
+`postinst`. La regla no elimina datos por antiguedad. `libpam-systemd` se
+recomienda para integrar las sesiones de usuario.
+
+En una sesion ya abierta se puede aplicar la regla como el propio usuario:
+
+```bash
+systemd-tmpfiles --user --create yap.conf
+stat -c '%U %a %n' ~/.config/yap
+```
+
+Sin una sesion systemd, la creacion al login no aplica; Yap sigue creando
+su directorio al guardar datos. El paquete no instala ni habilita
+`yap-daemon.service`: la inferencia persistente, la condicion de RAM y
+`yap --daemon-status` siguen pendientes de decision en #33.
+
+### AppArmor y actualizaciones
+
+El perfil se llama **`yap`** y cubre el launcher y el script instalado en
+`/opt/yap/yap.py`. No declara modo complain: la instalacion limpia usa
+enforce cuando AppArmor esta disponible. Una desactivacion explicita del
+administrador en `/etc/apparmor.d/disable/` se respeta.
+
+El perfil es un **conffile de dpkg**: las reinstalaciones conservan las
+modificaciones locales, `remove` lo conserva y `purge` lo elimina. En la
+primera actualizacion desde paquetes antiguos, que copiaban ese archivo
+sin registrarlo como conffile, `dpkg` puede pedir elegir entre el perfil
+existente y el nuevo. Revisar las diferencias y adoptar el perfil corregido,
+reaplicando las personalizaciones necesarias. No forzar globalmente el
+reemplazo de configuraciones locales. Si el perfil conservado contiene
+errores de sintaxis, corregirlo y ejecutar `sudo dpkg --configure yap`.
+
+`postinst` compila el perfil incluso sin soporte de kernel. Los errores de
+sintaxis o de carga con AppArmor disponible hacen fallar la configuracion
+del paquete; no se ocultan. En contenedores o kernels sin AppArmor se emite
+un aviso explicito: el perfil esta instalado, **sin confinamiento activo**.
+Durante actualizaciones, el nuevo `prerm` ya no descarga el perfil; en
+desinstalaciones sigue descargandolo.
+
+Verificacion en una VM Debian con AppArmor activo:
+
+```bash
+sudo aa-status
+sudo cat /sys/kernel/security/apparmor/profiles | grep '^yap ('
+yap --apparmor-status
+yap ayuda
+```
+
+Comprobar tambien una consulta local y las aplicaciones educativas del
+aula; compilar un perfil no demuestra que todos los flujos funcionen bajo
+confinamiento. Las pruebas en contenedores no sustituyen esa validacion.
+
+English: the package validates and loads AppArmor when the kernel supports
+it, preserves administrator changes through dpkg conffiles, and installs a
+user tmpfiles rule for a private Yap directory at session startup. Containers
+validate syntax and the package lifecycle, not live kernel confinement. The
+persistent inference daemon remains outside this delivery.
 
 El `postinst` de `yap-models-*` descarga el GGUF a `/opt/yap/models/` si el archivo no viene ya embebido en el paquete.
 
@@ -50,9 +111,10 @@ sudo apt purge yap yap-models-1b yap-models-3b
 /usr/share/yap/pseint/
 /usr/share/yap/cursos/
 /usr/share/yap/apparmor/
+/usr/share/user-tmpfiles.d/yap.conf  # regla de sesion, no limpieza de progreso
 /usr/share/doc/yap/
 /etc/yap/                       # configs vivas (postinst)
-/etc/apparmor.d/usr.local.bin.yap
+/etc/apparmor.d/usr.local.bin.yap    # conffile gestionado por dpkg
 ```
 
 ## Construir
@@ -88,7 +150,8 @@ Plantillas en `packaging/`:
 
 ```
 packaging/
-├── yap/DEBIAN/{control,postinst,prerm,postrm}
+├── yap/DEBIAN/{control,conffiles,postinst,prerm,postrm}
+├── yap/user-tmpfiles.d/yap.conf
 ├── yap/copyright
 ├── yap-models-1b/DEBIAN/{control,postinst,postrm}
 └── yap-models-3b/DEBIAN/{control,postinst,postrm}
@@ -102,9 +165,21 @@ packaging/
 
 | Evento | Que hace |
 |---|---|
-| Pull request a `main` | Tests `test_yap_deb.py` + `.deb` stub + instalacion en contenedor **Debian 12 (bookworm)** |
+| Pull request a `main` | Tests de empaquetado, AppArmor y whitelists + `.deb` stub + instalacion, reinstalacion y purga en contenedores **Debian 12 (bookworm) y 13 (trixie)** |
 | GitHub Release publicado | Compila llama.cpp y adjunta los `.deb` al release |
 | `workflow_dispatch` | Build real; opcional embeber modelos |
+
+Las pruebas de maintainer scripts ejecutan el shell real sobre rutas
+temporales con el parser simulado para errores y disponibilidad del kernel.
+Otra prueba compila el perfil con `apparmor_parser` real. La prueba Debian
+ejecuta `apt` y `dpkg-reconfigure` en el contenedor, y
+`systemd-tmpfiles --user` como un usuario sin privilegios. Comprueba que
+reinstalar conserva configuraciones y que
+purgar conserva el progreso. Se usa un stub de llama-cli y un GGUF simulado;
+no se valida inferencia ni se descargan modelos.
+
+Referencias: [systemd-tmpfiles](https://www.freedesktop.org/software/systemd/man/systemd-tmpfiles.html)
+y [configuracion de paquetes Debian](https://www.debian.org/doc/debian-policy/ap-pkg-conffiles.html).
 
 ## Repositorio apt (opcional)
 
