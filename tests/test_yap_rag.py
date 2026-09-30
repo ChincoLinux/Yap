@@ -23,6 +23,7 @@ import shutil
 import json
 import time
 import unittest.mock as mock
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import yap
@@ -582,11 +583,14 @@ class TestRagPathTraversal(RagTestBase):
         """Symlinks pointing outside corpus directories are rejected."""
         # Create a file outside the corpus
         outside = os.path.join(self.tmpdir, "secret.json")
-        with open(outside, "w") as f:
+        with open(outside, "w", encoding="utf-8") as f:
             json.dump({"secret": "data"}, f)
         # Create symlink inside cursos dir
         link = os.path.join(self.cursos_dir, "evil.json")
-        os.symlink(outside, link)
+        try:
+            os.symlink(outside, link)
+        except OSError:
+            pytest.skip("Symlink creation requires administrative privileges on Windows")
         # Corpus paths should NOT include the symlinked file
         paths = yap._rag_corpus_paths()
         for p in paths:
