@@ -2,9 +2,12 @@
 #
 # Se ejecuta en cada push y PR a las ramas: main, lowmem, ultra-lowmem
 # Etapas:
-#   1. test-unit: 49 pruebas unitarias (seguridad + funcional) con pytest
-#   2. test-report: Verificacion estatica del codigo fuente
-#   3. test-config: Validacion de archivos de configuracion
+#   1. unit-tests: seguridad + funcional + evaluacion + Super Yap con pytest
+#   2. Verificacion estatica del codigo fuente (sin shell=True, eval, os.system)
+#   3. Validacion de los archivos de whitelist del repo
+#
+# Para la suite completa (825 pruebas, 21 archivos) usar pytest directamente:
+#   python3 -m pytest tests/ -v
 
 name: Yap CI
 
@@ -17,10 +20,10 @@ on:
 jobs:
 
   # ──────────────────────────────────────────────────────────────────
-  # JOB 1: Pruebas unitarias (seguridad + funcional)
+  # JOB 1: Pruebas unitarias
   # ──────────────────────────────────────────────────────────────────
   unit-tests:
-    name: "Unit tests (49) - Python 3.12"
+    name: "Unit tests - Python 3.12"
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -50,7 +53,7 @@ jobs:
       - name: Ejecutar pruebas funcionales
         run: |
           echo "═══════════════════════════════════════════════"
-          echo "  PRUEBAS FUNCIONALES (24)"
+          echo "  PRUEBAS FUNCIONALES (59)"
           echo "═══════════════════════════════════════════════"
           python -m pytest tests/test_yap_functional.py -v --tb=short
 
@@ -60,6 +63,13 @@ jobs:
           echo "  PRUEBAS DE EVALUACION (#23)"
           echo "═══════════════════════════════════════════════"
           python -m pytest tests/test_yap_evaluacion.py -v --tb=short
+
+      - name: Ejecutar pruebas de Super Yap
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "  PRUEBAS DE SUPER YAP (#91)"
+          echo "═══════════════════════════════════════════════"
+          python -m pytest tests/test_yap_super.py -v --tb=short
 
       - name: Verificar ausencia de vulnerabilidades
         run: |
@@ -130,7 +140,7 @@ jobs:
           echo "    • branch-check: ${{ needs.branch-check.result }}"
           echo ""
           if [ "${{ needs.unit-tests.result }}" = "success" ]; then
-            echo "  ✓ 49 pruebas pasadas — sistema seguro y funcional"
+            echo "  ✓ Seguridad, funcionalidad, evaluacion y Super Yap: OK"
           else
             echo "  ✗ Pruebas fallidas — revisar logs"
           fi

@@ -10,7 +10,7 @@
 
 | Atributo | Valor |
 |---|---|
-| Versión | `1.0.0-beta` |
+| Versión | `1.0.1` (fuente: `VERSION`) |
 | Modelo | Llama 3.2 Instruct (GGUF Q4_K_M / 1B) |
 | Runtime | llama.cpp (enlace estático, CPU-only) |
 | Idioma | Español |
@@ -52,7 +52,7 @@ PROGRESS_FILE = ~/.config/yap/progress.json
 
 ### Intenciones soportadas
 
-`open_app` (abrir app whitelist) · `search` (Wikipedia API) · `webfetch` (URL directa) · `query` (LLM directo) · `pseint` (tutor PSeInt).
+`open_app` (abrir app whitelist) · `search` (Wikipedia API) · `webfetch` (URL directa) · `query` (LLM directo) · `pseint` (tutor PSeInt) · `super` / `super_query` (Super Yap Gradio Cloud Run, opt-in, #91).
 
 ---
 
@@ -79,9 +79,12 @@ Comandos arbitrarios · red fuera de whitelist · instalar/eliminar software · 
 
 | Rama | Modelo | Ctx | KV Cache | RAM | Threads |
 |---|---|---|---|---|---|
-| `master` | 3B Q4_K_M | 4096 | FP16 | ~3.5GB | 4 |
+| `main` | 3B Q4_K_M | 2048 (`MAX_CTX`) | FP16 | ~3.5GB | 4 |
 | `lowmem` | 3B Q4_K_M | 2048 | Q8_0 | ~3.1GB | 2 |
 | `ultra-lowmem` | 1B Q4_K_M | 2048 | Q8_0 | ~1.8GB | 2 |
+| Super Yap (Gradio Cloud Run) | Nube (no hay 8B local) | — | — | 0 GB extra en el PC | — |
+
+Super Yap es opt-in (`YAP_SUPER_ENABLED=1` o auto en Gradio Cloud Run): el alumno sigue en 1B/3B. Si `llama-cli` tarda 3 minutos, se pasa de tokens o hay `super on`, Yap consulta Gradio y reenvía `HISTORY`. Ver `docs/SUPER-YAP.md`.
 
 El hook `.githooks/post-checkout` informa del cambio de modelo al hacer `git checkout`.
 
@@ -91,21 +94,24 @@ El hook `.githooks/post-checkout` informa del cambio de modelo al hacer `git che
 
 ```
 Yap/
-├── yap.py                 # Agente principal (36KB, ~640 líneas)
-├── setup.sh               # Instalador (compila llama.cpp, descarga modelo)
+├── yap.py                 # Agente principal + cliente Gradio Cloud Run (#91)
+├── setup.sh               # Instalador de desarrollo (compila llama.cpp)
+├── build-deb.sh           # Genera yap_*.deb y yap-models-*.deb (#31)
+├── packaging/             # Plantillas DEBIAN (control, postinst, prerm, postrm)
 ├── whitelist/
 │   ├── apps.conf          # Apps permitidas
 │   └── web.conf           # Dominios permitidos
 ├── cursos/                # JSON de cursos (FPY1101, etc.)
 ├── tests/
-│   ├── test_yap_security.py    # 25 pruebas
-│   ├── test_yap_functional.py  # 56 pruebas
-│   └── run_tests.py            # Ejecutor con reporte
+│   ├── test_yap_security.py    # 25 pruebas (de 21 archivos)
+│   ├── test_yap_functional.py  # 59 pruebas
+│   ├── conftest.py             # Aísla Super Yap (YAP_SUPER_*=0)
+│   └── run_tests.py            # Ejecutor: 5 archivos, chequeos, 26 requisitos
 ├── .githooks/post-checkout    # Hook informativo de rama
 ├── .github/
-│   ├── workflows/test.yml      # CI: 81 pruebas + verificación estática
+│   ├── workflows/              # 11 workflows (CI, A-Dev, releases, quality gates)
 │   └── adev/                   # Configuración A-Dev (ver sección 7)
-├── docs/                  # Documentación
+├── docs/                  # ROADMAP, PACKAGING, TRUNK-BASED, SECURITY-AUDIT, SUPER-YAP
 └── USAGE.md              # Guía de uso
 ```
 
@@ -115,12 +121,14 @@ Yap/
 
 ```bash
 pip install pytest
-python3 -m pytest tests/ -v          # 81 pruebas (sin LLM/GPU/Internet)
+python3 -m pytest tests/ -v          # 825 pruebas (sin LLM/GPU/Internet)
 python3 tests/run_tests.py --report  # Reporte TXT
 python3 tests/run_tests.py --vm      # Infra (solo en VM)
 ```
 
-**Cobertura:** 25 seguridad + 56 funcional + 5 infra = 81/81 ✓
+**Cobertura:** 21 archivos, 825 pruebas. `run_tests.py` ejecuta 5 de ellos
+(237 pruebas) + 5 chequeos de infraestructura + 5 estáticos + mapeo de 26
+requisitos. Detalle en [tests/README.md](tests/README.md).
 
 ---
 

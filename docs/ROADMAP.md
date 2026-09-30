@@ -30,7 +30,7 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 | 26 | Cursos adicionales — MAT1101, INF1101, TEL1101 | P1 | Planeado |
 | 27 | Sistema de ejercicios interactivos con validación automática | P1 | En revisión |
 | 28 | Adaptación de dificultad según progreso del estudiante | P2 | Planeado |
-| 29 | Feedback pedagógico estructurado (formativo vs sumativo) | P2 | Planeado |
+| 29 | Feedback pedagógico estructurado (formativo vs sumativo) | P2 | En revisión |
 | 30 | Exportación de progreso a PDF/CSV para el docente | P2 | Planeado |
 
 ### Fase 3 — Empaquetado para ChincoLinux OS (v1.3)
@@ -38,7 +38,7 @@ automáticas, y empaquetado nativo para la distribución ChincoLinux.
 
 | # | Issue | Prioridad | Estado |
 |---|-------|-----------|--------|
-| 31 | Crear paquete .deb para Yap | P0 | Planeado |
+| 31 | Crear paquete .deb para Yap | P0 | Completado |
 | 32 | Integrar Yap en el build de la ISO de ChincoLinux | P0 | Planeado |
 | 33 | Configuración post-install automática (systemd, AppArmor, whitelists) | P1 | Parcial (1) |
 | 34 | Tests de integración en ChincoLinux OS (Live USB / VM) | P1 | Planeado |
@@ -67,14 +67,13 @@ pertenece al alcance de ese issue y todos requieren un issue propio.
 | B3 | El menú del modo interactivo numera las entradas como `[1] [2] [3]`, lo que sugiere que son opciones seleccionables. Al escribir un número, el texto se envía al LLM como consulta en lugar de ejecutar la acción correspondiente. | `yap.py` — `display_menu()` | P2 | Por revisar |
 ### Notas
 
-**(1) #33 — entrega parcial.** Se cubren las whitelists escolares y queda
-verificado que el perfil AppArmor ya se carga en modo enforce desde #14.
-Los dos criterios restantes quedan pendientes por motivos distintos:
+**(1) #33 — entrega parcial.** Se cubren las whitelists escolares, el perfil
+AppArmor en modo enforce (#14) y el `postinst` del paquete `.deb` (#31).
+Queda pendiente el daemon systemd:
 
 | Criterio pendiente | Motivo |
 |---|---|
 | Servicio systemd `yap-daemon` | Yap invoca `llama-cli` de nuevo en cada consulta, sin proceso persistente. Precargar el modelo exige migrar a `llama-server`, lo que excede una tarea de configuración post-install y merece issue propio |
-| `postinst` del paquete | Depende de #31, aún sin empezar |
 
 **(2) #38 — entrega parcial.** Los criterios de aceptación del issue están
 cubiertos: `telemetry.json`, comando `telemetria`, exportación anónima opt-in,

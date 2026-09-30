@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+# prerm de yap — descarga el perfil AppArmor antes de quitar archivos.
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        if [ -f /etc/apparmor.d/usr.local.bin.yap ] && command -v apparmor_parser >/dev/null 2>&1; then
+            apparmor_parser -R /etc/apparmor.d/usr.local.bin.yap 2>/dev/null || true
+        fi
+        ;;
+esac
+
+exit 0

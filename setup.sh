@@ -10,6 +10,7 @@ set -euo pipefail
 # faltante. El resto de pasos detectan lo ya instalado.
 # ============================================================
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 YAP_VERSION="$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "1.0.0")"
 YAP_DIR="/opt/yap"
 MODEL_DIR="$YAP_DIR/models"
@@ -17,13 +18,15 @@ CONFIG_DIR="/etc/yap"
 WHITELIST_DIR="$CONFIG_DIR/whitelist"
 PSEINT_DIR="$CONFIG_DIR/pseint"
 BIN_DIR="/usr/local/bin"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LLAMACPP_REPO="https://github.com/ggerganov/llama.cpp.git"
 LLAMACPP_BRANCH="b5097"
 
 # Tamaños reales de cada modelo (para información al usuario)
 MODELO_3B_BYTES="1.9 GB"
 MODELO_1B_BYTES="0.81 GB"
+# Mínimos para rechazar HTML de error (401) o descargas truncadas
+MIN_BYTES_1B=700000000
+MIN_BYTES_3B=1500000000
 
 RAMAS=(main lowmem ultra-lowmem)
 RAMA_ACTUAL=$(git -C "$SCRIPT_DIR" branch --show-current 2>/dev/null || echo "desconocida")
@@ -130,6 +133,85 @@ echo "  PASO 3/6 — Gestión del modelo de lenguaje"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
+# ponytail: extraer el .gguf con regex, no sed sobre os.environ.get(...)
+# (el sed anterior dejaba un ')' final y construía una URL inválida)
+extraer_nombre_modelo() {
+  grep -oE 'Llama-3\.2-[0-9]+B-Instruct-Q4_K_M\.gguf' "$SCRIPT_DIR/yap.py" | head -n1
+}
+
+es_gguf_valido() {
+  local f="$1"
+  local min_bytes="$2"
+  [[ -f "$f" ]] || return 1
+  local size magic
+  size=$(stat -c%s "$f" 2>/dev/null || sudo stat -c%s "$f" 2>/dev/null || echo 0)
+  [[ "$size" -ge "$min_bytes" ]] || return 1
+  magic=$(head -c 4 "$f" 2>/dev/null || sudo head -c 4 "$f" 2>/dev/null || echo "")
+  [[ "$magic" == "GGUF" ]] || return 1
+  return 0
+}
+
+descargar_url() {
+  local url="$1"
+  local dest="$2"
+  local curl_auth=()
+  if [[ -n "${HF_TOKEN:-}" ]]; then
+    curl_auth=(-H "Authorization: Bearer ${HF_TOKEN}")
+  fi
+
+  echo "    Intentando: $url"
+
+  if command -v curl >/dev/null 2>&1; then
+    if curl -fL --retry 5 --retry-delay 2 \
+      --connect-timeout 30 \
+      -A "Yap-setup/${YAP_VERSION} (ChincoLinux)" \
+      "${curl_auth[@]}" \
+      -o "$dest" "$url"; then
+      return 0
+    fi
+    return 1
+  fi
+
+  # Fallback: --config=/dev/null ignora .wgetrc/.netrc que provocan 401
+  if wget --config=/dev/null --progress=bar:force \
+    --user-agent="Yap-setup/${YAP_VERSION} (ChincoLinux)" \
+    --tries=5 --timeout=30 \
+    -O "$dest" "$url"; then
+    return 0
+  fi
+  return 1
+}
+
+descargar_modelo() {
+  local dest="$1"
+  local filename="$2"
+  local size_tag="$3"
+  local min_bytes="$4"
+  local tmp
+  tmp=$(mktemp "${TMPDIR:-/tmp}/${filename}.XXXXXX")
+
+  local urls=(
+    "https://huggingface.co/bartowski/Llama-3.2-${size_tag}-Instruct-GGUF/resolve/main/${filename}?download=true"
+    "https://hf-mirror.com/bartowski/Llama-3.2-${size_tag}-Instruct-GGUF/resolve/main/${filename}?download=true"
+    "https://huggingface.co/unsloth/Llama-3.2-${size_tag}-Instruct-GGUF/resolve/main/${filename}?download=true"
+    "https://hf-mirror.com/unsloth/Llama-3.2-${size_tag}-Instruct-GGUF/resolve/main/${filename}?download=true"
+  )
+
+  local url
+  for url in "${urls[@]}"; do
+    rm -f "$tmp"
+    if descargar_url "$url" "$tmp" && es_gguf_valido "$tmp" "$min_bytes"; then
+      sudo mkdir -p "$(dirname "$dest")"
+      sudo mv "$tmp" "$dest"
+      sudo chmod 644 "$dest"
+      return 0
+    fi
+    echo "    [AVISO] Fuente no usable (401/HTML/truncado). Probando otra..."
+  done
+  rm -f "$tmp"
+  return 1
+}
+
 # Detectar archivos de modelo existentes
 MODELOS_EXISTENTES=()
 shopt -s nullglob
@@ -139,15 +221,21 @@ done
 shopt -u nullglob
 
 # Determinar qué modelo necesita esta rama
-MODEL_FILENAME=$(grep 'MODEL_PATH =' "$SCRIPT_DIR/yap.py" | sed "s|.*/||;s|\"||g")
-SIZE=$(echo "$MODEL_FILENAME" | sed 's/Llama-3.2-//;s/-Instruct-Q4_K_M.gguf//')
+MODEL_FILENAME="$(extraer_nombre_modelo)"
+if [[ -z "$MODEL_FILENAME" ]]; then
+  echo "  [ERROR] No se pudo detectar el GGUF Q4_K_M declarado en yap.py"
+  exit 1
+fi
+SIZE="$(echo "$MODEL_FILENAME" | grep -oE '[0-9]+B' | head -n1)"
 MODEL_FILE="$MODEL_DIR/$MODEL_FILENAME"
-MODEL_URL="https://huggingface.co/bartowski/Llama-3.2-${SIZE}-Instruct-GGUF/resolve/main/${MODEL_FILENAME}"
+MODEL_URL="https://huggingface.co/bartowski/Llama-3.2-${SIZE}-Instruct-GGUF/resolve/main/${MODEL_FILENAME}?download=true"
+MIN_BYTES=$MIN_BYTES_1B
+[[ "$SIZE" == "3B" ]] && MIN_BYTES=$MIN_BYTES_3B
 
 echo "  Modelo REQUERIDO por la rama '$RAMA_ACTUAL':"
 echo "    • Archivo:  $MODEL_FILENAME"
 TAM_MODELO=""; [ "$SIZE" = "3B" ] && TAM_MODELO="$MODELO_3B_BYTES"; [ "$SIZE" = "1B" ] && TAM_MODELO="$MODELO_1B_BYTES"
-echo "    • Tamaño:   $TAM_MODELO"
+echo "    • Tamaño:   ${TAM_MODELO:-desconocido}"
 echo "    • Formato:  GGUF Q4_K_M (cuantización 4 bits, mezcla K-quant)"
 echo "    • URL:      $MODEL_URL"
 echo ""
@@ -171,7 +259,7 @@ fi
 
 sudo mkdir -p "$MODEL_DIR"
 
-if [ -f "$MODEL_FILE" ]; then
+if es_gguf_valido "$MODEL_FILE" "$MIN_BYTES"; then
   echo "  ────────────────────────────────────────────────────────────"
   echo "  ［CONFIRMACIÓN］El modelo requerido YA EXISTE."
   echo "  ────────────────────────────────────────────────────────────"
@@ -180,12 +268,33 @@ if [ -f "$MODEL_FILE" ]; then
   echo "  Ruta:   $MODEL_FILE"
   echo ""
 else
+  if [ -f "$MODEL_FILE" ]; then
+    echo "  [AVISO] $MODEL_FILE existe pero no es un GGUF válido (posible HTML 401)."
+    echo "  Se vuelve a descargar."
+    echo ""
+    sudo rm -f "$MODEL_FILE"
+  fi
   echo "  ────────────────────────────────────────────────────────────"
-  echo "  ［EJECUTANDO］sudo wget — descargando modelo..."
+  echo "  ［EJECUTANDO］curl — descargando modelo Q4_K_M..."
   echo "  ────────────────────────────────────────────────────────────"
-  echo "  (la descarga puede tomar varios minutos)"
+  echo "  (la descarga puede tomar varios minutos; si Hugging Face"
+  echo "   responde 401 se prueban espejos automáticamente)"
   echo ""
-  sudo wget --progress=bar:force -O "$MODEL_FILE" "$MODEL_URL"
+  if ! descargar_modelo "$MODEL_FILE" "$MODEL_FILENAME" "$SIZE" "$MIN_BYTES"; then
+    echo ""
+    echo "  [ERROR] No se pudo descargar $MODEL_FILENAME"
+    echo ""
+    echo "  Hugging Face a veces responde 401 a wget (almacén Xet)."
+    echo "  Opciones:"
+    echo "    1. Token de lectura:  export HF_TOKEN=hf_...   (huggingface.co/settings/tokens)"
+    echo "       y re-ejecutar:     sudo -E ./setup.sh"
+    echo "    2. Descarga manual y copia a $MODEL_FILE"
+    echo "       curl -fL -o /tmp/$MODEL_FILENAME \\"
+    echo "         \"$MODEL_URL\""
+    echo "       sudo mv /tmp/$MODEL_FILENAME $MODEL_FILE"
+    echo ""
+    exit 1
+  fi
   echo ""
   echo "  ✓ Descarga completa."
   echo "    Tamaño: $(ls -lh "$MODEL_FILE" | awk '{print $5}')"

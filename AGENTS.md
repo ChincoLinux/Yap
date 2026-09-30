@@ -15,8 +15,8 @@ This guide helps AI agents (like Claude Code, Devin, etc.) understand how to col
 |---|---|
 | Repositorio | `ChincoLinux/Yap` (organización) |
 | Fork de trabajo | `VECTORG99/Yap` |
-| Archivo principal | `yap.py` (~1253 líneas) |
-| CI | `.github/workflows/test.yml` — 49+ tests, sin LLM/GPU/Internet |
+| Archivo principal | `yap.py` (~6200 líneas, stdlib-only) |
+| CI | `.github/workflows/test.yml` — 11 workflows; `pytest tests/` = 825 tests, sin LLM/GPU/Internet |
 | Modelo | Llama 3.2 1B/3B Instruct (Q4_K_M, CPU-only) |
 
 ## Labels Guide for AI Agents
@@ -63,6 +63,11 @@ These labels track the PR lifecycle state. They are mutually exclusive and auto-
 
 ## Autonomous AI Agent Contract
 
+### Before starting work (Branch Hygiene Protocol — A-Dev Rule 50):
+1. **Clean up merged branches**: Delete local and remote branches that are already merged.
+2. **Reset main if diverged**: Ensure `main` matches `origin/main` (`git checkout main && git pull origin main`).
+3. **Branch-per-change (Rule 48 & 49)**: ALWAYS create a fresh dedicated branch from latest `main`. Never reuse a branch that has been committed, merged, or superseded.
+
 ### When creating issues:
 1. Add appropriate **type label** (`bug`, `enhancement`, `documentation`, etc.)
 2. Add **priority label** if urgent (`priority:P0`, `priority:P1`)
@@ -75,7 +80,7 @@ These labels track the PR lifecycle state. They are mutually exclusive and auto-
      — GitHub only auto-closes the first issue in a comma-separated list without
      repeated keywords.
 2. **MUST** use [conventional commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `chore:`, etc.
-3. **MUST** use branch naming: `feat/issue-XXX-description`, `fix/issue-XXX-description`, `docs/issue-XXX-description`.
+3. **MUST** use branch naming: `feat/issue-XXX-description`, `fix/issue-XXX-description`, `docs/issue-XXX-description`, `chore/issue-XXX-description`.
 4. **MUST** write PR title and body — body must include the checklist from `PULL_REQUEST_TEMPLATE.md`.
 5. **MUST** run `python3 -m pytest tests/ -v` before pushing. CI must be green.
 6. **Do NOT** approve your own PR — ask another member of `core-devs` to review.
@@ -90,19 +95,21 @@ These labels track the PR lifecycle state. They are mutually exclusive and auto-
 
 ### Issue → PR → Merge Workflow
 
-1. **Issue created** with type and priority labels
-2. **Developer claims** (comment on issue or open draft PR)
-3. **PR created** with `Closes #XXX`, conventional commit title
-4. **CI checks run** automatically (49+ tests + branch-check + A-Dev Hardness review)
-5. **Code review** by maintainers or AI (advisory comments from `yap-reviewer` bot)
-6. **Changes addressed** if requested
-7. **Merge** when approved and checks pass (auto-merge native, squash)
-8. **Branch deleted** automatically after merge
+1. **Issue created** with type and priority labels (acts as single source of truth per A-Dev Rule 1/30)
+2. **Developer claims** (comment on issue or assign)
+3. **Fresh branch created** following the hygiene protocol
+4. **PR created** with `Closes #XXX`, conventional commit title
+5. **CI checks run** automatically (825 tests + branch-check + A-Dev Hardness review)
+6. **Code review** by maintainers or AI (advisory comments from `yap-reviewer` bot)
+7. **Changes addressed** if requested
+8. **Merge** when approved and checks pass (auto-merge native, squash)
+9. **Branch deleted** automatically after merge (both local and remote cleanup)
 
-### Branch Protection
+### Branch Protection & CI/CD Invariants
 
-- `main` is protected with `enforce_admins: true` — no admin bypass
-- `required_reviews: 0` — no mandatory approval count (human review still expected per A-Dev doctrine)
+- `main` is protected with strict branch rules (`enforce_admins: true`, required checks, no direct push).
+- **NO DIRECT PUSHES TO MAIN (A-Dev Rule 2)**: Neither human developers, AI agents, nor GitHub Actions workflows may push directly to `main`.
+- **Automated Releases (A-Dev Rule 14)**: Release bump commits and CHANGELOG updates from automated workflows must NEVER push directly to `main`. They must create a dedicated `chore/bump-vX.Y.Z` branch and open an automated PR to undergo the normal CI and review cycle.
 - `allow_force_pushes: false`
 - Auto-merge (squash) enabled via GitHub native settings
 
@@ -147,15 +154,17 @@ Yap/
 ├── CLAUDE.md              # Arquitectura técnica detallada
 ├── CONTRIBUTING.md        # Guía de contribución
 ├── GOVERNANCE.md          # Gobernanza de la organización
-├── yap.py                 # Agente principal (~1253 líneas)
-├── setup.sh               # Instalador (compila llama.cpp, descarga modelo)
+├── yap.py                 # Agente principal + cliente Gradio Cloud Run (#91)
+├── setup.sh               # Instalador de desarrollo (compila llama.cpp, descarga modelo)
+├── build-deb.sh           # Genera paquetes .deb (issue #31)
+├── packaging/             # Plantillas DEBIAN (yap, yap-models-1b/3b)
 ├── deploy-yap.sh          # Despliegue masivo por SSH
 ├── whitelist/             # Apps y dominios permitidos
 │   ├── apps.conf
 │   └── web.conf
 ├── cursos/                # JSON de cursos (FPY1101, etc.)
-├── tests/                 # Suite de tests (49+)
-├── docs/                  # ROADMAP, TRUNK-BASED, DEPLOY, SECURITY-AUDIT
+├── tests/                 # Suite de tests: 21 archivos, 825 tests (ver tests/README.md)
+├── docs/                  # ROADMAP, PACKAGING, TRUNK-BASED, SECURITY-AUDIT
 ├── .github/
 │   ├── workflows/         # CI, pr-review, test, auto-release
 │   ├── adev/              # Políticas Hardness + agente reviewer
@@ -174,7 +183,7 @@ Yap/
 ## Testing
 
 ```bash
-# Run all tests (49+, no LLM/GPU/Internet needed)
+# Run all tests (825, no LLM/GPU/Internet needed)
 python3 -m pytest tests/ -v
 
 # Run with coverage
@@ -187,7 +196,9 @@ python3 -m pytest tests/test_yap_security.py -v
 python3 tests/run_tests.py --report
 ```
 
-**Coverage:** 25 security + 56 functional + 5 infra = 49+ tests ✓
+**Cobertura:** 825 pruebas en 21 archivos. `pytest tests/` = suite completa;
+`python3 tests/run_tests.py` = 237 pruebas + 10 chequeos + mapeo de 26 requisitos.
+Ver [tests/README.md](tests/README.md).
 
 ## Security Considerations
 
