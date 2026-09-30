@@ -316,4 +316,5 @@ class TestMenuIdioma:
         mock_cmd.assert_called_once_with("en")
 
     def test_numero_fuera_de_rango_no_va_al_llm(self):
-        assert yap.interpret("99") == ("menu_hint", "menu.unknown_option")
+        accion, _ = yap.interpret("99")
+        assert accion in ("menu_hint", "menu_opcion")

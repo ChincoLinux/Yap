@@ -10,6 +10,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - i18n multi-idioma (#36): catálogos JSON `es`/`en`/`arn`, `yap perfil idioma`,
   LLM responde en el idioma del perfil; mapudungun con traducción comunitaria parcial
+- Rutas de teclado para las ordenes que el menu anuncia (#59): `abre`,
+  `abrir`, `busca`, `buscar`, `pseint`, `tutor pseint` y `aprender pseint`
+  se resuelven en `interpret()` sin pasar por el clasificador, que con el
+  modelo 1B acierta poco. El parametro conserva las mayusculas que escribe
+  el usuario. Elegir por numero una opcion que necesita datos muestra ahora
+  una pista de uso con un ejemplo, en vez de repetir su propia etiqueta
+- Super Yap (#91): cliente Gradio 5 en Cloud Run (`urllib` + cookies, sin
+  `requests`) contra el host pin `*.southamerica-west1.run.app`. Cada
+  consulta reenvía el historial vivo (`HISTORY`) para no perder contexto;
+  si Super Yap cae, se usa el LLM local. Opt-in `YAP_SUPER_ENABLED=1` o
+  auto si el endpoint es Gradio. Comandos `super` / `nube`. Solo loopback,
+  LAN privada o hosts pin; sin `socket` en `yap.py`.
+  `YAP_SUPER_ENABLED=0` fuerza el Yap local. Si `llama-cli` tarda 3 min
+  o se pasa de ~1200 tokens, se consulta Gradio.
+
+### Changed
+- Yap local usa como techo **Llama 3.2 3B Instruct Q4_K_M**. Un `YAP_MODEL_PATH`
+  con 8B se ignora y cae al 3B; el 1B sigue permitido.
+- Super Yap (#91)(`super_yap.py`, GGUF,
+  `YAP_SUPER_CTX` / `YAP_SUPER_THREADS`, umbral de 7 GB). El alumno sigue
+  en 1B/3B; si `llama-cli` tarda **3 minutos** (180 s) o se pasa de tokens,
+  Yap consulta Gradio 5 en Cloud Run (`GET /` → `queue/join` → SSE).
+  `super on` / `super <pregunta>` siguen forzando la nube.
+
+### Fixed
+- Consultas invisibles a partir de la segunda pregunta (#99): los procesos
+  hijos heredaban la terminal del estudiante. `llama-cli` hace `tcsetattr`
+  sobre el stdin que recibe y apaga el eco; al no restaurarlo siempre, lo
+  escrito dejaba de verse aunque Enter siguiera enviando la consulta. Las
+  nueve llamadas a `subprocess` pasan ahora `stdin=subprocess.DEVNULL`,
+  incluido el lanzador de aplicaciones de la whitelist, que vivía más que
+  la llamada y competía por la misma terminal
+
+## [1.0.0] - 2026-09-06
+### Added
+- Feedback pedagógico estructurado (#29): distinción entre feedback formativo
+  y sumativo, con pautas diferenciadas en el prompt del evaluador. Al cerrar
+  una experiencia se muestra la nota junto a fortalezas y áreas por mejorar,
+  compuestas a partir de los criterios ya registrados y sin llamada adicional
+  al modelo. El resultado de cada intento indica el avance respecto al anterior
 - Control de sesiones dentro del agente (#21): crear, pausar, retomar, cerrar y
   listar sesiones, con límite de 3 abiertas, prompt marcado con la sesión activa
   y archivado en el historial al cerrar
@@ -17,6 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tipos `respuesta_libre`, `codigo_pseint`, `opcion_multiple` y `completar` en el JSON del curso
 - `progress.json` guarda puntaje, intentos y fecha de aprobación; máximo 3 intentos por actividad
 - `yap progreso` muestra % completado, promedio, reprobadas y nota chilena (1.0-7.0)
+- Paquete `.deb` de Yap (`build-deb.sh`, `packaging/`) con `postinst` (whitelists, AppArmor, symlink `/usr/local/bin/yap`) y paquetes de modelo `yap-models-1b` / `yap-models-3b` (#31)
+- CI `build-deb.yml`: genera `.deb` en cada release y prueba instalación limpia en Debian 12
+- `docs/PACKAGING.md`: guía de construcción e instalación del paquete
 - CI Quality Suite adaptada de Homedir (os-santiago/homedir): `pr-quality-suite.yml` (ruff style + pyflakes static + pytest coverage + pip-audit deps + arch validation), `pr-traceability-check.yml` (verifica `Closes #N` en cada PR), `pr-state-labeler.yml` (auto-label `pr:needs-review`/`pr:approved`/etc.), `quality-gates.yml` (CodeQL Python + TruffleHog secret scan + dependency review), `pr-validation.yml` (build & verify + smoke test CLI)
 - Scripts de CI: `scripts/ci/check_pr_traceability.py`, `scripts/ci/label_pr_state.py`, `scripts/ci/pr_preflight.sh`
 - Auto-asignación semanal de issues al equipo
@@ -39,10 +82,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `nota_chilena()` no redondea puntajes en [59.1, 60) a 4.0
 - Fallback de evaluación trata "no es correcto" / "no esta correcto" como reprobado
 - Parser JSON reconcilia `aprobado` y `puntaje` para que no se apruebe con 2.0 ni se repruebe con nota de aprobación
+- setup.sh lee VERSION despues de definir SCRIPT_DIR
+- auto-release.yml importa os al actualizar el CHANGELOG
+- fallback-merge.yml eliminado: mergeaba PRs no relacionadas y aceptaba aprobaciones obsoletas
 - setup.sh no falla cuando yap-agent.md no existe
 - Path traversal vulnerability en domain whitelist (#1)
 - Conversation history and context management (#2)
 - Graceful handling of blocked apps (#3)
+- fix: fallos de CI y scripts (#81) (#76)
 
 ## [1.0.0-beta] - 2026-06-17
 

@@ -98,6 +98,7 @@ Construir un sistema Debian estable ultraligero con un agente IA local (**CPU-on
 | **Whitelist de apps** | Lista de aplicaciones permitidas con soporte multi-binario |
 | **Whitelist de dominios** | Lista de dominios permitidos para webfetch |
 | **LLM local** | Modelo Llama 3.2 ejecutado con llama.cpp |
+| **RAG local** | Recuperación contextual con Okapi BM25 100% stdlib ([docs/RAG.md](docs/RAG.md)) |
 | **Notificador** | Alertas graficas mediante `notify-send` |
 
 ---
@@ -111,7 +112,7 @@ El instalador automatiza la configuracion del entorno. Conceptos clave:
 | Linea(s) | Concepto | Explicacion |
 |---|---|---|
 | 2 | **`set -euo pipefail`** | Modo estricto: `-e` aborta en error; `-u` variables no definidas como error; `-o pipefail` propaga errores en tuberias |
-| 14 | **`SCRIPT_DIR`** | Obtiene la ruta absoluta del directorio del script mediante `${BASH_SOURCE[0]}` |
+| 13 | **`SCRIPT_DIR`** | Obtiene la ruta absoluta del directorio del script mediante `${BASH_SOURCE[0]}` antes de leer `VERSION` |
 | 38 | **`git clone --depth 1`** | Clonado superficial (un solo commit) para minimizar ancho de banda |
 | 41-42 | **`cmake` + `cmake --build`** | Configuracion y compilacion con `-DBUILD_SHARED_LIBS=OFF` para enlace estatico |
 | 47-52 | **Descarga del modelo** | Lee `MODEL_PATH` de `yap.py` y descarga el `.gguf` correspondiente (3B o 1B) |
@@ -206,7 +207,17 @@ El instalador automatiza la configuracion del entorno. Conceptos clave:
 - **Disco:** 5 GB de espacio libre.
 - **Red:** Conexion a Internet (solo durante la instalacion).
 
-### 6.2 Procedimiento
+### 6.2 Paquete .deb (recomendado en aulas)
+
+```bash
+sudo apt install ./yap_1.0.0_amd64.deb
+sudo apt install ./yap-models-1b_1.0.0_all.deb    # ~2 GB RAM
+# sudo apt install ./yap-models-3b_1.0.0_all.deb  # ~3.5 GB RAM
+```
+
+El `.deb` instala el agente, `llama-cli` precompilado, whitelists en `/etc/yap/` y el perfil AppArmor. No requiere `setup.sh` ni `build-essential`. Guia completa: [docs/PACKAGING.md](docs/PACKAGING.md).
+
+### 6.3 Procedimiento de desarrollo (`setup.sh`)
 
 ```bash
 git clone https://github.com/ChincoLinux/Yap.git
@@ -232,7 +243,7 @@ El instalador realiza automaticamente:
 5. Instalacion de aplicaciones sugeridas (LibreOffice, Firefox, Evince, Micro, Htop).
 6. Verificacion de componentes.
 
-### 6.3 Actualizacion
+### 6.4 Actualizacion
 
 ```bash
 cd ~/Yap
@@ -252,6 +263,8 @@ El proyecto mantiene **tres ramas** con distintos perfiles de consumo de RAM y c
 | **main** | 3B Q4_K_M (2.0 GB) | 4096 | FP16 | ~3.5 GB | 8 GB+ RAM |
 | **lowmem** | 3B Q4_K_M (2.0 GB) | 2048 | Q8_0 | ~3.1 GB | 6 GB RAM |
 | **ultra-lowmem** | 1B Q4_K_M (0.81 GB) | 2048 | Q8_0 | ~1.8 GB | 3-4 GB RAM |
+
+**Super Yap** (opt-in, issue #91) consulta Gradio `/chat` en Cloud Run si el Yap local (1B/3B) **tarda 3 minutos** o se pasa de tokens, **sin perder el historial**. No hay modelo 8B local. `super on` / `super off` cambian el motor. Ver [docs/SUPER-YAP.md](docs/SUPER-YAP.md).
 
 ### 7.1 Cambio entre ramas
 
@@ -515,7 +528,7 @@ git checkout lowmem
 - [ ] Historial de contexto persistente entre sesiones.
 - [ ] Sugerencias de apps alternativas al bloquear.
 - [ ] Integracion con **AppArmor**.
-- [ ] Instalador `.deb`.
+- [x] Instalador `.deb`.
 - [ ] Mas fuentes en whitelist educativa.
 - [ ] Interfaz de configuracion grafica.
 

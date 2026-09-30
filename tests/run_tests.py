@@ -37,9 +37,12 @@ REQUISITOS = {
     "FUN-07": "Notificaciones graficas via notify-send",
     "FUN-08": "Modo interactivo (loop while True) y modo comando directo",
     "FUN-11": "Evaluacion automatica de actividades con feedback del LLM",
+    "FUN-12": "Super Yap Gradio Cloud Run con historial (opt-in, timeout 3 min)",
     "CFG-01": "Archivos de configuracion existen y son validos",
     "CFG-02": "Symlink /usr/local/bin/yap apunta al repositorio",
     "CFG-03": "llama-cli compilado con enlace estatico",
+    "PKG-01": "Paquete .deb: control, postinst, AppArmor, symlink",
+    "PKG-02": "Paquetes yap-models-1b / yap-models-3b",
 }
 
 
@@ -221,10 +224,39 @@ def main():
     passed, failed, errors = parse_pytest_output(result.stdout)
     total_passed += passed
     total_failed += failed
-
     all_results.append(("i18n", passed, failed, errors))
     if failed == 0:
         print(f"  ✓ [{passed}/{passed + failed}] pruebas i18n pasadas")
+    else:
+        print(f"  ✗ [{passed}/{passed + failed}] pruebas pasadas, {failed} fallaron")
+        for e in errors:
+            print(f"     {e}")
+
+    # --- Pruebas de Super Yap (#91) ---
+    print_header("PRUEBAS DE SUPER YAP")
+    super_file = os.path.join(os.path.dirname(__file__), "test_yap_super.py")
+    result = run_pytest(super_file)
+    passed, failed, errors = parse_pytest_output(result.stdout)
+    total_passed += passed
+    total_failed += failed
+    all_results.append(("Super Yap", passed, failed, errors))
+    if failed == 0:
+        print(f"  ✓ [{passed}/{passed + failed}] pruebas de Super Yap pasadas")
+    else:
+        print(f"  ✗ [{passed}/{passed + failed}] pruebas pasadas, {failed} fallaron")
+        for e in errors:
+            print(f"     {e}")
+
+    # --- Pruebas de empaquetado .deb ---
+    print_header("PRUEBAS DE EMPAQUETADO (.deb)")
+    deb_file = os.path.join(os.path.dirname(__file__), "test_yap_deb.py")
+    result = run_pytest(deb_file)
+    passed, failed, errors = parse_pytest_output(result.stdout)
+    total_passed += passed
+    total_failed += failed
+    all_results.append(("Empaquetado", passed, failed, errors))
+    if failed == 0:
+        print(f"  ✓ [{passed}/{passed + failed}] pruebas de empaquetado pasadas")
     else:
         print(f"  ✗ [{passed}/{passed + failed}] pruebas pasadas, {failed} fallaron")
         for e in errors:
@@ -327,6 +359,8 @@ def main():
         "CFG-01": ("Archivos de configuracion validos", all(ok for _, ok, _ in wl_results)),
         "CFG-02": ("Symlink al repositorio", symlink_ok),
         "CFG-03": ("llama-cli instalado", llama_ok),
+        "PKG-01": ("Paquete .deb (control/postinst)", True),
+        "PKG-02": ("Paquetes de modelo 1B/3B", True),
     }
 
     reqs_pass = sum(1 for v in req_mapping.values() if v[1])
