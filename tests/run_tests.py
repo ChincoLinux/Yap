@@ -14,8 +14,14 @@ Uso:
 import sys
 import os
 import subprocess
-import json
 from datetime import datetime
+
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        # Non-fatal: keep default encoding if reconfigure fails
+        pass
 
 REPORT_DIR = os.path.join(os.path.dirname(__file__), "report")
 
@@ -37,7 +43,7 @@ REQUISITOS = {
     "FUN-07": "Notificaciones graficas via notify-send",
     "FUN-08": "Modo interactivo (loop while True) y modo comando directo",
     "FUN-11": "Evaluacion automatica de actividades con feedback del LLM",
-    "FUN-11": "Ejercicios interactivos: 4 tipos, pistas, validacion exacta/LLM, progress.json",
+    "FUN-12": "Ejercicios interactivos: 4 tipos, pistas, validacion exacta/LLM, progress.json",
     "CFG-01": "Archivos de configuracion existen y son validos",
     "CFG-02": "Symlink /usr/local/bin/yap apunta al repositorio",
     "CFG-03": "llama-cli compilado con enlace estatico",
@@ -257,7 +263,7 @@ def main():
     print_header("VERIFICACION DE CODIGO FUENTE")
 
     yap_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "yap.py")
-    with open(yap_path) as f:
+    with open(yap_path, encoding="utf-8") as f:
         source = f.read()
 
     code_checks = []
@@ -340,7 +346,7 @@ def main():
     # --- Generar Reporte ---
     if generate_report:
         report_file = os.path.join(REPORT_DIR, f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
-        with open(report_file, "w") as f:
+        with open(report_file, "w", encoding="utf-8") as f:
             f.write("=" * 72 + "\n")
             f.write(f"  YAP — Reporte de Pruebas\n")
             f.write(f"  Fecha: {timestamp}\n")

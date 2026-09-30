@@ -124,7 +124,7 @@ def _load_confirmations():
     if not os.path.exists(CONFIRMATION_FILE):
         return {}
     try:
-        with open(CONFIRMATION_FILE) as f:
+        with open(CONFIRMATION_FILE, encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError):
         return {}
@@ -134,7 +134,7 @@ def _save_confirmations(data):
     """Save confirmation history atomically."""
     os.makedirs(os.path.dirname(CONFIRMATION_FILE), exist_ok=True)
     tmp = CONFIRMATION_FILE + ".tmp"
-    with open(tmp, "w") as f:
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     os.replace(tmp, CONFIRMATION_FILE)
 
@@ -200,7 +200,7 @@ def confirm_action(action, param, description=""):
 def load_whitelist(path):
     apps = {}
     if os.path.exists(path):
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#"):
@@ -213,7 +213,7 @@ def load_whitelist(path):
 def load_domain_whitelist(path):
     domains = []
     if os.path.exists(path):
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#"):
@@ -594,7 +594,7 @@ def _load_history_sessions():
     if not os.path.exists(HISTORY_FILE):
         return []
     try:
-        with open(HISTORY_FILE) as f:
+        with open(HISTORY_FILE, encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, list):
             return data
@@ -607,7 +607,7 @@ def _write_history_file(sessions):
     """Write history sessions atomically."""
     os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
     tmp = HISTORY_FILE + ".tmp"
-    with open(tmp, "w") as f:
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(sessions, f, indent=2, ensure_ascii=False)
     os.replace(tmp, HISTORY_FILE)
 
@@ -1283,7 +1283,7 @@ def guardar_progreso(progress):
     path = PROGRESS_FILE
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
-    with open(tmp, "w") as f:
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(progress, f, indent=2, ensure_ascii=False)
     os.replace(tmp, path)  # atomic on Linux
 
@@ -2867,7 +2867,7 @@ def apparmor_status():
     # Fallback: check profiles file directly
     if not status["profile_loaded"]:
         try:
-            with open("/sys/kernel/security/apparmor/profiles") as f:
+            with open("/sys/kernel/security/apparmor/profiles", encoding="utf-8", errors="replace") as f:
                 for line in f:
                     if APPARMOR_PROFILE in line:
                         status["profile_loaded"] = True
