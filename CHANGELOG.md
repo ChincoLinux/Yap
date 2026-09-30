@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- i18n multi-idioma (#36): catálogos JSON `es`/`en`/`arn`, `yap perfil idioma`,
+  LLM responde en el idioma del perfil; mapudungun con traducción comunitaria parcial
 - Rutas de teclado para las ordenes que el menu anuncia (#59): `abre`,
   `abrir`, `busca`, `buscar`, `pseint`, `tutor pseint` y `aprender pseint`
   se resuelven en `interpret()` sin pasar por el clasificador, que con el
