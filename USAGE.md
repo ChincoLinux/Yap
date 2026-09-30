@@ -46,6 +46,9 @@ yap --tutorial
 | `yap sesion retomar 3` | Retomar una sesion pausada. |
 
 | `yap telemetria` | Resumen local de tu uso de Yap. |
+| `yap rag` | Estado del indice de recuperacion contextual RAG local. |
+| `yap rag rebuild` | Reconstruir el indice RAG local forzadamente. |
+| `yap rag buscar <tema>` | Buscar directamente en el corpus local (cursos, guias). |
 | `yap super` | Estado de Super Yap (Gradio Cloud Run, opt-in, ver [docs/SUPER-YAP.md](docs/SUPER-YAP.md)). |
 | `yap super on` / `yap super off` | Usar Super Yap en todas las consultas, o volver al local. |
 | `yap super <pregunta>` | Forzar Super Yap; si no está, usa el LLM local. |
@@ -402,7 +405,22 @@ Actividades no aprobadas: 2
 Las fortalezas y las areas por mejorar se calculan a partir de los criterios
 registrados durante la EA, sin consultar al modelo. Un criterio solo cuenta
 como fortaleza si no se fallo en ninguna actividad: aprobarlo una vez no
-cancela un fallo posterior.
+
+## RAG local (Recuperacion Aumentada Offline)
+
+Yap cuenta con un motor de RAG local basado en **Okapi BM25** (100% biblioteca estandar de Python, 0 dependencias externas) que indexa planes de estudio (`cursos/*.json`), documentacion (`docs/*.md`), listas de aplicaciones/web (`whitelist/*.conf`) y manuales.
+
+Al formular cualquier pregunta al asistente, Yap busca automaticamente los fragmentos mas relevantes y los inyecta en el contexto del modelo, manteniendose estrictamente dentro del limite de tokens configurado (`YAP_RAG_MAX_TOKENS = 512`) para proteger la memoria RAM y la velocidad de inferencia en CPU.
+
+### Comandos de administracion e inspeccion
+
+| Comando | Descripcion |
+|---------|-------------|
+| `yap rag` o `yap rag status` | Muestra si el RAG esta activo, ruta del indice en cache y cantidad de fragmentos. |
+| `yap rag rebuild` | Fuerza la reconstruccion completa del indice BM25 y mide la latencia. |
+| `yap rag buscar <tema>` | Realiza una busqueda directa para verificar que fragmentos y puntajes devuelve el motor. |
+
+Para detalles tecnicos sobre la formula BM25, la arquitectura y las justificaciones de diseno, consulta [docs/RAG.md](docs/RAG.md).
 
 ## Ramas de configuracion
 

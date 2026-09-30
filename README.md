@@ -98,6 +98,7 @@ Construir un sistema Debian estable ultraligero con un agente IA local (**CPU-on
 | **Whitelist de apps** | Lista de aplicaciones permitidas con soporte multi-binario |
 | **Whitelist de dominios** | Lista de dominios permitidos para webfetch |
 | **LLM local** | Modelo Llama 3.2 ejecutado con llama.cpp |
+| **RAG local** | Recuperación contextual con Okapi BM25 100% stdlib ([docs/RAG.md](docs/RAG.md)) |
 | **Notificador** | Alertas graficas mediante `notify-send` |
 
 ---
