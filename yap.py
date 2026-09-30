@@ -2053,9 +2053,12 @@ RAG_CHUNK_SIZE = 300  # max words per chunk
 
 _RAG_INDEX = None
 
+_RAG_ACCENT_MAP = str.maketrans("áéíóúÁÉÍÓÚ", "aeiouaeiou")
+
 def _rag_tokenize(text):
-    """Simple word tokenizer."""
-    return re.findall(r'\b[a-záéíóúñü0-9]+\b', text.lower())
+    """Word tokenizer with accent folding for Spanish queries."""
+    folded = text.lower().translate(_RAG_ACCENT_MAP)
+    return re.findall(r'\b[a-zñü0-9]+\b', folded)
 
 def _rag_corpus_paths():
     """Enumerate all files in the RAG corpus."""
@@ -2168,6 +2171,18 @@ def _rag_chunk_json_curso(data, source):
 
             chunks.append({"text": act_text, "source": source})
 
+    evaluaciones = data.get("evaluaciones", [])
+    for ev in evaluaciones:
+        ev_nombre = ev.get("nombre", "")
+        ev_tipo = ev.get("tipo", "")
+        ev_desc = ev.get("descripcion", "")
+        ev_pond = ev.get("ponderacion", "")
+        ev_pond_str = f" Ponderacion: {ev_pond}%." if ev_pond != "" else ""
+        ev_horas = ev.get("horas", 0)
+        ev_horas_str = f" {ev_horas} horas." if ev_horas else ""
+        text = f"Evaluacion {ev_nombre} ({ev_tipo}): {ev_desc}.{ev_pond_str}{ev_horas_str}"
+        chunks.append({"text": text, "source": source})
+
     return chunks
 
 def _rag_build_chunks():
@@ -2182,10 +2197,12 @@ def _rag_build_chunks():
                     data = json.loads(content)
                     chunks.extend(_rag_chunk_json_curso(data, path))
                 except json.JSONDecodeError:
+                    # Non-fatal: if JSON is invalid, fall back to plain text chunking
                     chunks.extend(_rag_chunk_text(content, path))
             else:
                 chunks.extend(_rag_chunk_text(content, path))
         except (OSError, UnicodeDecodeError):
+            # Non-fatal: omit unreadable or binary-corrupted files from the index
             pass
     return chunks
 
@@ -2298,6 +2315,7 @@ def _rag_corpus_hash():
             st = os.stat(p)
             items.append(f"{p}:{st.st_mtime}:{st.st_size}")
         except OSError:
+            # Non-fatal: omit file if removed or inaccessible during stat
             pass
     h = hashlib.sha256(",".join(items).encode("utf-8")).hexdigest()
     return h[:16]
@@ -2323,6 +2341,7 @@ def _rag_load_or_build():
                 _RAG_INDEX = RagBM25Index.from_dict(data)
                 return _RAG_INDEX
         except (OSError, json.JSONDecodeError):
+            # Non-fatal: stale or corrupted cached index, force rebuild below
             pass
             
     # Need to build
@@ -2337,11 +2356,14 @@ def _rag_load_or_build():
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(idx.to_dict(), f, ensure_ascii=False)
         os.replace(tmp, idx_path)
-    except OSError:
+    except OSError as err:
+        # Non-fatal: if cache directory is not writable, keep index in memory only
+        if os.environ.get("YAP_DEBUG") == "1":
+            sys.stderr.write(f"[yap] Aviso: No se pudo guardar caché RAG ({err}). Operando en memoria.\n")
         pass
         
     _RAG_INDEX = idx
-    return idx
+    return _RAG_INDEX
 
 def rag_rebuild():
     """Force rebuild index."""
@@ -2360,11 +2382,14 @@ def rag_rebuild():
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(idx.to_dict(), f, ensure_ascii=False)
         os.replace(tmp, idx_path)
-    except OSError:
+    except OSError as err:
+        # Non-fatal: keep rebuilt index in memory if disk write fails
+        if os.environ.get("YAP_DEBUG") == "1":
+            sys.stderr.write(f"[yap] Aviso: No se pudo persistir caché reconstruido ({err}).\n")
         pass
     _RAG_INDEX = idx
     t1 = time.time()
-    return idx.N, int((t1 - t0) * 1000)
+    return _RAG_INDEX.N, int((t1 - t0) * 1000)
 
 def rag_retrieve(query, top_k=RAG_TOP_K, max_tokens=RAG_MAX_CONTEXT_TOKENS):
     """Retrieve fragments matching query."""
