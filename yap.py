@@ -3929,8 +3929,8 @@ def notify(title, msg, urgency="normal"):
 
 # ── AppArmor integration (#14) ──────────────────────────────
 
-APPARMOR_PROFILE = "usr.local.bin.yap"
-APPARMOR_PROFILE_PATH = f"/etc/apparmor.d/{APPARMOR_PROFILE}"
+APPARMOR_PROFILE = "yap"
+APPARMOR_PROFILE_PATH = "/etc/apparmor.d/usr.local.bin.yap"
 
 
 def apparmor_status():
@@ -3943,7 +3943,20 @@ def apparmor_status():
     """
     status = {"installed": False, "profile_loaded": False, "mode": None}
 
-    # Check if AppArmor is available
+    # A confined user can inspect its own label without executing aa-status
+    # or reading the privileged, system-wide profile list.
+    try:
+        with open("/proc/self/attr/current") as f:
+            name, separator, mode = f.read().strip().partition(" (")
+        if name == APPARMOR_PROFILE and separator and mode.endswith(")"):
+            status["installed"] = True
+            status["profile_loaded"] = True
+            status["mode"] = mode[:-1]
+            return status
+    except OSError:
+        pass
+
+    # The kernel interface may be hidden from a confined process.
     if not os.path.isdir("/sys/kernel/security/apparmor"):
         return status
     status["installed"] = True
@@ -3961,7 +3974,7 @@ def apparmor_status():
             if APPARMOR_PROFILE in profiles:
                 status["profile_loaded"] = True
                 status["mode"] = profiles[APPARMOR_PROFILE]
-    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError, ValueError):
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError, ValueError):
         pass
 
     # Fallback: check profiles file directly
@@ -3969,11 +3982,10 @@ def apparmor_status():
         try:
             with open("/sys/kernel/security/apparmor/profiles") as f:
                 for line in f:
-                    if APPARMOR_PROFILE in line:
+                    name, separator, mode = line.strip().partition(" (")
+                    if name == APPARMOR_PROFILE and separator and mode.endswith(")"):
                         status["profile_loaded"] = True
-                        parts = line.strip().split()
-                        if len(parts) >= 2:
-                            status["mode"] = parts[1]
+                        status["mode"] = mode[:-1]
                         break
         except (FileNotFoundError, OSError):
             pass
