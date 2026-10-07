@@ -68,6 +68,13 @@ jobs:
           echo "═══════════════════════════════════════════════"
           python -m pytest tests/test_yap_super.py -v --tb=short
 
+      - name: Ejecutar pruebas de Yap Core (Headless / Desacoplado)
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "  PRUEBAS DE YAP CORE (#152)"
+          echo "═══════════════════════════════════════════════"
+          python -m pytest tests/test_yap_core.py -v --tb=short
+
       - name: Verificar ausencia de vulnerabilidades
         run: |
           echo "═══════════════════════════════════════════════"

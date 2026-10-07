@@ -1,5 +1,7 @@
 *.gguf
 *.bin
+bin/
+models/
 __pycache__/
 *.pyc
 build/

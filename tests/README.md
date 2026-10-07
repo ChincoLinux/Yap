@@ -9,6 +9,7 @@ tests/
 ├── test_yap_evaluacion.py   # Evaluacion automatica de actividades (#23)
 ├── test_yap_deb.py          # empaquetado .deb (#31)
 ├── test_yap_super.py        # Super Yap Gradio Cloud Run + contexto (#91)
+├── test_yap_core.py         # Motor en segundo plano y desacoplamiento headless (#152)
 ├── run_tests.py             # Ejecutor con reporte integrado
 ├── report/                  # Reportes generados (--report)
 └── README.md                # Este archivo

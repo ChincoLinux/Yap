@@ -19,6 +19,18 @@ import time
 import math
 import hashlib
 
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
 WHITELIST_WEB = f"{CONFIG_DIR}/whitelist/web.conf"
@@ -4767,7 +4779,13 @@ def _responder_super_por_fallback(prompt, context, store_history, motivo):
     return None
 
 
-def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=True):
+def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=True, on_token=None):
+    if on_token is not None:
+        import yap_core
+        return yap_core.query_stream(
+            prompt, context=context, store_history=store_history,
+            allow_super_fallback=allow_super_fallback, on_token=on_token,
+        )
     if (
         allow_super_fallback
         and _super_disponible()
@@ -5080,7 +5098,7 @@ def classify_intent(user_input):
             # antes del LLM, y alargar este prompt degrada al modelo 1B.
             if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "curso", "guia", "progreso", "sesion", "help", "query"):
                 return action, param
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
 
     return "query", user_input.strip()
@@ -5450,6 +5468,12 @@ def handle_action(action, param, original_input):
     else:
         print("Consultando LLM...")
         print(cmd_query(original_input))
+
+
+def get_engine():
+    """Retorna la instancia del motor desacoplado yap_core (#152)."""
+    import yap_core
+    return yap_core.get_engine()
 
 
 if __name__ == "__main__":
