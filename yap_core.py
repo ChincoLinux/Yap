@@ -756,3 +756,4 @@ def reset_engine():
         if _GLOBAL_ENGINE is not None:
             _GLOBAL_ENGINE.stop()
             _GLOBAL_ENGINE = None
+
