@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Motor desacoplado y headless yap_core (#152): capa de abstracción asíncrona
+  basada en hilos (`threading`/`queue`) y streaming de tokens mediante callbacks,
+  permitiendo a interfaces gráficas y widgets de escritorio consultar y ejecutar
+  acciones de Yap sin congelar la interfaz de usuario ni bloquear la consola.
 - Rutas de teclado para las ordenes que el menu anuncia (#59): `abre`,
   `abrir`, `busca`, `buscar`, `pseint`, `tutor pseint` y `aprender pseint`
   se resuelven en `interpret()` sin pasar por el clasificador, que con el

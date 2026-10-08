@@ -23,6 +23,7 @@ import shutil
 import json
 import time
 import unittest.mock as mock
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import yap
@@ -586,7 +587,10 @@ class TestRagPathTraversal(RagTestBase):
             json.dump({"secret": "data"}, f)
         # Create symlink inside cursos dir
         link = os.path.join(self.cursos_dir, "evil.json")
-        os.symlink(outside, link)
+        try:
+            os.symlink(outside, link)
+        except OSError:
+            pytest.skip("Symlinks require administrator privileges on Windows")
         # Corpus paths should NOT include the symlinked file
         paths = yap._rag_corpus_paths()
         for p in paths:

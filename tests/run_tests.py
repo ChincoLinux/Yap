@@ -232,6 +232,21 @@ def main():
         for e in errors:
             print(f"     {e}")
 
+    # --- Pruebas de Yap Core (#152) ---
+    print_header("PRUEBAS DE YAP CORE (#152)")
+    core_file = os.path.join(os.path.dirname(__file__), "test_yap_core.py")
+    result = run_pytest(core_file)
+    passed, failed, errors = parse_pytest_output(result.stdout)
+    total_passed += passed
+    total_failed += failed
+    all_results.append(("Yap Core", passed, failed, errors))
+    if failed == 0:
+        print(f"  ✓ [{passed}/{passed + failed}] pruebas de Yap Core pasadas")
+    else:
+        print(f"  ✗ [{passed}/{passed + failed}] pruebas pasadas, {failed} fallaron")
+        for e in errors:
+            print(f"     {e}")
+
     # --- Pruebas de empaquetado .deb ---
     print_header("PRUEBAS DE EMPAQUETADO (.deb)")
     deb_file = os.path.join(os.path.dirname(__file__), "test_yap_deb.py")
