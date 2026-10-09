@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - i18n multi-idioma (#36): catálogos JSON `es`/`en`/`arn`, `yap perfil idioma`,
   LLM responde en el idioma del perfil; mapudungun con traducción comunitaria parcial
+- Modo profesor (#25): `yap profesor` abre un panel con el progreso de la
+  clase. El docente importa los `progress.json` de sus estudiantes desde una
+  carpeta o una llave USB (`yap profesor importar`), y el panel muestra avance,
+  nota ponderada en escala chilena y fecha de la ultima actividad, con filtros
+  por curso y por EA, ficha individual y exportacion a CSV. Requiere
+  `yap perfil rol profesor` y un PIN, que se guarda derivado con sal. El rol
+  `estudiante`/`profesor` es nuevo en el perfil (#24). La opcion solo aparece
+  en el menu de quien tiene el rol, de modo que la numeracion del estudiante no
+  cambia. Todo local: nada se envia a ninguna parte
 - Rutas de teclado para las ordenes que el menu anuncia (#59): `abre`,
   `abrir`, `busca`, `buscar`, `pseint`, `tutor pseint` y `aprender pseint`
   se resuelven en `interpret()` sin pasar por el clasificador, que con el

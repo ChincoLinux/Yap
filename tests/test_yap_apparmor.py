@@ -50,7 +50,7 @@ class TestAppArmorStatus:
                 import json
                 mock_run.return_value = mock.MagicMock(
                     returncode=0,
-                    stdout=json.dumps({"profiles": {"usr.local.bin.yap": "enforce"}})
+                    stdout=json.dumps({"profiles": {"yap": "enforce"}})
                 )
                 status = yap.apparmor_status()
                 assert status["installed"] is True
@@ -64,11 +64,49 @@ class TestAppArmorStatus:
                 import json
                 mock_run.return_value = mock.MagicMock(
                     returncode=0,
-                    stdout=json.dumps({"profiles": {"usr.local.bin.yap": "complain"}})
+                    stdout=json.dumps({"profiles": {"yap": "complain"}})
                 )
                 status = yap.apparmor_status()
                 assert status["profile_loaded"] is True
                 assert status["mode"] == "complain"
+
+    @pytest.mark.parametrize("mode", ["enforce", "complain"])
+    def test_kernel_fallback_uses_exact_profile_name(self, mode):
+        profiles = f"other-yap (enforce)\nyap-child (enforce)\nyap ({mode})\n"
+        with mock.patch("os.path.isdir", return_value=True), \
+             mock.patch("subprocess.run", side_effect=FileNotFoundError), \
+             mock.patch("builtins.open", mock.mock_open(read_data=profiles)):
+            assert yap.apparmor_status() == {
+                "installed": True, "profile_loaded": True, "mode": mode,
+            }
+
+    def test_kernel_fallback_rejects_similar_names(self):
+        with mock.patch("os.path.isdir", return_value=True), \
+             mock.patch("subprocess.run", side_effect=FileNotFoundError), \
+             mock.patch("builtins.open", mock.mock_open(
+                 read_data="other-yap (enforce)\nyap-child (enforce)\n",
+             )):
+            assert yap.apparmor_status()["profile_loaded"] is False
+
+    def test_profile_name_and_filename_are_distinct(self):
+        assert yap.APPARMOR_PROFILE == "yap"
+        assert yap.APPARMOR_PROFILE_PATH == "/etc/apparmor.d/usr.local.bin.yap"
+
+    @pytest.mark.parametrize("mode", ["enforce", "complain"])
+    def test_confined_user_reads_own_label_without_subprocess(self, mode):
+        with mock.patch("os.path.isdir", return_value=False), \
+             mock.patch("builtins.open", mock.mock_open(read_data=f"yap ({mode})\n")), \
+             mock.patch("subprocess.run") as run:
+            assert yap.apparmor_status() == {
+                "installed": True, "profile_loaded": True, "mode": mode,
+            }
+            run.assert_not_called()
+
+    def test_permission_errors_do_not_crash_status(self):
+        with mock.patch("os.path.isdir", return_value=True), \
+             mock.patch("builtins.open", side_effect=PermissionError), \
+             mock.patch("subprocess.run", side_effect=PermissionError):
+            assert yap.apparmor_status()["profile_loaded"] is False
 
 
 class TestCmdAppArmorStatus:
