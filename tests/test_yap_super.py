@@ -26,6 +26,7 @@ class SuperTestBase:
         yap.HISTORY.clear()
         yap._SUPER_ESTADO = "local"
         yap._SUPER_MODO = "auto"
+        yap._SUPER_ELECCION = None
         yap._gradio_reset_cache()
         self._env_backup = {
             k: os.environ.get(k)
@@ -49,6 +50,7 @@ class SuperTestBase:
         yap.HISTORY.clear()
         yap._SUPER_ESTADO = "local"
         yap._SUPER_MODO = "auto"
+        yap._SUPER_ELECCION = None
         yap._gradio_reset_cache()
 
     def habilitar(self, endpoint=None, token=""):
@@ -511,6 +513,122 @@ class TestFallbackLocalASuper(SuperTestBase):
         yap._SUPER_MODO = "local"
         action, param = yap.interpret("explica la diferencia entre while y for")
         assert action == "query"
+
+
+class TestEleccionTurnoConsulta(SuperTestBase):
+    """#151: en auto interactivo, el estudiante elige nube o local cada turno."""
+
+    @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    def test_interactivo_respuesta_n_usa_nube(self, _cls):
+        self.habilitar()
+        os.environ["YAP_SUPER_INTERNET"] = "1"
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            with patch("builtins.input", return_value="N") as mock_input:
+                action, param = yap.interpret("hola", interactivo=True)
+        assert action == "super_query"
+        mock_input.assert_called_once()
+        assert "nube" in mock_input.call_args[0][0]
+
+    @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    def test_interactivo_respuesta_l_usa_local(self, _cls):
+        self.habilitar()
+        os.environ["YAP_SUPER_INTERNET"] = "1"
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            with patch("builtins.input", return_value="l") as mock_input:
+                action, param = yap.interpret("hola", interactivo=True)
+        assert action == "query_local"
+        mock_input.assert_called_once()
+
+    @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    def test_interactivo_enter_por_defecto_usa_nube(self, _cls):
+        self.habilitar()
+        os.environ["YAP_SUPER_INTERNET"] = "1"
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            with patch("builtins.input", return_value=""):
+                action, param = yap.interpret("hola", interactivo=True)
+        assert action == "super_query"
+
+    @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    def test_interactivo_sin_internet_no_pregunta(self, _cls):
+        self.habilitar()
+        os.environ["YAP_SUPER_INTERNET"] = "0"
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            with patch("builtins.input") as mock_input:
+                action, param = yap.interpret("hola", interactivo=True)
+        assert action == "query_local"
+        mock_input.assert_not_called()
+
+    @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    def test_interactivo_sin_tty_no_pregunta(self, _cls):
+        self.habilitar()
+        os.environ["YAP_SUPER_INTERNET"] = "1"
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = False
+            with patch("builtins.input") as mock_input:
+                action, param = yap.interpret("hola", interactivo=True)
+        assert action == "super_query"
+        mock_input.assert_not_called()
+
+    @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    def test_no_interactivo_mantiene_automatismo(self, _cls):
+        self.habilitar()
+        os.environ["YAP_SUPER_INTERNET"] = "1"
+        action, param = yap.interpret("hola")
+        assert action == "super_query"
+
+    @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    def test_modo_super_on_no_pregunta(self, _cls):
+        self.habilitar()
+        yap._SUPER_MODO = "super"
+        with patch("builtins.input") as mock_input:
+            action, param = yap.interpret("hola", interactivo=True)
+        assert action == "super_query"
+        mock_input.assert_not_called()
+
+    @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    def test_super_off_no_pregunta_y_usa_local(self, _cls):
+        self.habilitar()
+        os.environ["YAP_SUPER_INTERNET"] = "1"
+        yap.cmd_super_modo("off")
+        with patch("builtins.input") as mock_input:
+            action, param = yap.interpret("hola", interactivo=True)
+        assert action == "query_local"
+        mock_input.assert_not_called()
+
+    @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    def test_super_auto_reactiva_pregunta(self, _cls):
+        self.habilitar()
+        os.environ["YAP_SUPER_INTERNET"] = "1"
+        yap.cmd_super_modo("on")
+        assert yap.cmd_super_modo("auto")
+        assert yap._SUPER_ELECCION is None
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            with patch("builtins.input", return_value="l") as mock_input:
+                action, param = yap.interpret("hola", interactivo=True)
+        assert action == "query_local"
+        mock_input.assert_called_once()
+
+    def test_super_pregunta_explicita_no_pregunta(self):
+        self.habilitar()
+        os.environ["YAP_SUPER_INTERNET"] = "1"
+        with patch.object(yap, "classify_intent") as mock_cls:
+            with patch("builtins.input") as mock_input:
+                action, param = yap.interpret("super explica while", interactivo=True)
+        assert action == "super_query"
+        mock_cls.assert_not_called()
+        mock_input.assert_not_called()
+
+    def test_handle_action_query_local_no_delega(self):
+        with patch.object(yap, "cmd_query", return_value="local") as mock_cmd:
+            with patch("builtins.print"):
+                yap.handle_action("query_local", "hola", "hola")
+        mock_cmd.assert_called_once()
+        assert mock_cmd.call_args.kwargs.get("allow_super_fallback") is False
 
 
 class TestNoImportsPeligrososSuper:
