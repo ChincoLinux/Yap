@@ -224,14 +224,18 @@ class TestExportacion(TelemetryTestBase):
         """Las fechas de uso podrían correlacionarse con una persona concreta."""
         yap.registrar_uso("query")
         yap.cmd_telemetria("exportar")
-        contenido = open(self.efile, encoding="utf-8").read()
+        with open(self.efile, encoding="utf-8") as _f:
+
+            contenido = _f.read()
         assert "creado" not in contenido
         assert "actualizado" not in contenido
 
     def test_el_export_no_lleva_rutas_ni_usuario(self):
         yap.registrar_uso("query")
         yap.cmd_telemetria("exportar")
-        contenido = open(self.efile, encoding="utf-8").read()
+        with open(self.efile, encoding="utf-8") as _f:
+
+            contenido = _f.read()
         assert os.path.expanduser("~") not in contenido
         assert "/home/" not in contenido
         assert "C:\\" not in contenido
@@ -255,7 +259,9 @@ class TestPrivacidad(TelemetryTestBase):
         """El texto que escribe el estudiante no debe quedar registrado."""
         with mock.patch.object(yap, "cmd_query", return_value="respuesta"):
             yap.handle_action("query", "mi nombre es Juan Perez", "mi nombre es Juan Perez")
-        contenido = open(self.tfile, encoding="utf-8").read()
+        with open(self.tfile, encoding="utf-8") as _f:
+
+            contenido = _f.read()
         assert "Juan" not in contenido
         assert "nombre" not in contenido
 

@@ -33,7 +33,7 @@ class TestAppWhitelist:
         # Crear whitelist temporal para pruebas
         self.tmp_dir = tempfile.mkdtemp()
         self.apps_path = os.path.join(self.tmp_dir, "apps.conf")
-        with open(self.apps_path, "w") as f:
+        with open(self.apps_path, "w", encoding="utf-8") as f:
             f.write("# Apps permitidas\n")
             f.write("LibreOffice:libreoffice\n")
             f.write("Firefox:firefox-esr,firefox\n")
@@ -84,7 +84,7 @@ class TestDomainWhitelist:
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()
         self.web_path = os.path.join(self.tmp_dir, "web.conf")
-        with open(self.web_path, "w") as f:
+        with open(self.web_path, "w", encoding="utf-8") as f:
             f.write("# Dominios permitidos\n")
             f.write("wikipedia.org\n")
             f.write("debian.org\n")
@@ -133,7 +133,9 @@ class TestCommandSecurity:
 
     def test_no_shell_true_en_subprocess(self):
         """Verificar que subprocess nunca usa shell=True."""
-        source = open(yap.__file__).read()
+        with open(yap.__file__, encoding="utf-8") as _f:
+
+            source = _f.read()
         # Buscar shell=True en el codigo fuente
         # Nota: shell=True es peligroso porque permite injection
         assert "shell=True" not in source, (
@@ -142,14 +144,18 @@ class TestCommandSecurity:
 
     def test_no_eval(self):
         """Verificar que no se usa eval() en el codigo."""
-        source = open(yap.__file__).read()
+        with open(yap.__file__, encoding="utf-8") as _f:
+
+            source = _f.read()
         assert "eval(" not in source, (
             "eval() detectado — riesgo de ejecucion de codigo arbitrario"
         )
 
     def test_no_os_system(self):
         """Verificar que no se usa os.system()."""
-        source = open(yap.__file__).read()
+        with open(yap.__file__, encoding="utf-8") as _f:
+
+            source = _f.read()
         assert "os.system(" not in source, (
             "os.system() detectado — riesgo de shell injection"
         )
@@ -158,7 +164,7 @@ class TestCommandSecurity:
         """Intentar injection en nombre de app debe fallar gracefulmente."""
         tmp_dir = tempfile.mkdtemp()
         apps_path = os.path.join(tmp_dir, "apps.conf")
-        with open(apps_path, "w") as f:
+        with open(apps_path, "w", encoding="utf-8") as f:
             f.write("LibreOffice:libreoffice\n")
 
         with mock.patch.object(yap, "WHITELIST_APPS", apps_path):
@@ -183,7 +189,7 @@ class TestCommandSecurity:
         """Intentar URLs maliciosas debe ser bloqueado."""
         tmp_dir = tempfile.mkdtemp()
         web_path = os.path.join(tmp_dir, "web.conf")
-        with open(web_path, "w") as f:
+        with open(web_path, "w", encoding="utf-8") as f:
             f.write("wikipedia.org\n")
 
         with mock.patch.object(yap, "WHITELIST_WEB", web_path):
@@ -215,7 +221,7 @@ class TestConfigLoading:
         """Lineas con # deben ser ignoradas."""
         tmp_dir = tempfile.mkdtemp()
         path = os.path.join(tmp_dir, "test.conf")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write("# Comentario\n")
             f.write("  # Otro comentario\n")
             f.write("App:comando\n")
@@ -231,7 +237,7 @@ class TestConfigLoading:
         """Lineas vacias deben ser ignoradas."""
         tmp_dir = tempfile.mkdtemp()
         path = os.path.join(tmp_dir, "test.conf")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write("\n\n\n")
             f.write("App:comando\n")
             f.write("\n")
@@ -246,7 +252,7 @@ class TestConfigLoading:
         """Lineas sin ':' deben ser ignoradas."""
         tmp_dir = tempfile.mkdtemp()
         path = os.path.join(tmp_dir, "test.conf")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write("linea sin dos puntos\n")
             f.write("App:comando\n")
 
@@ -267,14 +273,18 @@ class TestSecurityLimits:
     def test_contenido_limitado_3000_chars(self):
         """El contenido webfetch debe limitarse a 3000 caracteres."""
         # Verificar que la funcion cmd_webfetch limita la salida
-        source = open(yap.__file__).read()
+        with open(yap.__file__, encoding="utf-8") as _f:
+
+            source = _f.read()
         assert "text[:3000]" in source or "text[:2000]" in source, (
             "No se encontro limite de caracteres en cmd_webfetch"
         )
 
     def test_timeout_en_subprocess(self):
         """Todas las llamadas a subprocess deben tener timeout."""
-        source = open(yap.__file__).read()
+        with open(yap.__file__, encoding="utf-8") as _f:
+
+            source = _f.read()
         # Buscar subprocess.run sin timeout
         import re
         # Encontrar todas las llamadas a subprocess.run
@@ -296,7 +306,9 @@ class TestFileSystemSecurity:
 
     def test_no_escritura_fuera_de_whitelist(self):
         """Verificar que no hay operaciones de escritura arbitrarias."""
-        source = open(yap.__file__).read()
+        with open(yap.__file__, encoding="utf-8") as _f:
+
+            source = _f.read()
         # No debe haber open() con 'w' fuera de load_whitelist
         # (load_whitelist solo LEE archivos)
         dangerous_patterns = [
@@ -361,7 +373,7 @@ class TestCodeQuality:
 
     def test_no_shebang_incorrecto(self):
         """Verificar que el shebang es correcto."""
-        with open(yap.__file__) as f:
+        with open(yap.__file__, encoding="utf-8") as f:
             first_line = f.readline().strip()
         assert first_line == "#!/usr/bin/env python3", (
             f"Shebang incorrecto: {first_line}"
@@ -369,7 +381,7 @@ class TestCodeQuality:
 
     def test_imports_minimos(self):
         """Verificar que solo se importan modulos necesarios."""
-        with open(yap.__file__) as f:
+        with open(yap.__file__, encoding="utf-8") as f:
             source = f.read()
         imports = []
         for line in source.split("\n"):

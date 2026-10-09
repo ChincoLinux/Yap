@@ -127,7 +127,7 @@ class TestConfirmationPersistence:
     def test_load_confirmations_json_invalido(self):
         tmp = tempfile.mkdtemp()
         conf_file = os.path.join(tmp, "confirmations.json")
-        with open(conf_file, "w") as f:
+        with open(conf_file, "w", encoding="utf-8") as f:
             f.write("not json{{{")
         with mock.patch.object(yap, "CONFIRMATION_FILE", conf_file):
             assert yap._load_confirmations() == {}
@@ -139,7 +139,7 @@ class TestConfirmationPersistence:
         with mock.patch.object(yap, "CONFIRMATION_FILE", conf_file):
             yap._save_confirmations({"test": 1})
             assert os.path.exists(conf_file)
-            with open(conf_file) as f:
+            with open(conf_file, encoding="utf-8") as f:
                 assert json.load(f) == {"test": 1}
             # No debe quedar archivo .tmp
             assert not os.path.exists(conf_file + ".tmp")

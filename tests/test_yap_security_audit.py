@@ -33,7 +33,7 @@ class TestPathTraversal:
         self.cursos_dir = os.path.join(self.tmp_dir, "cursos")
         os.makedirs(self.cursos_dir)
         # Create a valid course
-        with open(os.path.join(self.cursos_dir, "FPY1101.json"), "w") as f:
+        with open(os.path.join(self.cursos_dir, "FPY1101.json"), "w", encoding="utf-8") as f:
             json.dump({
                 "codigo": "FPY1101", "nombre": "Test", "horas": 1,
                 "semanas": 1, "ras": [], "eas": [], "evaluaciones": []
@@ -86,7 +86,7 @@ class TestSchemeValidation:
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()
         self.web_path = os.path.join(self.tmp_dir, "web.conf")
-        with open(self.web_path, "w") as f:
+        with open(self.web_path, "w", encoding="utf-8") as f:
             f.write("wikipedia.org\n")
 
     def teardown_method(self):
@@ -133,7 +133,7 @@ class TestAppInjectionFuzz:
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()
         self.apps_path = os.path.join(self.tmp_dir, "apps.conf")
-        with open(self.apps_path, "w") as f:
+        with open(self.apps_path, "w", encoding="utf-8") as f:
             f.write("Firefox:firefox\n")
 
     def teardown_method(self):
@@ -178,7 +178,7 @@ class TestLargeInputFuzz:
         long_name = "A" * 10000
         tmp_dir = tempfile.mkdtemp()
         apps_path = os.path.join(tmp_dir, "apps.conf")
-        with open(apps_path, "w") as f:
+        with open(apps_path, "w", encoding="utf-8") as f:
             f.write("Firefox:firefox\n")
         with mock.patch.object(yap, "WHITELIST_APPS", apps_path):
             result = yap.cmd_open_app(long_name)
@@ -193,7 +193,7 @@ class TestUnicodeFuzz:
     def test_emoji_en_app_name(self):
         tmp_dir = tempfile.mkdtemp()
         apps_path = os.path.join(tmp_dir, "apps.conf")
-        with open(apps_path, "w") as f:
+        with open(apps_path, "w", encoding="utf-8") as f:
             f.write("Firefox:firefox\n")
         with mock.patch.object(yap, "WHITELIST_APPS", apps_path):
             result = yap.cmd_open_app("🔥💥")
@@ -204,7 +204,7 @@ class TestUnicodeFuzz:
     def test_unicode_en_url(self):
         tmp_dir = tempfile.mkdtemp()
         web_path = os.path.join(tmp_dir, "web.conf")
-        with open(web_path, "w") as f:
+        with open(web_path, "w", encoding="utf-8") as f:
             f.write("wikipedia.org\n")
         with mock.patch.object(yap, "WHITELIST_WEB", web_path):
             result = yap.cmd_webfetch("http://wikipedia.org/🔥")
@@ -222,7 +222,7 @@ class TestCorruptJsonFuzz:
         tmp_dir = tempfile.mkdtemp()
         cursos_dir = os.path.join(tmp_dir, "cursos")
         os.makedirs(cursos_dir)
-        with open(os.path.join(cursos_dir, "BROKEN.json"), "w") as f:
+        with open(os.path.join(cursos_dir, "BROKEN.json"), "w", encoding="utf-8") as f:
             f.write("{not valid json{{{")
         with mock.patch.object(yap, "CURSOS_DIR", cursos_dir):
             with pytest.raises(json.JSONDecodeError):
@@ -234,7 +234,7 @@ class TestCorruptJsonFuzz:
         """progress.json corrupto debe retornar dict vacío."""
         tmp_dir = tempfile.mkdtemp()
         prog_file = os.path.join(tmp_dir, "progress.json")
-        with open(prog_file, "w") as f:
+        with open(prog_file, "w", encoding="utf-8") as f:
             f.write("not json{{{")
         with mock.patch.object(yap, "PROGRESS_FILE", prog_file):
             result = yap.cargar_progreso()
