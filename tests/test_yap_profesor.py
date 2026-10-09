@@ -518,23 +518,23 @@ class TestMenu(ProfesorTestBase):
     """Requisito: la opcion no ensucia el menu del estudiante."""
 
     def test_el_estudiante_no_ve_la_opcion(self):
-        etiquetas = [e for e, _ in yap._menu_principal()]
+        etiquetas = [e for e, *_ in yap._menu_principal()]
         assert not any("Profesor" in e for e in etiquetas)
 
     def test_el_profesor_si_la_ve(self):
         yap.actualizar_rol("profesor")
-        etiquetas = [e for e, _ in yap._menu_principal()]
+        etiquetas = [e for e, *_ in yap._menu_principal()]
         assert any("Profesor" in e for e in etiquetas)
 
     def test_la_numeracion_del_estudiante_no_cambia(self):
         """Anadir la opcion no puede mover los numeros que ya usa el alumno."""
-        base = [c for _, c in yap._menu_principal()]
+        base = [c for _, c, *_ in yap._menu_principal()]
         yap.actualizar_rol("profesor")
-        con_rol = [c for _, c in yap._menu_principal()]
+        con_rol = [c for _, c, *_ in yap._menu_principal()]
         assert con_rol[:len(base) - 3] == base[:len(base) - 3]
 
     def test_el_numero_del_profesor_enruta(self):
         yap.actualizar_rol("profesor")
         opciones = yap._menu_principal()
-        numero = next(i for i, (e, _) in enumerate(opciones, 1) if "Profesor" in e)
+        numero = next(i for i, (e, *_) in enumerate(opciones, 1) if "Profesor" in e)
         assert yap.interpret(str(numero)) == ("profesor", "")

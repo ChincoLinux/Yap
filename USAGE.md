@@ -47,6 +47,9 @@ yap --tutorial
 
 | `yap telemetria` | Resumen local de tu uso de Yap. |
 | `yap profesor` | Panel de monitoreo de la clase (requiere rol y PIN). |
+| `yap rag` | Estado del indice de recuperacion contextual RAG local. |
+| `yap rag rebuild` | Reconstruir el indice RAG local forzadamente. |
+| `yap rag buscar <tema>` | Buscar directamente en el corpus local (cursos, guias). |
 | `yap super` | Estado de Super Yap (Gradio Cloud Run, opt-in, ver [docs/SUPER-YAP.md](docs/SUPER-YAP.md)). |
 | `yap super on` / `yap super off` | Usar Super Yap en todas las consultas, o volver al local. |
 | `yap super <pregunta>` | Forzar Super Yap; si no está, usa el LLM local. |
@@ -56,6 +59,27 @@ yap --tutorial
 | `yap que es python` | Pregunta sobre programacion. |
 | `yap busca <tema>` | Buscar en Wikipedia y resumir con AI. |
 | `yap abre firefox` | Abrir aplicacion permitida. |
+
+## Ordenes directas
+
+Estas ordenes se resuelven sin consultar al clasificador, asi que responden
+siempre igual y al instante:
+
+| Escribe | Hace |
+|---------|------|
+| `abre firefox` | Abre una aplicacion de la whitelist (`abrir` tambien vale). |
+| `busca que es un algoritmo` | Busca en Wikipedia y resume (`buscar` tambien). |
+| `pseint como hago un ciclo` | Pregunta al tutor (`tutor pseint` tambien). |
+| `aprender pseint` | Abre el tutorial interactivo. |
+
+Lo que escribas despues de la orden se respeta tal cual, con sus mayusculas:
+`busca Linus Torvalds` busca exactamente eso.
+
+Si escribes solo `abre`, sin nada mas, Yap se lo pasa al modelo para que
+interprete que querias.
+
+En el menu numerado, elegir una opcion que necesita datos —como «Abre [app]»—
+te responde con un ejemplo de como escribirla.
 
 ## Modo interactivo
 
@@ -382,7 +406,22 @@ Actividades no aprobadas: 2
 Las fortalezas y las areas por mejorar se calculan a partir de los criterios
 registrados durante la EA, sin consultar al modelo. Un criterio solo cuenta
 como fortaleza si no se fallo en ninguna actividad: aprobarlo una vez no
-cancela un fallo posterior.
+
+## RAG local (Recuperacion Aumentada Offline)
+
+Yap cuenta con un motor de RAG local basado en **Okapi BM25** (100% biblioteca estandar de Python, 0 dependencias externas) que indexa planes de estudio (`cursos/*.json`), documentacion (`docs/*.md`), listas de aplicaciones/web (`whitelist/*.conf`) y manuales.
+
+Al formular cualquier pregunta al asistente, Yap busca automaticamente los fragmentos mas relevantes y los inyecta en el contexto del modelo, manteniendose estrictamente dentro del limite de tokens configurado (`YAP_RAG_MAX_TOKENS = 512`) para proteger la memoria RAM y la velocidad de inferencia en CPU.
+
+### Comandos de administracion e inspeccion
+
+| Comando | Descripcion |
+|---------|-------------|
+| `yap rag` o `yap rag status` | Muestra si el RAG esta activo, ruta del indice en cache y cantidad de fragmentos. |
+| `yap rag rebuild` | Fuerza la reconstruccion completa del indice BM25 y mide la latencia. |
+| `yap rag buscar <tema>` | Realiza una busqueda directa para verificar que fragmentos y puntajes devuelve el motor. |
+
+Para detalles tecnicos sobre la formula BM25, la arquitectura y las justificaciones de diseno, consulta [docs/RAG.md](docs/RAG.md).
 
 ## Ramas de configuracion
 
