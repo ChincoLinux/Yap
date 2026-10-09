@@ -4,7 +4,7 @@ Section: education
 Priority: optional
 Architecture: amd64
 Depends: python3 (>= 3.11), libnotify-bin, apparmor
-Recommends: yap-models-1b | yap-models-3b
+Recommends: yap-models-1b | yap-models-3b, libpam-systemd
 Suggests: firefox-esr, libreoffice, evince, micro, htop
 Maintainer: ChincoLinux <chincolinux@users.noreply.github.com>
 Homepage: https://github.com/ChincoLinux/Yap
