@@ -176,5 +176,123 @@ class TestHandleActionIntegration:
                     yap.handle_action("webfetch", "https://wikipedia.org", "fetch")
 
 
+class TestMotorConsulta:
+    """#151: elección nube/local por turno en el REPL.
+
+    En 'auto' con internet y TTY pregunta; sin red, sin TTY o con una
+    elección explícita decide sin solicitar input().
+    """
+
+    def test_internet_respuesta_n_usa_nube(self):
+        with mock.patch.object(yap, "_super_disponible", return_value=True), \
+             mock.patch.object(yap, "_hay_internet", return_value=True), \
+             mock.patch.object(yap, "_SUPER_MODO", "auto"), \
+             mock.patch.object(yap, "_SUPER_ELECCION", None), \
+             mock.patch("sys.stdin") as mock_stdin, \
+             mock.patch("builtins.input", return_value="N") as mock_input:
+            mock_stdin.isatty.return_value = True
+            assert yap._elegir_motor_consulta() is True
+            mock_input.assert_called_once()
+            assert "nube" in mock_input.call_args[0][0]
+
+    def test_internet_respuesta_l_usa_local(self):
+        with mock.patch.object(yap, "_super_disponible", return_value=True), \
+             mock.patch.object(yap, "_hay_internet", return_value=True), \
+             mock.patch.object(yap, "_SUPER_MODO", "auto"), \
+             mock.patch.object(yap, "_SUPER_ELECCION", None), \
+             mock.patch("sys.stdin") as mock_stdin, \
+             mock.patch("builtins.input", return_value="l") as mock_input:
+            mock_stdin.isatty.return_value = True
+            assert yap._elegir_motor_consulta() is False
+            mock_input.assert_called_once()
+
+    def test_internet_enter_por_defecto_usa_nube(self):
+        with mock.patch.object(yap, "_super_disponible", return_value=True), \
+             mock.patch.object(yap, "_hay_internet", return_value=True), \
+             mock.patch.object(yap, "_SUPER_MODO", "auto"), \
+             mock.patch.object(yap, "_SUPER_ELECCION", None), \
+             mock.patch("sys.stdin") as mock_stdin, \
+             mock.patch("builtins.input", return_value=""):
+            mock_stdin.isatty.return_value = True
+            assert yap._elegir_motor_consulta() is True
+
+    def test_sin_internet_va_directo_a_local(self):
+        with mock.patch.object(yap, "_super_disponible", return_value=True), \
+             mock.patch.object(yap, "_hay_internet", return_value=False), \
+             mock.patch.object(yap, "_SUPER_MODO", "auto"), \
+             mock.patch.object(yap, "_SUPER_ELECCION", None), \
+             mock.patch("sys.stdin") as mock_stdin, \
+             mock.patch("builtins.input") as mock_input:
+            mock_stdin.isatty.return_value = True
+            assert yap._elegir_motor_consulta() is False
+            mock_input.assert_not_called()
+
+    def test_sin_tty_no_pregunta(self):
+        with mock.patch.object(yap, "_super_disponible", return_value=True), \
+             mock.patch.object(yap, "_hay_internet", return_value=True), \
+             mock.patch.object(yap, "_SUPER_MODO", "auto"), \
+             mock.patch.object(yap, "_SUPER_ELECCION", None), \
+             mock.patch("sys.stdin") as mock_stdin, \
+             mock.patch("builtins.input") as mock_input:
+            mock_stdin.isatty.return_value = False
+            assert yap._elegir_motor_consulta() is True
+            mock_input.assert_not_called()
+
+    def test_no_interactivo_no_pregunta(self):
+        with mock.patch.object(yap, "_super_disponible", return_value=True), \
+             mock.patch.object(yap, "_hay_internet", return_value=True), \
+             mock.patch.object(yap, "_SUPER_MODO", "auto"), \
+             mock.patch.object(yap, "_SUPER_ELECCION", None), \
+             mock.patch("builtins.input") as mock_input:
+            assert yap._elegir_motor_consulta(interactivo=False) is True
+            mock_input.assert_not_called()
+
+    def test_modo_super_no_pregunta(self):
+        with mock.patch.object(yap, "_super_disponible", return_value=True), \
+             mock.patch.object(yap, "_hay_internet", return_value=False), \
+             mock.patch.object(yap, "_SUPER_MODO", "super"), \
+             mock.patch.object(yap, "_SUPER_ELECCION", None), \
+             mock.patch("builtins.input") as mock_input:
+            assert yap._elegir_motor_consulta() is True
+            mock_input.assert_not_called()
+
+    def test_modo_local_no_pregunta(self):
+        with mock.patch.object(yap, "_super_disponible", return_value=False), \
+             mock.patch.object(yap, "_hay_internet", return_value=True), \
+             mock.patch.object(yap, "_SUPER_MODO", "local"), \
+             mock.patch.object(yap, "_SUPER_ELECCION", None), \
+             mock.patch("builtins.input") as mock_input:
+            assert yap._elegir_motor_consulta() is False
+            mock_input.assert_not_called()
+
+    def test_eleccion_explicita_local_no_pregunta(self):
+        with mock.patch.object(yap, "_super_disponible", return_value=True), \
+             mock.patch.object(yap, "_hay_internet", return_value=True), \
+             mock.patch.object(yap, "_SUPER_MODO", "auto"), \
+             mock.patch.object(yap, "_SUPER_ELECCION", "local"), \
+             mock.patch("builtins.input") as mock_input:
+            assert yap._elegir_motor_consulta() is False
+            mock_input.assert_not_called()
+
+    def test_eleccion_explicita_super_no_pregunta(self):
+        with mock.patch.object(yap, "_super_disponible", return_value=True), \
+             mock.patch.object(yap, "_hay_internet", return_value=False), \
+             mock.patch.object(yap, "_SUPER_MODO", "auto"), \
+             mock.patch.object(yap, "_SUPER_ELECCION", "super"), \
+             mock.patch("builtins.input") as mock_input:
+            assert yap._elegir_motor_consulta() is True
+            mock_input.assert_not_called()
+
+    def test_eof_usa_nube_por_defecto(self):
+        with mock.patch.object(yap, "_super_disponible", return_value=True), \
+             mock.patch.object(yap, "_hay_internet", return_value=True), \
+             mock.patch.object(yap, "_SUPER_MODO", "auto"), \
+             mock.patch.object(yap, "_SUPER_ELECCION", None), \
+             mock.patch("sys.stdin") as mock_stdin, \
+             mock.patch("builtins.input", side_effect=EOFError):
+            mock_stdin.isatty.return_value = True
+            assert yap._elegir_motor_consulta() is True
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
