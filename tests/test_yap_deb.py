@@ -19,6 +19,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -301,47 +302,194 @@ class TestBuildDebSmoke:
             assert "usr/local/bin/llama-cli" in out
             assert "usr/share/yap/whitelist/apps.conf" in out
             assert "usr/share/yap/apparmor/usr.local.bin.yap" in out
+            assert "etc/apparmor.d/usr.local.bin.yap" in out
+            assert "usr/share/user-tmpfiles.d/yap.conf" in out
+            conffiles = subprocess.run(
+                [dpkg_deb, "-I", yap_deb, "conffiles"],
+                capture_output=True, text=True, timeout=30,
+            )
+            assert conffiles.returncode == 0, conffiles.stderr
+            assert conffiles.stdout.strip() == "/etc/apparmor.d/usr.local.bin.yap"
 
 
 # ============================================================
-# Simulacion de postinst (copia if-missing)
+# Ejecucion de maintainer scripts con rutas aisladas (sin root ni red)
 # ============================================================
 
-class TestPostinstCopySemantics:
-    """install_if_missing no debe pisar configs del administrador."""
+@pytest.fixture
+def maintainer_env(tmp_path):
+    """Run the actual shell scripts; relocate only absolute installation paths."""
+    if os.name != "posix" or not shutil.which("sh"):
+        pytest.skip("requiere shell POSIX")
+    root = tmp_path / "root"
+    share = root / "usr/share/yap"
+    for dirname, source in (
+        ("whitelist", "whitelist"), ("cursos", "cursos"),
+        ("pseint", "whitelist/pseint"),
+    ):
+        shutil.copytree(Path(REPO_ROOT) / source, share / dirname)
+    profile = root / "etc/apparmor.d/usr.local.bin.yap"
+    profile.parent.mkdir(parents=True)
+    shutil.copyfile(Path(REPO_ROOT) / "apparmor/usr.local.bin.yap", profile)
 
-    def test_copy_only_when_missing(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            src = os.path.join(tmp, "share", "apps.conf")
-            dest = os.path.join(tmp, "etc", "apps.conf")
-            os.makedirs(os.path.dirname(src))
-            os.makedirs(os.path.dirname(dest))
-            with open(src, "w", encoding="utf-8") as fh:
-                fh.write("DEFAULT\n")
-            with open(dest, "w", encoding="utf-8") as fh:
-                fh.write("CUSTOM\n")
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    parser = fake_bin / "apparmor_parser"
+    parser.write_text(
+        '#!/bin/sh\nprintf "%s\\n" "$*" >> "$YAP_TEST_PARSER_LOG"\n'
+        'case "$1" in\n'
+        '  -r) exit "${YAP_TEST_LOAD_RC:-0}" ;;\n'
+        '  --skip-kernel-load) exit "${YAP_TEST_PARSE_RC:-0}" ;;\n'
+        'esac\n', encoding="utf-8",
+    )
+    parser.chmod(0o755)
+    log = tmp_path / "parser.log"
+    env = dict(os.environ, PATH=f"{fake_bin}:{os.environ['PATH']}",
+               YAP_TEST_PARSER_LOG=str(log))
 
-            # Replica la guarda de postinst
-            if not os.path.exists(dest):
-                shutil.copy(src, dest)
+    def run(name="postinst", action="configure"):
+        script = _read(os.path.join(PACKAGING, "yap", "DEBIAN", name))
+        for path in ("/usr/share/yap", "/etc/yap", "/opt/yap",
+                     "/usr/local/bin", "/etc/apparmor.d",
+                     "/sys/kernel/security/apparmor"):
+            script = script.replace(path, str(root) + path)
+        target = tmp_path / name
+        target.write_text(script, encoding="utf-8")
+        return subprocess.run(["sh", str(target), action], env=env,
+                              capture_output=True, text=True, timeout=15)
 
-            with open(dest, encoding="utf-8") as fh:
-                assert fh.read() == "CUSTOM\n"
+    return root, env, log, run
 
-    def test_copy_when_absent(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            src = os.path.join(tmp, "share", "apps.conf")
-            dest = os.path.join(tmp, "etc", "apps.conf")
-            os.makedirs(os.path.dirname(src))
-            os.makedirs(os.path.dirname(dest))
-            with open(src, "w", encoding="utf-8") as fh:
-                fh.write("DEFAULT\n")
 
-            if not os.path.exists(dest):
-                shutil.copy(src, dest)
+class TestMaintainerScripts:
+    def test_install_and_reconfigure_preserve_admin_configs(self, maintainer_env):
+        root, _, log, run = maintainer_env
+        result = run()
+        assert result.returncode == 0, result.stderr
+        etc = root / "etc/yap"
+        apps = etc / "whitelist/apps.conf"
+        web = etc / "whitelist/web.conf"
+        assert apps.read_bytes() == (Path(REPO_ROOT) / "whitelist/apps.conf").read_bytes()
+        assert web.is_file()
+        assert (etc / "cursos/FPY1101.json").is_file()
+        assert (etc / "pseint/ejercicios.conf").is_file()
+        assert (root / "usr/local/bin/yap").is_symlink()
+        apps.write_text("CUSTOM\n", encoding="utf-8")
+        apps.chmod(0o640)
+        # Even intentionally empty whitelists must remain empty.
+        web.write_text("", encoding="utf-8")
+        result = run()
+        assert result.returncode == 0, result.stderr
+        assert apps.read_text() == "CUSTOM\n"
+        assert apps.stat().st_mode & 0o777 == 0o640
+        assert web.read_text() == ""
+        assert len(log.read_text().splitlines()) == 2  # parse only; no kernel
+        assert "sin confinamiento activo" in result.stderr
 
-            with open(dest, encoding="utf-8") as fh:
-                assert fh.read() == "DEFAULT\n"
+    def test_dangling_config_symlink_is_not_followed(self, maintainer_env):
+        root, _, _, run = maintainer_env
+        apps = root / "etc/yap/whitelist/apps.conf"
+        apps.parent.mkdir(parents=True)
+        target = root / "admin-missing.conf"
+        apps.symlink_to(target)
+        assert run().returncode == 0
+        assert apps.is_symlink()
+        assert not target.exists()
+
+    def test_loads_valid_profile_when_kernel_is_available(self, maintainer_env):
+        root, _, log, run = maintainer_env
+        (root / "sys/kernel/security/apparmor").mkdir(parents=True)
+        result = run()
+        assert result.returncode == 0, result.stderr
+        calls = log.read_text().splitlines()
+        assert calls[0].startswith("--skip-kernel-load --skip-cache ")
+        assert calls[1].startswith("-r ")
+
+    @pytest.mark.parametrize("failure", ["YAP_TEST_PARSE_RC", "YAP_TEST_LOAD_RC"])
+    def test_parser_errors_fail_configuration(self, maintainer_env, failure):
+        root, env, _, run = maintainer_env
+        (root / "sys/kernel/security/apparmor").mkdir(parents=True)
+        env[failure] = "1"
+        assert run().returncode != 0
+
+    def test_respects_admin_disabled_profile(self, maintainer_env):
+        root, _, log, run = maintainer_env
+        (root / "sys/kernel/security/apparmor").mkdir(parents=True)
+        disabled = root / "etc/apparmor.d/disable/usr.local.bin.yap"
+        disabled.parent.mkdir()
+        disabled.symlink_to("../usr.local.bin.yap")
+        result = run()
+        assert result.returncode == 0, result.stderr
+        assert "deshabilitado" in result.stderr
+        assert len(log.read_text().splitlines()) == 1
+
+    def test_postinst_preserves_dpkg_managed_profile(self, maintainer_env):
+        root, _, _, run = maintainer_env
+        profile = root / "etc/apparmor.d/usr.local.bin.yap"
+        custom = profile.read_text() + "\n# Administrator customization\n"
+        profile.write_text(custom, encoding="utf-8")
+        assert run().returncode == 0
+        assert profile.read_text() == custom
+        profile.unlink()  # An admin deletion is also a conffile choice.
+        assert run().returncode == 0
+        assert not profile.exists()
+
+    def test_upgrade_does_not_unload_profile(self, maintainer_env):
+        _, _, log, run = maintainer_env
+        assert run("prerm", "upgrade").returncode == 0
+        assert not log.exists()
+        assert run("prerm", "remove").returncode == 0
+        assert log.read_text().startswith("-R ")
+
+    def test_remove_preserves_configs_and_purge_cleans_etc_only(self, maintainer_env):
+        root, _, _, run = maintainer_env
+        assert run().returncode == 0
+        etc = root / "etc/yap"
+        student = root / "home/student/.config/yap/progress.json"
+        student.parent.mkdir(parents=True)
+        student.write_text('{"progress": 1}', encoding="utf-8")
+        assert run("postrm", "remove").returncode == 0
+        assert etc.is_dir()
+        assert (root / "etc/apparmor.d/usr.local.bin.yap").is_file()
+        assert run("postrm", "purge").returncode == 0
+        assert not etc.exists()
+        assert student.read_text() == '{"progress": 1}'
+
+    def test_other_postinst_actions_do_nothing(self, maintainer_env):
+        root, _, log, run = maintainer_env
+        assert run(action="abort-upgrade").returncode == 0
+        assert not (root / "etc/yap").exists()
+        assert not log.exists()
+
+
+@pytest.mark.skipif(not shutil.which("apparmor_parser"), reason="requiere apparmor_parser")
+def test_apparmor_profile_compiles_without_kernel():
+    result = subprocess.run(
+        ["apparmor_parser", "--skip-kernel-load", "--skip-cache",
+         os.path.join(REPO_ROOT, "apparmor", "usr.local.bin.yap")],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.skipif(not shutil.which("systemd-tmpfiles"), reason="requiere systemd-tmpfiles")
+def test_user_tmpfiles_creates_private_directory_without_deleting_progress(tmp_path):
+    user_home = tmp_path / "student"
+    user_home.mkdir()
+    env = dict(os.environ, HOME=str(user_home))
+    command = ["systemd-tmpfiles", "--user", "--create",
+               os.path.join(PACKAGING, "yap", "user-tmpfiles.d", "yap.conf")]
+    result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stderr
+    config = user_home / ".config/yap"
+    assert config.is_dir()
+    assert config.stat().st_mode & 0o777 == 0o700
+    assert config.stat().st_uid == os.getuid()
+    progress = config / "progress.json"
+    progress.write_text('{"progress": 1}', encoding="utf-8")
+    result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stderr
+    assert progress.read_text() == '{"progress": 1}'
 
 
 if __name__ == "__main__":
