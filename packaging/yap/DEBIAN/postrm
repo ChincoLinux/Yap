@@ -2,16 +2,13 @@
 set -e
 
 # postrm de yap
-#  - remove: quita el perfil AppArmor; conserva /etc/yap (configs del admin)
+#  - remove: conserva la configuracion del administrador
 #  - purge:  elimina /etc/yap
+# dpkg gestiona /etc/apparmor.d/usr.local.bin.yap como conffile.
 # Nunca toca ~/.config/yap/ (progreso, historial, confirmaciones del estudiante)
 
 case "$1" in
-    remove)
-        rm -f /etc/apparmor.d/usr.local.bin.yap
-        ;;
     purge)
-        rm -f /etc/apparmor.d/usr.local.bin.yap
         rm -rf /etc/yap
         ;;
 esac
