@@ -45,7 +45,8 @@ yap --tutorial
 | `yap sesion pausar` | Pausar la sesion y guardar el contexto. |
 | `yap sesion retomar 3` | Retomar una sesion pausada. |
 
-| `yap telemetria` | Resumen local de tu uso de Yap. |
+| `yap perfil` | Ver idioma de la interfaz (es/en/arn). |
+| `yap perfil idioma en` | Cambiar idioma a inglés. También: `es`, `arn` (mapudungun). |
 | `yap profesor` | Panel de monitoreo de la clase (requiere rol y PIN). |
 | `yap rag` | Estado del indice de recuperacion contextual RAG local. |
 | `yap rag rebuild` | Reconstruir el indice RAG local forzadamente. |
@@ -92,6 +93,7 @@ Chinco > abre firefox         → Abre Firefox
 Chinco > busca variable       → Wikipedia + resumen AI
 Chinco > como hago un ciclo   → Tutor PSeInt
 Chinco > ayuda                → Lista de comandos
+Chinco > perfil idioma en     → Interfaz y LLM en inglés (es/en/arn)
 Chinco > salir                → Salir
 Chinco > que es un algoritmo  → Consulta directa al AI
 ```

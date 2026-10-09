@@ -531,7 +531,7 @@ class TestMenu(ProfesorTestBase):
         base = [c for _, c, *_ in yap._menu_principal()]
         yap.actualizar_rol("profesor")
         con_rol = [c for _, c, *_ in yap._menu_principal()]
-        assert con_rol[:len(base) - 3] == base[:len(base) - 3]
+        assert con_rol[:len(base) - 4] == base[:len(base) - 4]
 
     def test_el_numero_del_profesor_enruta(self):
         yap.actualizar_rol("profesor")

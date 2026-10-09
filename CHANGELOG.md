@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- i18n multi-idioma (#36): catálogos JSON `es`/`en`/`arn`, `yap perfil idioma`,
+  LLM responde en el idioma del perfil; mapudungun con traducción comunitaria parcial
 - Modo profesor (#25): `yap profesor` abre un panel con el progreso de la
   clase. El docente importa los `progress.json` de sus estudiantes desde una
   carpeta o una llave USB (`yap profesor importar`), y el panel muestra avance,
