@@ -13,6 +13,9 @@ commit-msg.txt
 .pytest_cache/
 resultado-*.txt
 
+# Borradores locales del issue #33 (no forman parte del codigo del proyecto)
+/borradores/issue-33/*.md
+
 # Paquetes Debian generados (#31)
 dist/
 *.deb
