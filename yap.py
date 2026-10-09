@@ -189,6 +189,7 @@ _RE_SUPER_HOME = re.compile(r"(?i)(/home/|/Users/)[^\s/]+")
 _RE_SUPER_EMAIL = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
 _SUPER_ESTADO = "local"  # local | super | degradado
 _SUPER_MODO = "auto"     # auto | super | local  (menu: super on / super off)
+_SUPER_ELECCION = None   # None | super | local  (eleccion explicita de sesion)
 _GRADIO_CACHE = {}
 _GRADIO_COOKIEJAR = http.cookiejar.CookieJar()
 _GRADIO_OPENER = None
@@ -4589,9 +4590,39 @@ def debe_delegar_super(texto, context=None):
     """En auto, nube si hay internet. Sin red, Yap local."""
     if not _super_disponible():
         return False
-    if _SUPER_MODO == "super":
+    if _SUPER_MODO == "super" or _SUPER_ELECCION == "super":
         return True
+    if _SUPER_ELECCION == "local":
+        return False
     return _hay_internet()
+
+
+def _elegir_motor_consulta(interactivo=True):
+    """True = nube (Super Yap), False = modelo local (Llama).
+
+    En 'auto' con internet y TTY pregunta turno a turno. Sin red, sin TTY
+    o con una eleccion explicita ('super on' / 'super off') decide directo,
+    sin prompts ni delays. Mensaje corto para lectores de pantalla.
+    """
+    if not _super_disponible():
+        return False
+    if _SUPER_MODO == "super" or _SUPER_ELECCION == "super":
+        return True
+    if _SUPER_MODO == "local" or _SUPER_ELECCION == "local":
+        return False
+    if not _hay_internet():
+        return False
+    if not interactivo or not sys.stdin.isatty():
+        return True
+    try:
+        resp = input(
+            "¿Deseas responder con la nube (Super Yap) o el modelo local "
+            "(Llama)? [N/l]: "
+        )
+    except (EOFError, KeyboardInterrupt):
+        sys.stdout.write("\n")
+        return True
+    return resp.strip().lower()[:1] != "l"
 
 
 def _local_llama_timeout():
@@ -4878,8 +4909,10 @@ def cmd_super_status():
     modo_txt = {
         "super": "super (todas las consultas)",
         "local": "local (sin Super Yap)",
-        "auto": "auto (nube si hay internet; si no, local)",
+        "auto": "auto (pregunta nube/local cada turno si hay internet)",
     }.get(_SUPER_MODO, _SUPER_MODO)
+    if _SUPER_ELECCION:
+        modo_txt += f"; eleccion: {_SUPER_ELECCION}"
     proto = "Gradio /chat" if _host_es_super_gradio(url) else "HTTP /v1/query"
     port = parsed.port or (443 if parsed.scheme == "https" else SUPER_NUBE_PORT_LEGACY)
     lines = [
@@ -4904,10 +4937,11 @@ def cmd_super_status():
 
 def cmd_super_modo(valor):
     """Menu: super on / super off. Session-level, no persiste."""
-    global _SUPER_MODO
+    global _SUPER_MODO, _SUPER_ELECCION
     v = (valor or "").strip().lower()
     if v in ("on", "activar", "super", "nube", "1"):
         _SUPER_MODO = "super"
+        _SUPER_ELECCION = "super"
         if not _super_habilitado() or not super_configurada():
             return (
                 f"{C['YELLOW']}Super Yap pedido, pero no esta configurado. "
@@ -4917,12 +4951,22 @@ def cmd_super_modo(valor):
             f"{C['CYAN']}Super Yap activado.{C['RESET']} "
             "Las consultas van a la nube. Escribe 'super off' para volver al local."
         )
-    if v in ("off", "local", "auto", "0"):
+    if v in ("off", "local", "0"):
         _SUPER_MODO = "auto"
+        _SUPER_ELECCION = "local"
         _actualizar_estado_super(False)
         return (
             f"{C['GREEN']}Yap local activado.{C['RESET']} "
-            "Super Yap si hay internet, si el local tarda 3 min, o 'super <pregunta>'."
+            "Las consultas van al modelo local. "
+            "Escribe 'super <pregunta>' o 'super on' para la nube."
+        )
+    if v in ("auto",):
+        _SUPER_MODO = "auto"
+        _SUPER_ELECCION = None
+        _actualizar_estado_super(False)
+        return (
+            f"{C['CYAN']}Modo automatico.{C['RESET']} "
+            "Con internet se pregunta en cada turno: nube o local."
         )
     return cmd_super_status()
 
@@ -5282,7 +5326,7 @@ def classify_intent(user_input):
 
     return "query", user_input.strip()
 
-def interpret(user_input):
+def interpret(user_input, interactivo=False):
     """Keyword router before LLM classifier for known commands."""
     global _IDIOMA_MENU_ACTIVO
     stripped = user_input.strip().lower()
@@ -5302,7 +5346,7 @@ def interpret(user_input):
             if cmd:
                 if cmd == "salir":
                     sys.exit(0)
-                return interpret(cmd)
+                return interpret(cmd, interactivo=interactivo)
             # Las informativas no traen pista: ahi la etiqueta ya es la respuesta
             return "menu_opcion", pista or _etiqueta
         return "menu_opcion", f"[ERROR] Opcion {n} no existe. Elige 1-{len(menu)}."
@@ -5373,8 +5417,12 @@ def interpret(user_input):
         return "super_modo", "off"
     if stripped.startswith(("super ", "nube ")):
         pregunta = user_input.split(" ", 1)[1].strip()
-        if pregunta.lower() in ("on", "activar", "off", "local"):
-            return "super_modo", "on" if pregunta.lower() in ("on", "activar") else "off"
+        if pregunta.lower() in ("on", "activar"):
+            return "super_modo", "on"
+        if pregunta.lower() in ("off", "local"):
+            return "super_modo", "off"
+        if pregunta.lower() in ("auto", "automatico", "automático"):
+            return "super_modo", "auto"
         if pregunta:
             return "super_query", pregunta
         return "super", ""
@@ -5435,8 +5483,15 @@ def interpret(user_input):
             return "curso", f"FPY1101:{param}"
 
     action, param = classify_intent(user_input)
-    if action == "query" and debe_delegar_super(user_input):
-        return "super_query", param or user_input
+    if action == "query":
+        pregunta = param or user_input
+        if interactivo:
+            # Turno a turno: el estudiante decide nube o local (si hay red/TTY).
+            if _elegir_motor_consulta(interactivo=True):
+                return "super_query", pregunta
+            return "query_local", pregunta
+        if debe_delegar_super(user_input):
+            return "super_query", pregunta
     return action, param
 
 
@@ -5519,7 +5574,7 @@ def main():
                 sys.exit(0)
             if not user_input:
                 continue
-            action, param = interpret(user_input)
+            action, param = interpret(user_input, interactivo=True)
             handle_action(action, param, user_input)
             print()  # blank line between turns
 
@@ -5650,6 +5705,11 @@ def handle_action(action, param, original_input):
     elif action == "apparmor_status":
         print(cmd_apparmor_status())
 
+    elif action == "query_local":
+        # Eleccion explicita del estudiante: no delegar a la nube ni por red.
+        print("Consultando LLM local...")
+        print(cmd_query(original_input, allow_super_fallback=False))
+
     elif action == "menu_opcion":
         print(param)
 
@@ -5659,8 +5719,6 @@ def handle_action(action, param, original_input):
     elif action == "menu":
         print(cmd_menu())
 
-    elif action == "help":
-        print()
         print(t("help.body"))
         print()
 
