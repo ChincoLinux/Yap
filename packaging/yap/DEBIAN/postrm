@@ -8,8 +8,19 @@ set -e
 # Nunca toca ~/.config/yap/ (progreso, historial, confirmaciones del estudiante)
 
 case "$1" in
+    remove)
+        if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload >/dev/null 2>&1 || true
+        fi
+        ;;
     purge)
-        rm -rf /etc/yap
+        rm -rf /etc/yap /run/yap
+        rm -f /lib/systemd/system/yap-daemon.service \
+              /lib/systemd/system/yap-sync.service \
+              /lib/systemd/system/yap-sync.timer
+        if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload >/dev/null 2>&1 || true
+        fi
         ;;
 esac
 

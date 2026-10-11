@@ -1,0 +1,16 @@
+[Unit]
+Description=Yap — Daemon de IA Local para ChincoLinux
+Documentation=https://github.com/ChincoLinux/Yap
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/yap --daemon
+Restart=on-failure
+RestartSec=5s
+MemoryMax=4G
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=Yap — Sincronización periódica de whitelists escolares
+Documentation=https://github.com/ChincoLinux/Yap
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

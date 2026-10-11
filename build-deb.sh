@@ -258,8 +258,18 @@ stage_yap() {
     "$staging/usr/share/user-tmpfiles.d/yap.conf"
 
   if [ -f "$SCRIPT_DIR/yap-agent.md" ]; then
+    mkdir -p "$staging/usr/share/yap/agent"
     install_file 0644 "$SCRIPT_DIR/yap-agent.md" "$staging/opt/yap/agent/yap.md"
     install_file 0644 "$SCRIPT_DIR/yap-agent.md" "$staging/usr/share/yap/agent/yap.md"
+  fi
+
+  if [ -d "$PACKAGING_DIR/systemd" ]; then
+    mkdir -p "$staging/usr/share/yap/systemd" "$staging/lib/systemd/system"
+    for unit in "$PACKAGING_DIR/systemd"/*; do
+      [ -f "$unit" ] || continue
+      install_file 0644 "$unit" "$staging/usr/share/yap/systemd/$(basename "$unit")"
+      install_file 0644 "$unit" "$staging/lib/systemd/system/$(basename "$unit")"
+    done
   fi
 
   for doc in README.md USAGE.md CHANGELOG.md LICENSE; do
