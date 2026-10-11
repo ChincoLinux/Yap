@@ -41,10 +41,12 @@ def _llamadas_subprocess(fuente):
         if not isinstance(nodo, ast.Call):
             continue
         f = nodo.func
-        if (isinstance(f, ast.Attribute)
-                and isinstance(f.value, ast.Name)
-                and f.value.id == "subprocess"
-                and f.attr in LLAMADAS):
+        if (
+            isinstance(f, ast.Attribute)
+            and isinstance(f.value, ast.Name)
+            and f.value.id == "subprocess"
+            and f.attr in LLAMADAS
+        ):
             encontradas.append((f.attr, nodo))
     return encontradas
 
@@ -60,6 +62,7 @@ def _kwarg(nodo, nombre):
 # 1. REVISION ESTATICA
 # ============================================================
 
+
 class TestNingunProcesoHeredaLaTerminal:
     """Requisito: ningun hijo recibe la terminal del estudiante."""
 
@@ -74,7 +77,8 @@ class TestNingunProcesoHeredaLaTerminal:
             if _kwarg(nodo, "stdin") is None
         ]
         assert not faltan, (
-            "estas llamadas heredan la terminal del estudiante: " + ", ".join(faltan))
+            "estas llamadas heredan la terminal del estudiante: " + ", ".join(faltan)
+        )
 
     def test_el_stdin_es_devnull(self):
         """Un pipe abierto dejaria al hijo esperando entrada que nunca llega."""
@@ -83,8 +87,7 @@ class TestNingunProcesoHeredaLaTerminal:
             valor = _kwarg(nodo, "stdin")
             if valor is None:
                 continue
-            es_devnull = (isinstance(valor, ast.Attribute)
-                          and valor.attr == "DEVNULL")
+            es_devnull = isinstance(valor, ast.Attribute) and valor.attr == "DEVNULL"
             if not es_devnull:
                 malas.append(f"{attr}() en la linea {nodo.lineno}")
         assert not malas, "stdin deberia ser subprocess.DEVNULL en: " + ", ".join(malas)
@@ -93,6 +96,7 @@ class TestNingunProcesoHeredaLaTerminal:
 # ============================================================
 # 2. LAS RUTAS DE llama-cli
 # ============================================================
+
 
 class TestRutasDeLlamaCli:
     """Requisito: las tres llamadas al modelo local sueltan la terminal."""
@@ -111,8 +115,9 @@ class TestRutasDeLlamaCli:
         assert run.call_args.kwargs["stdin"] is subprocess.DEVNULL
 
     def test_classify_intent(self):
-        with mock.patch("subprocess.run",
-                        return_value=self._resultado("query|hola")) as run:
+        with mock.patch(
+            "subprocess.run", return_value=self._resultado("query|hola")
+        ) as run:
             yap.classify_intent("hola")
         assert run.call_args.kwargs["stdin"] is subprocess.DEVNULL
 
@@ -130,26 +135,32 @@ class TestRutasDeLlamaCli:
 # 3. LANZADOR DE APLICACIONES
 # ============================================================
 
+
 class TestLanzadorDeAplicaciones:
     """Requisito: la aplicacion vive mas que la llamada; no puede quedarse
     con la terminal del REPL."""
 
     def test_popen_de_la_app_no_hereda_stdin(self):
-        with mock.patch.object(yap, "load_whitelist",
-                               return_value={"firefox": ["firefox"]}):
-            with mock.patch.object(yap.shutil, "which",
-                                   return_value="/usr/bin/firefox"):
+        with mock.patch.object(
+            yap, "load_whitelist", return_value={"firefox": ["firefox"]}
+        ):
+            with mock.patch.object(
+                yap.shutil, "which", return_value="/usr/bin/firefox"
+            ):
                 with mock.patch("subprocess.Popen") as popen:
-                    with mock.patch("subprocess.run",
-                                    return_value=mock.Mock(stdout="1.0", stderr="")):
+                    with mock.patch(
+                        "subprocess.run",
+                        return_value=mock.Mock(stdout="1.0", stderr=""),
+                    ):
                         yap.cmd_open_app("firefox")
         popen.assert_called_once()
         assert popen.call_args.kwargs["stdin"] is subprocess.DEVNULL
 
     def test_la_app_bloqueada_sigue_sin_lanzarse(self):
         """El arreglo no puede relajar la whitelist."""
-        with mock.patch.object(yap, "load_whitelist",
-                               return_value={"firefox": ["firefox"]}):
+        with mock.patch.object(
+            yap, "load_whitelist", return_value={"firefox": ["firefox"]}
+        ):
             with mock.patch("subprocess.Popen") as popen:
                 salida = yap.cmd_open_app("chrome")
         popen.assert_not_called()

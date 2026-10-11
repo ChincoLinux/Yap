@@ -37,6 +37,7 @@ def _numero_de(fragmento):
 # 1. RUTAS DE TECLADO
 # ============================================================
 
+
 class TestRutasDeTeclado:
     """Requisito: las ordenes que el menu anuncia responden siempre."""
 
@@ -48,30 +49,46 @@ class TestRutasDeTeclado:
 
     def test_busca(self):
         assert yap.interpret("busca que es un algoritmo") == (
-            "search", "que es un algoritmo")
+            "search",
+            "que es un algoritmo",
+        )
 
     def test_buscar(self):
         assert yap.interpret("buscar linux") == ("search", "linux")
 
     def test_pseint(self):
         assert yap.interpret("pseint como hago un ciclo") == (
-            "pseint", "como hago un ciclo")
+            "pseint",
+            "como hago un ciclo",
+        )
 
     def test_tutor_pseint(self):
         assert yap.interpret("tutor pseint que es un arreglo") == (
-            "pseint", "que es un arreglo")
+            "pseint",
+            "que es un arreglo",
+        )
 
     def test_tutorial_de_pseint(self):
-        for texto in ("aprender pseint", "quiero aprender pseint",
-                      "ejercicios pseint", "tutorial pseint"):
+        for texto in (
+            "aprender pseint",
+            "quiero aprender pseint",
+            "ejercicios pseint",
+            "tutorial pseint",
+        ):
             assert yap.interpret(texto) == ("introduccion_pseint", "inicio"), texto
 
     def test_ninguna_ruta_llama_al_clasificador(self):
         """Es el objetivo del issue: no depender del 1B para esto."""
         with mock.patch.object(yap, "classify_intent") as clasificador:
-            for texto in ("abre firefox", "abrir htop", "busca linux",
-                          "buscar python", "pseint ciclos",
-                          "tutor pseint arreglos", "aprender pseint"):
+            for texto in (
+                "abre firefox",
+                "abrir htop",
+                "busca linux",
+                "buscar python",
+                "pseint ciclos",
+                "tutor pseint arreglos",
+                "aprender pseint",
+            ):
                 yap.interpret(texto)
         clasificador.assert_not_called()
 
@@ -86,21 +103,24 @@ class TestRutasDeTeclado:
     def test_sin_parametro_sigue_al_clasificador(self):
         """'abre' a secas es ambiguo: que lo resuelva el LLM."""
         for texto in ("abre", "busca", "pseint"):
-            with mock.patch.object(yap, "classify_intent",
-                                   return_value=("query", texto)) as c:
+            with mock.patch.object(
+                yap, "classify_intent", return_value=("query", texto)
+            ) as c:
                 yap.interpret(texto)
             c.assert_called_once()
 
     def test_solo_espacios_tras_la_orden_no_es_ruta(self):
-        with mock.patch.object(yap, "classify_intent",
-                               return_value=("query", "x")) as c:
+        with mock.patch.object(
+            yap, "classify_intent", return_value=("query", "x")
+        ) as c:
             yap.interpret("abre   ")
         c.assert_called_once()
 
     def test_una_palabra_que_empieza_igual_no_se_enruta(self):
         """'abrelatas' no es 'abre'."""
-        with mock.patch.object(yap, "classify_intent",
-                               return_value=("query", "x")) as c:
+        with mock.patch.object(
+            yap, "classify_intent", return_value=("query", "x")
+        ) as c:
             yap.interpret("abrelatas de cocina")
         c.assert_called_once()
 
@@ -108,6 +128,7 @@ class TestRutasDeTeclado:
 # ============================================================
 # 2. PISTAS DE USO
 # ============================================================
+
 
 class TestPistas:
     """Requisito: elegir un numero que pide datos explica como usarse."""
@@ -149,6 +170,7 @@ class TestPistas:
 # 3. EL MENU SIGUE SANO
 # ============================================================
 
+
 class TestMenu:
     """Requisito: anadir la pista no puede romper la numeracion."""
 
@@ -167,7 +189,9 @@ class TestMenu:
 
     def test_las_opciones_con_comando_siguen_ejecutandose(self):
         assert yap.interpret(str(_numero_de("Historial — "))) == (
-            "historial", "historial")
+            "historial",
+            "historial",
+        )
         assert yap.interpret(str(_numero_de("Ayuda"))) == ("help", "ayuda")
 
     def test_un_numero_fuera_de_rango_avisa(self):
@@ -176,8 +200,9 @@ class TestMenu:
         assert "no existe" in param.lower()
 
     def test_un_numero_con_texto_no_es_seleccion(self):
-        with mock.patch.object(yap, "classify_intent",
-                               return_value=("query", "x")) as c:
+        with mock.patch.object(
+            yap, "classify_intent", return_value=("query", "x")
+        ) as c:
             yap.interpret("5 cursos")
         c.assert_called_once()
 
@@ -185,6 +210,7 @@ class TestMenu:
 # ============================================================
 # 4. NO ROMPER LO EXISTENTE
 # ============================================================
+
 
 class TestRutasPrevias:
     """Las rutas que ya funcionaban deben seguir igual."""
@@ -208,7 +234,8 @@ class TestRutasPrevias:
         assert yap.interpret("ayuda") == ("help", "ayuda")
 
     def test_una_pregunta_libre_sigue_yendo_al_llm(self):
-        with mock.patch.object(yap, "classify_intent",
-                               return_value=("query", "que es debian")) as c:
+        with mock.patch.object(
+            yap, "classify_intent", return_value=("query", "que es debian")
+        ) as c:
             yap.interpret("que es debian")
         c.assert_called_once()

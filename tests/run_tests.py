@@ -14,7 +14,6 @@ Uso:
 import sys
 import os
 import subprocess
-import json
 from datetime import datetime
 
 REPORT_DIR = os.path.join(os.path.dirname(__file__), "report")
@@ -65,9 +64,13 @@ def print_result(name, passed, detail=""):
 def run_pytest(test_file, extra_args=None):
     """Run pytest on a file and return (passed_count, failed_count, output)."""
     cmd = [
-        sys.executable, "-m", "pytest",
+        sys.executable,
+        "-m",
+        "pytest",
         test_file,
-        "-v", "--tb=short", "--no-header",
+        "-v",
+        "--tb=short",
+        "--no-header",
     ]
     if extra_args:
         cmd.extend(extra_args)
@@ -113,6 +116,7 @@ def check_symlink():
 def check_llama_cli():
     """Verificar que llama-cli existe y es estatico."""
     import shutil
+
     path = shutil.which("llama-cli")
     if not path:
         return False, "llama-cli no encontrado en PATH"
@@ -129,6 +133,7 @@ def check_model():
     """Verificar que el modelo existe."""
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
     import yap as yap_mod
+
     model_path = yap_mod.MODEL_PATH
     if os.path.exists(model_path):
         size = os.path.getsize(model_path)
@@ -323,7 +328,9 @@ def main():
     # Validacion estricta: domain == d or domain.endswith("." + d)
     has_strict_domain = '.endswith("." + d)' in source or '.endswith("." + d)' in source
     code_checks.append(("Validacion estricta de dominios", has_strict_domain, ""))
-    print_result("Validacion estricta de dominios (fix notwikipedia)", has_strict_domain)
+    print_result(
+        "Validacion estricta de dominios (fix notwikipedia)", has_strict_domain
+    )
 
     has_timeout = "timeout=" in source
     code_checks.append(("Timeout en subprocess", has_timeout, ""))
@@ -341,7 +348,10 @@ def main():
     req_mapping = {
         "SEG-01": ("cmd_open_app con whitelist", True),
         "SEG-02": ("cmd_webfetch con whitelist de dominios", True),
-        "SEG-03": ("Sin shell=True, eval(), os.system()", not has_shell_true and not has_eval and not has_os_system),
+        "SEG-03": (
+            "Sin shell=True, eval(), os.system()",
+            not has_shell_true and not has_eval and not has_os_system,
+        ),
         "SEG-04": ("Graceful blocking con alternativas", True),
         "SEG-05": ("Validacion estricta de dominios", has_strict_domain),
         "SEG-06": ("Sin escritura arbitraria", True),
@@ -356,7 +366,10 @@ def main():
         "FUN-07": ("Notificaciones notify-send", True),
         "FUN-08": ("Modo interactivo y comando", True),
         "FUN-11": ("Evaluacion automatica de actividades", True),
-        "CFG-01": ("Archivos de configuracion validos", all(ok for _, ok, _ in wl_results)),
+        "CFG-01": (
+            "Archivos de configuracion validos",
+            all(ok for _, ok, _ in wl_results),
+        ),
         "CFG-02": ("Symlink al repositorio", symlink_ok),
         "CFG-03": ("llama-cli instalado", llama_ok),
         "PKG-01": ("Paquete .deb (control/postinst)", True),
@@ -376,7 +389,9 @@ def main():
     total_tests = total_passed + total_failed
     pass_rate = (total_passed / total_tests * 100) if total_tests > 0 else 0
 
-    print(f"  Pruebas automatizadas: {total_passed}/{total_tests} pasadas ({pass_rate:.0f}%)")
+    print(
+        f"  Pruebas automatizadas: {total_passed}/{total_tests} pasadas ({pass_rate:.0f}%)"
+    )
     print(f"  Requisitos cumplidos:  {reqs_pass}/{reqs_total}")
     print(f"  Fecha: {timestamp}")
     print()
@@ -384,24 +399,32 @@ def main():
     if total_failed == 0 and reqs_pass == reqs_total:
         print("  ✓ TODAS LAS PRUEBAS PASARON — Sistema seguro y funcional")
     else:
-        print(f"  ⚠ {total_failed} pruebas fallaron, {reqs_total - reqs_pass} requisitos no cumplidos")
+        print(
+            f"  ⚠ {total_failed} pruebas fallaron, {reqs_total - reqs_pass} requisitos no cumplidos"
+        )
 
     # --- Generar Reporte ---
     if generate_report:
-        report_file = os.path.join(REPORT_DIR, f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+        report_file = os.path.join(
+            REPORT_DIR, f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        )
         with open(report_file, "w") as f:
             f.write("=" * 72 + "\n")
-            f.write(f"  YAP — Reporte de Pruebas\n")
+            f.write("  YAP — Reporte de Pruebas\n")
             f.write(f"  Fecha: {timestamp}\n")
             f.write("=" * 72 + "\n\n")
-            f.write(f"Pruebas: {total_passed}/{total_tests} pasadas ({pass_rate:.0f}%)\n")
+            f.write(
+                f"Pruebas: {total_passed}/{total_tests} pasadas ({pass_rate:.0f}%)\n"
+            )
             f.write(f"Requisitos: {reqs_pass}/{reqs_total}\n\n")
             f.write("Requisitos:\n")
             for req_id, (desc, ok) in sorted(req_mapping.items()):
                 icon = "✓" if ok else "✗"
                 f.write(f"  {icon} {req_id}: {desc}\n")
             f.write("\n")
-            f.write(f"Estado: {'TODAS LAS PRUEBAS PASARON' if total_failed == 0 else f'{total_failed} FALLARON'}\n")
+            f.write(
+                f"Estado: {'TODAS LAS PRUEBAS PASARON' if total_failed == 0 else f'{total_failed} FALLARON'}\n"
+            )
         print(f"\n  Reporte guardado: {report_file}")
 
     return 0 if total_failed == 0 else 1

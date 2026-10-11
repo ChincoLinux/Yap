@@ -19,9 +19,7 @@ import urllib.error
 import http.cookiejar
 import re
 import atexit
-import time
 import math
-import hashlib
 
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
@@ -43,10 +41,12 @@ CHINCO_ART = [
     "  ╚═════╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═════╝ ",
 ]
 
+
 def render_art(art_lines, color=""):
     """Join art lines with optional ANSI color wrapping."""
     s = "\n".join(art_lines)
     return f"{color}{s}{C['RESET']}" if color else s
+
 
 C = {
     "RESET": "\033[0m",
@@ -59,12 +59,14 @@ C = {
     "GRAY": "\033[90m",
 }
 
+
 def display_header(title):
     """Return a colored header string with the given title."""
     w = shutil.get_terminal_size().columns
     line = f"{C['CYAN']}{'═' * w}{C['RESET']}"
     padded = f"  {C['BOLD']}{C['GREEN']}{title}{C['RESET']}  "
     return f"\n{line}\n{padded}\n{line}\n"
+
 
 def display_menu(title, options):
     """Return a numbered menu string. Returns string, does not print."""
@@ -84,47 +86,69 @@ def _menu_principal():
     solo se lista para quien tiene el rol de profesor.
     """
     opciones = [
-        ("Cualquier consulta directa al AI", "",
-         "Escribe tu consulta tal cual y Yap te respondera."),
-        ("Abre [app] — abrir aplicacion permitida", "",
-         "Escribe 'abre' y el nombre. Por ejemplo: abre firefox"),
-        ("Busca [tema] — buscar en Wikipedia", "",
-         "Escribe 'busca' y el tema. Por ejemplo: busca que es un algoritmo"),
-        ("Tutor PSeInt — preguntas de programacion", "",
-         "Escribe 'pseint' y tu duda. Por ejemplo: pseint como hago un ciclo"),
+        (
+            "Cualquier consulta directa al AI",
+            "",
+            "Escribe tu consulta tal cual y Yap te respondera.",
+        ),
+        (
+            "Abre [app] — abrir aplicacion permitida",
+            "",
+            "Escribe 'abre' y el nombre. Por ejemplo: abre firefox",
+        ),
+        (
+            "Busca [tema] — buscar en Wikipedia",
+            "",
+            "Escribe 'busca' y el tema. Por ejemplo: busca que es un algoritmo",
+        ),
+        (
+            "Tutor PSeInt — preguntas de programacion",
+            "",
+            "Escribe 'pseint' y tu duda. Por ejemplo: pseint como hago un ciclo",
+        ),
         ("Curso FPY1101 — plan de estudio", "curso FPY1101", ""),
         ("Perfil — ver o actualizar tu perfil", "perfil", ""),
         ("Historial — ver sesiones anteriores", "historial", ""),
         ("Historial --ultimo — retomar ultima sesion", "historial --ultimo", ""),
         ("Sesion — estado, pausar, retomar o cerrar sesion", "sesion", ""),
         ("Telemetria — ver tu uso de Yap (100% local)", "telemetria", ""),
-        ("Super / nube — Gradio Cloud Run; si el local tarda 3 min, se usa la nube", "super", ""),
+        (
+            "Super / nube — Gradio Cloud Run; si el local tarda 3 min, se usa la nube",
+            "super",
+            "",
+        ),
         (f"Modelo: {etiqueta_familia_modelo()}", "", ""),
     ]
     try:
         if es_profesor():
             opciones.append(
-                ("Profesor — panel de monitoreo de la clase", "profesor", ""))
+                ("Profesor — panel de monitoreo de la clase", "profesor", "")
+            )
     except (OSError, ValueError):
         pass
-    opciones.extend([
-        ("Menu — ver de nuevo las opciones", "menu", ""),
-        ("Ayuda — lista de comandos", "ayuda", ""),
-        (t("menu.idioma"), "idioma", ""),
-        ("Salir — Ctrl+C o 'salir'", "salir", ""),
-    ])
+    opciones.extend(
+        [
+            ("Menu — ver de nuevo las opciones", "menu", ""),
+            ("Ayuda — lista de comandos", "ayuda", ""),
+            (t("menu.idioma"), "idioma", ""),
+            ("Salir — Ctrl+C o 'salir'", "salir", ""),
+        ]
+    )
     return opciones
 
 
 def cmd_menu():
     """Volver a mostrar el menu numerado de opciones."""
-    return display_menu("Comandos", [
-        etiqueta for etiqueta, _cmd, _pista in _menu_principal()
-    ])
+    return display_menu(
+        "Comandos", [etiqueta for etiqueta, _cmd, _pista in _menu_principal()]
+    )
+
 
 def display_box(text, color="CYAN"):
     """Return text wrapped in a colored box. Returns string."""
-    w = max(3, min(shutil.get_terminal_size().columns - 2, 78))  # ponytail: min 3 avoids textwrap crash on narrow/non-TTY
+    w = max(
+        3, min(shutil.get_terminal_size().columns - 2, 78)
+    )  # ponytail: min 3 avoids textwrap crash on narrow/non-TTY
     c = C.get(color.upper(), C["CYAN"])
     lines = []
     lines.append(f"{c}┌{'─' * w}┐{C['RESET']}")
@@ -133,6 +157,7 @@ def display_box(text, color="CYAN"):
             lines.append(f"{c}│{C['RESET']} {wrapped:<{w - 2}} {c}│{C['RESET']}")
     lines.append(f"{c}└{'─' * w}┘{C['RESET']}")
     return "\n".join(lines)
+
 
 MODEL_DIR = "/opt/yap/models"
 MODEL_3B_NAME = "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
@@ -169,8 +194,7 @@ LLAMA_TEMP_CLASSIFY = float(os.environ.get("YAP_LLAMA_TEMP_CLASSIFY", "0.1"))
 # Host Gradio en Cloud Run (chat publico /chat). Pin exacto, sin DNS.
 # La IP 137.184.146.113 sigue permitida para el contrato HTTP /v1/query.
 SUPER_GRADIO_HOST = (
-    "genai-app-superyap-1-1788986315174-114418439872"
-    ".southamerica-west1.run.app"
+    "genai-app-superyap-1-1788986315174-114418439872" ".southamerica-west1.run.app"
 )
 SUPER_NUBE_HOST_LEGACY = "137.184.146.113"
 SUPER_NUBE_HOST = SUPER_GRADIO_HOST
@@ -195,15 +219,29 @@ SUPER_INTERNET_PROBE_TIMEOUT = 3
 SUPER_INTERNET_CACHE_S = 60
 SUPER_GRADIO_HTML_MAX = 2 * 1024 * 1024
 SUPER_HINTS = (
-    "explica", "explique", "diferencia", "compara", "genera", "rubrica",
-    "rúbrica", "por que", "por qué", "razon", "razón", "analisis",
-    "análisis", "diseña", "disena", "paso a paso", "detalla",
+    "explica",
+    "explique",
+    "diferencia",
+    "compara",
+    "genera",
+    "rubrica",
+    "rúbrica",
+    "por que",
+    "por qué",
+    "razon",
+    "razón",
+    "analisis",
+    "análisis",
+    "diseña",
+    "disena",
+    "paso a paso",
+    "detalla",
 )
 _RE_SUPER_HOME = re.compile(r"(?i)(/home/|/Users/)[^\s/]+")
 _RE_SUPER_EMAIL = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
 _SUPER_ESTADO = "local"  # local | super | degradado
-_SUPER_MODO = "auto"     # auto | super | local  (menu: super on / super off)
-_SUPER_ELECCION = None   # None | super | local  (eleccion explicita de sesion)
+_SUPER_MODO = "auto"  # auto | super | local  (menu: super on / super off)
+_SUPER_ELECCION = None  # None | super | local  (eleccion explicita de sesion)
 _GRADIO_CACHE = {}
 _GRADIO_COOKIEJAR = http.cookiejar.CookieJar()
 _GRADIO_OPENER = None
@@ -230,11 +268,23 @@ SUPPORTED_LANGS = ("es", "en", "arn")
 DEFAULT_LANG = "es"
 PROFILE_FILE = os.path.expanduser("~/.config/yap/profile.json")
 LANG_ALIASES = {
-    "es": "es", "spa": "es", "español": "es", "espanol": "es",
-    "spanish": "es", "castellano": "es", "wigkadungun": "es",
-    "en": "en", "eng": "en", "english": "en", "ingles": "en", "inglés": "en",
-    "arn": "arn", "mapudungun": "arn", "mapuzugun": "arn",
-    "mapuzungun": "arn", "mapuche": "arn",
+    "es": "es",
+    "spa": "es",
+    "español": "es",
+    "espanol": "es",
+    "spanish": "es",
+    "castellano": "es",
+    "wigkadungun": "es",
+    "en": "en",
+    "eng": "en",
+    "english": "en",
+    "ingles": "en",
+    "inglés": "en",
+    "arn": "arn",
+    "mapudungun": "arn",
+    "mapuzugun": "arn",
+    "mapuzungun": "arn",
+    "mapuche": "arn",
 }
 
 _I18N_CACHE = {}
@@ -292,6 +342,7 @@ def _dig(catalog, key):
 
 def i18n_keys(lang):
     """Return dotted string keys in a catalog (skips _meta)."""
+
     def _walk(node, prefix=""):
         keys = []
         if not isinstance(node, dict):
@@ -305,6 +356,7 @@ def i18n_keys(lang):
             elif isinstance(v, dict):
                 keys.extend(_walk(v, path))
         return keys
+
     return _walk(_load_catalog(lang))
 
 
@@ -322,7 +374,11 @@ def _load_profile():
         with open(PROFILE_FILE, encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
-            if "idioma" not in data and "preferencias" in data and isinstance(data["preferencias"], dict):
+            if (
+                "idioma" not in data
+                and "preferencias" in data
+                and isinstance(data["preferencias"], dict)
+            ):
                 data["idioma"] = data["preferencias"].get("idioma", DEFAULT_LANG)
             return data
         return {}
@@ -452,7 +508,9 @@ def _opciones_idioma():
 def _menu_idioma_texto():
     opts = _opciones_idioma()
     lines = [display_menu(t("profile.menu_title"), [label for _, label in opts])]
-    lines.append("  " + t("profile.current", lang=get_lang(), name=t("lang.native_name")))
+    lines.append(
+        "  " + t("profile.current", lang=get_lang(), name=t("lang.native_name"))
+    )
     lines.append("  " + t("profile.choose"))
     return "\n".join(lines) + "\n"
 
@@ -489,8 +547,8 @@ def cmd_idioma(param=""):
 # Niveles: "always" (siempre preguntar), "new" (solo la primera vez), "trusted" (confiar tras N confirmaciones)
 
 SENSITIVE_ACTIONS = {
-    "open_app": "always",       # Abrir aplicaciones puede lanzar procesos con acceso a red
-    "webfetch": "always",       # Fetch a URLs expone datos al exterior
+    "open_app": "always",  # Abrir aplicaciones puede lanzar procesos con acceso a red
+    "webfetch": "always",  # Fetch a URLs expone datos al exterior
 }
 
 CONFIRMATION_FILE = os.path.expanduser("~/.config/yap/confirmations.json")
@@ -584,7 +642,9 @@ def load_whitelist(path):
                 if line and not line.startswith("#"):
                     parts = line.split(":", 1)
                     if len(parts) == 2:
-                        apps[parts[0].lower()] = [c.strip() for c in parts[1].split(",")]
+                        apps[parts[0].lower()] = [
+                            c.strip() for c in parts[1].split(",")
+                        ]
     return apps
 
 
@@ -640,9 +700,24 @@ def cargar_curso(codigo):
     return data
 
 
-REQUIRED_CURSO_KEYS = {"codigo", "nombre", "horas", "semanas", "ras", "eas", "evaluaciones"}
+REQUIRED_CURSO_KEYS = {
+    "codigo",
+    "nombre",
+    "horas",
+    "semanas",
+    "ras",
+    "eas",
+    "evaluaciones",
+}
 REQUIRED_RA_KEYS = {"id", "descripcion", "indicadores"}
-REQUIRED_EA_KEYS = {"id", "nombre", "descripcion", "horas", "actividades", "evaluaciones"}
+REQUIRED_EA_KEYS = {
+    "id",
+    "nombre",
+    "descripcion",
+    "horas",
+    "actividades",
+    "evaluaciones",
+}
 
 # Schema de evaluación automática por actividad (#23)
 # tipo es opcional: actividades sin tipo siguen el flujo Enter=hecho.
@@ -651,11 +726,11 @@ SCHEMA_EVALUACION_ACTIVIDAD = {
     "tipo": "respuesta_libre | codigo_pseint | opcion_multiple | completar",
     "criterios_evaluacion": ["criterio que el LLM debe verificar", "..."],
     "enunciado": "consigna visible para el estudiante (opcional)",
-    "opciones": ["A) ...", "B) ..."],          # requerido si tipo=opcion_multiple
-    "respuesta_correcta": "B",                   # requerido si tipo=opcion_multiple
-    "max_intentos": 3,                           # opcional, default YAP_MAX_INTENTOS
+    "opciones": ["A) ...", "B) ..."],  # requerido si tipo=opcion_multiple
+    "respuesta_correcta": "B",  # requerido si tipo=opcion_multiple
+    "max_intentos": 3,  # opcional, default YAP_MAX_INTENTOS
     # Sistema Adaptativo de Dificultad (#30)
-    "variantes": {                                # opcional, clave por dificultad
+    "variantes": {  # opcional, clave por dificultad
         "facil": {"enunciado": "consigna mas simple", "criterios_evaluacion": [...]},
         "normal": {"enunciado": "consigna estandar"},
         "desafiante": {"enunciado": "consigna mas exigente"},
@@ -680,28 +755,29 @@ ANUNCIOS_BAJAR = {
     "facil": "Bajaremos el nivel para repasar los conceptos y volver con mas fuerza 💪",
 }
 
+
 def _validar_curso(codigo, data):
     """Validate course structure has required keys. Raises ValueError if not."""
     # ponytail: plain dict key checks, no JSON Schema dependency
     missing = REQUIRED_CURSO_KEYS - data.keys()
     if missing:
         raise ValueError(
-            f"Curso '{codigo}': faltan claves requeridas: {', '.join(sorted(missing))}")
+            f"Curso '{codigo}': faltan claves requeridas: {', '.join(sorted(missing))}"
+        )
     for i, ra in enumerate(data.get("ras", [])):
         m = REQUIRED_RA_KEYS - ra.keys()
         if m:
-            raise ValueError(
-                f"Curso '{codigo}', RA#{i}: faltan {', '.join(sorted(m))}")
+            raise ValueError(f"Curso '{codigo}', RA#{i}: faltan {', '.join(sorted(m))}")
     for i, ea in enumerate(data.get("eas", [])):
         m = REQUIRED_EA_KEYS - ea.keys()
         if m:
-            raise ValueError(
-                f"Curso '{codigo}', EA#{i}: faltan {', '.join(sorted(m))}")
+            raise ValueError(f"Curso '{codigo}', EA#{i}: faltan {', '.join(sorted(m))}")
         ea_id = ea.get("id", f"EA#{i}")
         for j, act in enumerate(ea.get("actividades") or []):
             if not isinstance(act, dict):
                 raise ValueError(
-                    f"Curso '{codigo}', {ea_id}, actividad#{j}: debe ser un objeto")
+                    f"Curso '{codigo}', {ea_id}, actividad#{j}: debe ser un objeto"
+                )
             _validar_actividad_evaluacion(codigo, ea_id, act, j)
 
 
@@ -713,22 +789,26 @@ def _validar_actividad_evaluacion(codigo, ea_id, act, idx):
     if tipo not in TIPOS_EVALUACION:
         raise ValueError(
             f"Curso '{codigo}', {ea_id}, actividad#{idx}: "
-            f"tipo '{tipo}' invalido. Use: {', '.join(TIPOS_EVALUACION)}")
+            f"tipo '{tipo}' invalido. Use: {', '.join(TIPOS_EVALUACION)}"
+        )
     criterios = act.get("criterios_evaluacion")
     if criterios is not None and not isinstance(criterios, list):
         raise ValueError(
             f"Curso '{codigo}', {ea_id}, actividad#{idx}: "
-            f"criterios_evaluacion debe ser una lista")
+            f"criterios_evaluacion debe ser una lista"
+        )
     if tipo == "opcion_multiple":
         if not act.get("respuesta_correcta"):
             raise ValueError(
                 f"Curso '{codigo}', {ea_id}, actividad#{idx}: "
-                f"opcion_multiple requiere respuesta_correcta")
+                f"opcion_multiple requiere respuesta_correcta"
+            )
         opciones = act.get("opciones")
         if not isinstance(opciones, list) or not opciones:
             raise ValueError(
                 f"Curso '{codigo}', {ea_id}, actividad#{idx}: "
-                f"opcion_multiple requiere opciones (lista no vacia)")
+                f"opcion_multiple requiere opciones (lista no vacia)"
+            )
     if "max_intentos" in act:
         try:
             n = int(act["max_intentos"])
@@ -737,7 +817,8 @@ def _validar_actividad_evaluacion(codigo, ea_id, act, idx):
         if n < 1:
             raise ValueError(
                 f"Curso '{codigo}', {ea_id}, actividad#{idx}: "
-                f"max_intentos debe ser un entero >= 1")
+                f"max_intentos debe ser un entero >= 1"
+            )
 
 
 def listar_cursos():
@@ -761,6 +842,7 @@ def listar_cursos():
 # ponytail: XDG_CONFIG_HOME respetado; escritura atómica (.tmp + os.replace)
 # para evitar corrupción si el proceso muere a mitad de guardado (Ctrl+C).
 
+
 def _config_dir():
     """Return Yap's user config dir, honoring $XDG_CONFIG_HOME if set."""
     base = os.environ.get("XDG_CONFIG_HOME")
@@ -769,6 +851,7 @@ def _config_dir():
     if not base or not (base.startswith("/") or os.path.isabs(base)):
         base = os.path.expanduser("~/.config")
     return os.path.join(base, "yap")
+
 
 PROFILE_FILE = os.path.join(_config_dir(), "profile.json")
 
@@ -813,8 +896,15 @@ def _normalizar_perfil(data):
     if not isinstance(data, dict):
         return perfil
 
-    for clave in ("nombre", "fecha_primer_uso", "nivel", "rol",
-                  "cursos_inscritos", "curso_activo", "onboarding_completed"):
+    for clave in (
+        "nombre",
+        "fecha_primer_uso",
+        "nivel",
+        "rol",
+        "cursos_inscritos",
+        "curso_activo",
+        "onboarding_completed",
+    ):
         valor = data.get(clave)
         if valor is not None:
             perfil[clave] = valor
@@ -830,8 +920,9 @@ def _normalizar_perfil(data):
         if isinstance(acc_data, dict):
             for clave in list(perfil["preferencias"]["accesibilidad"]):
                 if clave in acc_data:
-                    perfil["preferencias"]["accesibilidad"][clave] = (
-                        _coerce_bool(acc_data[clave]))
+                    perfil["preferencias"]["accesibilidad"][clave] = _coerce_bool(
+                        acc_data[clave]
+                    )
 
     datos_profesor = data.get("profesor")
     if isinstance(datos_profesor, dict):
@@ -852,7 +943,9 @@ def _normalizar_perfil(data):
         perfil["rol"] = "estudiante"
     if not isinstance(perfil["cursos_inscritos"], list):
         perfil["cursos_inscritos"] = []
-    if perfil["curso_activo"] is not None and not isinstance(perfil["curso_activo"], str):
+    if perfil["curso_activo"] is not None and not isinstance(
+        perfil["curso_activo"], str
+    ):
         perfil["curso_activo"] = None
     if perfil["preferencias"]["idioma"] not in IDIOMAS_VALIDOS:
         perfil["preferencias"]["idioma"] = "es"
@@ -867,7 +960,10 @@ def cargar_perfil():
         if isinstance(data, dict):
             return _normalizar_perfil(data)
     except (json.JSONDecodeError, OSError) as err:
-        print(f"[yap] No se pudo cargar el perfil ({err}); se regenerará uno por defecto.", file=sys.stderr)
+        print(
+            f"[yap] No se pudo cargar el perfil ({err}); se regenerará uno por defecto.",
+            file=sys.stderr,
+        )
     perfil = _perfil_por_defecto()
     guardar_perfil(perfil)  # autogenera el archivo con valores válidos
     return perfil
@@ -898,7 +994,8 @@ def actualizar_nivel(nivel):
     nivel = str(nivel).strip().lower()
     if nivel not in NIVELES_VALIDOS:
         raise ValueError(
-            f"Nivel no válido: '{nivel}'. Opciones: {', '.join(NIVELES_VALIDOS)}")
+            f"Nivel no válido: '{nivel}'. Opciones: {', '.join(NIVELES_VALIDOS)}"
+        )
     perfil = cargar_perfil()
     perfil["nivel"] = nivel
     guardar_perfil(perfil)
@@ -910,7 +1007,8 @@ def actualizar_idioma(idioma):
     idioma = str(idioma).strip().lower()
     if idioma not in IDIOMAS_VALIDOS:
         raise ValueError(
-            f"Idioma no válido: '{idioma}'. Opciones: {', '.join(IDIOMAS_VALIDOS)}")
+            f"Idioma no válido: '{idioma}'. Opciones: {', '.join(IDIOMAS_VALIDOS)}"
+        )
     perfil = cargar_perfil()
     perfil["preferencias"]["idioma"] = idioma
     guardar_perfil(perfil)
@@ -922,7 +1020,8 @@ def actualizar_rol(rol):
     rol = str(rol).strip().lower()
     if rol not in ROLES_VALIDOS:
         raise ValueError(
-            f"Rol no válido: '{rol}'. Opciones: {', '.join(ROLES_VALIDOS)}")
+            f"Rol no válido: '{rol}'. Opciones: {', '.join(ROLES_VALIDOS)}"
+        )
     perfil = cargar_perfil()
     perfil["rol"] = rol
     guardar_perfil(perfil)
@@ -947,7 +1046,10 @@ def _system_prompt():
         if perfil.get("curso_activo"):
             contexto.append(f"su curso activo es {perfil['curso_activo']}")
     except (OSError, ValueError) as exc:
-        print(f"[yap] Aviso: no se pudo cargar el perfil para contexto del prompt: {exc}", file=sys.stderr)
+        print(
+            f"[yap] Aviso: no se pudo cargar el perfil para contexto del prompt: {exc}",
+            file=sys.stderr,
+        )
     if not contexto:
         return base
     return base + " Contexto: " + ", ".join(contexto) + "."
@@ -956,48 +1058,62 @@ def _system_prompt():
 def _formatar_perfil(perfil):
     """Render the profile as a formatted TUI string."""
     lines = [display_header("Mi Perfil")]
-    lines.append(f"\n  {C['BOLD']}Nombre:{C['RESET']} {perfil['nombre'] or '(sin definir)'}")
+    lines.append(
+        f"\n  {C['BOLD']}Nombre:{C['RESET']} {perfil['nombre'] or '(sin definir)'}"
+    )
     lines.append(f"  {C['BOLD']}Nivel:{C['RESET']} {perfil['nivel']}")
     lines.append(f"  {C['BOLD']}Rol:{C['RESET']} {perfil.get('rol', 'estudiante')}")
-    lines.append(f"  {C['BOLD']}Curso activo:{C['RESET']} {perfil['curso_activo'] or '(ninguno)'}")
-    lines.append(f"  {C['BOLD']}Cursos inscritos:{C['RESET']} "
-                 f"{', '.join(perfil['cursos_inscritos']) or '(ninguno)'}")
+    lines.append(
+        f"  {C['BOLD']}Curso activo:{C['RESET']} {perfil['curso_activo'] or '(ninguno)'}"
+    )
+    lines.append(
+        f"  {C['BOLD']}Cursos inscritos:{C['RESET']} "
+        f"{', '.join(perfil['cursos_inscritos']) or '(ninguno)'}"
+    )
     lines.append(f"  {C['BOLD']}Primer uso:{C['RESET']} {perfil['fecha_primer_uso']}")
     prefs = perfil["preferencias"]
     lines.append(f"\n  {C['BOLD']}Preferencias:{C['RESET']}")
     lines.append(f"    Idioma: {prefs['idioma']} | Tema: {prefs['tema']}")
-    fb = "sí" if prefs['feedback_detallado'] else "no"
-    notif = "sí" if prefs['notificaciones'] else "no"
+    fb = "sí" if prefs["feedback_detallado"] else "no"
+    notif = "sí" if prefs["notificaciones"] else "no"
     lines.append(f"    Feedback detallado: {fb} | Notificaciones: {notif}")
     acc = prefs["accesibilidad"]
+
     def _marca(v):
         return f"{C['GREEN']}SÍ{C['RESET']}" if v else f"{C['GRAY']}no{C['RESET']}"
-    lines.append("    Accesibilidad: "
-                 f"Alto contraste={_marca(acc['alto_contraste'])}"
-                 f" | Fuentes 2x={_marca(acc['fuentes_grandes'])}"
-                 f" | Lector pantalla={_marca(acc['lector_pantalla'])}"
-                 f" | Teclado={_marca(acc['navegacion_teclado'])}")
+
+    lines.append(
+        "    Accesibilidad: "
+        f"Alto contraste={_marca(acc['alto_contraste'])}"
+        f" | Fuentes 2x={_marca(acc['fuentes_grandes'])}"
+        f" | Lector pantalla={_marca(acc['lector_pantalla'])}"
+        f" | Teclado={_marca(acc['navegacion_teclado'])}"
+    )
     stats = perfil["estadisticas"]
     lines.append(f"\n  {C['BOLD']}Estadísticas:{C['RESET']}")
-    lines.append(f"    Sesiones: {stats['sesiones_totales']} | "
-                 f"Preguntas: {stats['preguntas_totales']} | "
-                 f"Tiempo total: {stats['tiempo_total_minutos']} min")
+    lines.append(
+        f"    Sesiones: {stats['sesiones_totales']} | "
+        f"Preguntas: {stats['preguntas_totales']} | "
+        f"Tiempo total: {stats['tiempo_total_minutos']} min"
+    )
     lines.append(f"\n  {C['GRAY']}Perfil guardado en: {PROFILE_FILE}{C['RESET']}")
-    lines.append(f"  {C['GRAY']}Actualizar: yap perfil nombre|nivel|idioma|rol <valor>{C['RESET']}")
+    lines.append(
+        f"  {C['GRAY']}Actualizar: yap perfil nombre|nivel|idioma|rol <valor>{C['RESET']}"
+    )
     return "\n".join(lines)
 
 
 def cmd_perfil(sub="", param=""):
     """Handle `yap perfil [subcomando] [param]`.
 
-    Subcomandos:
-      (ninguno)              — muestra el perfil formateado
-      nombre <valor>         — actualiza el nombre
-      nivel <basico|...>     — actualiza el nivel
-<<<<<<< HEAD
-      idioma <es|en|arn>     — actualiza preferencias.idioma
-      rol <estudiante|profesor> — actualiza el rol (#25)
-      accesibilidad [op]     — muestra o actualiza opciones de accesibilidad
+        Subcomandos:
+          (ninguno)              — muestra el perfil formateado
+          nombre <valor>         — actualiza el nombre
+          nivel <basico|...>     — actualiza el nivel
+    <<<<<<< HEAD
+          idioma <es|en|arn>     — actualiza preferencias.idioma
+          rol <estudiante|profesor> — actualiza el rol (#25)
+          accesibilidad [op]     — muestra o actualiza opciones de accesibilidad
     """
     if sub and not param and " " in sub.strip():
         partes = sub.strip().split(None, 1)
@@ -1025,8 +1141,9 @@ def cmd_perfil(sub="", param=""):
             actualizar_idioma(lang)
         except Exception:
             pass
-        return (f"[OK] Perfil actualizado (idioma = {lang}).\n" +
-                display_box(t("profile.set", lang=lang, name=t("lang.native_name")), color="GREEN"))
+        return f"[OK] Perfil actualizado (idioma = {lang}).\n" + display_box(
+            t("profile.set", lang=lang, name=t("lang.native_name")), color="GREEN"
+        )
 
     if not param:
         if campo in ("nombre", "nivel"):
@@ -1041,8 +1158,10 @@ def cmd_perfil(sub="", param=""):
         elif campo == "rol":
             actualizar_rol(param)
         else:
-            return (f"[ERROR] Campo desconocido: '{campo}'. "
-                    "Campos disponibles: nombre, nivel, idioma, rol, accesibilidad")
+            return (
+                f"[ERROR] Campo desconocido: '{campo}'. "
+                "Campos disponibles: nombre, nivel, idioma, rol, accesibilidad"
+            )
     except ValueError as e:
         return f"[ERROR] {e}"
     except OSError as e:
@@ -1171,7 +1290,8 @@ def actualizar_accesibilidad(opcion, valor=None):
         disponibles = ", ".join(sorted(OPCIONES_ACCESIBILIDAD))
         raise ValueError(
             f"Opción de accesibilidad no válida: '{opcion}'. "
-            f"Disponibles: {disponibles}")
+            f"Disponibles: {disponibles}"
+        )
     activo = _parsear_valor_accesibilidad(valor)
     perfil = cargar_perfil()
     perfil.setdefault("preferencias", {}).setdefault("accesibilidad", {})
@@ -1183,9 +1303,9 @@ def actualizar_accesibilidad(opcion, valor=None):
 # ── Sanitización ANSI para lector de pantalla ────────────────
 
 ANSI_ESCAPE_RE = re.compile(
-    r"\x1b\[[0-9;?]*[ -/]*[@-~]"       # CSI: colores, estilos, cursor
+    r"\x1b\[[0-9;?]*[ -/]*[@-~]"  # CSI: colores, estilos, cursor
     r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC: títulos, hyperlinks
-    r"|\x1b[()][0-9A-Za-z]"            # secuencias de 2 bytes (charset)
+    r"|\x1b[()][0-9A-Za-z]"  # secuencias de 2 bytes (charset)
 )
 
 
@@ -1201,6 +1321,7 @@ def sanitizar_salida(texto):
 
 # ── Detección de Orca (#37) ──────────────────────────────────
 
+
 def detectar_orca():
     """Detecta si el lector de pantalla Orca está activo.
 
@@ -1215,7 +1336,9 @@ def detectar_orca():
     try:
         result = subprocess.run(
             ["ps", "-eo", "comm"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
             stdin=subprocess.DEVNULL,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -1274,13 +1397,13 @@ PALETA_DEFAULT = dict(C)
 
 PALETA_ALTO_CONTRASTE = {
     "RESET": "\033[0m",
-    "BOLD": "\033[1;97m",       # blanco puro en negrita
-    "GREEN": "\033[97m",        # blanco puro (sin tonos)
+    "BOLD": "\033[1;97m",  # blanco puro en negrita
+    "GREEN": "\033[97m",  # blanco puro (sin tonos)
     "CYAN": "\033[97m",
     "YELLOW": "\033[97m",
     "RED": "\033[97m",
     "BLUE": "\033[97m",
-    "GRAY": "\033[97m",         # sin gris degradado (fondo negro puro)
+    "GRAY": "\033[97m",  # sin gris degradado (fondo negro puro)
 }
 
 
@@ -1310,6 +1433,7 @@ def aplicar_preferencias_accesibilidad():
 
 
 # ── Fuentes grandes (escala 2x) ──────────────────────────────
+
 
 def texto_ampliado(texto):
     """Escala tipográfica 2x: duplica cada carácter (ancho) y cada línea (alto).
@@ -1402,15 +1526,19 @@ def _mostrar_accesibilidad():
         lines.append(f"  {C['BOLD']}{nombre}:{C['RESET']} {marca}")
     lines.append("")
     if _deteccion_orca():
-        lines.append(f"  {C['GREEN']}Orca detectado: SI — la salida se sanitiza"
-                     f" automáticamente (lector de pantalla).{C['RESET']}")
+        lines.append(
+            f"  {C['GREEN']}Orca detectado: SI — la salida se sanitiza"
+            f" automáticamente (lector de pantalla).{C['RESET']}"
+        )
     else:
         lines.append("  Orca detectado: NO")
     lines.append("")
     lines.append("  Cambiar: yap perfil accesibilidad <opcion> [on|off]")
     lines.append(f"  Opciones: {', '.join(sorted(OPCIONES_ACCESIBILIDAD))}")
     lines.append(f"  {C['GRAY']}Guardado en: {PROFILE_FILE}{C['RESET']}")
-    lines.append(f"  {C['GRAY']}Actualizar: yap perfil accesibilidad lector-pantalla on{C['RESET']}")
+    lines.append(
+        f"  {C['GRAY']}Actualizar: yap perfil accesibilidad lector-pantalla on{C['RESET']}"
+    )
     return "\n".join(lines)
 
 
@@ -1428,8 +1556,10 @@ def cmd_accesibilidad(args=""):
     clave = _canonizar_opcion_accesibilidad(opcion)
     if clave is None:
         disponibles = ", ".join(sorted(OPCIONES_ACCESIBILIDAD))
-        return (f"[ERROR] Opción de accesibilidad no válida: '{opcion}'.\n"
-                f"Opciones: {disponibles}")
+        return (
+            f"[ERROR] Opción de accesibilidad no válida: '{opcion}'.\n"
+            f"Opciones: {disponibles}"
+        )
 
     try:
         perfil = actualizar_accesibilidad(clave, valor)
@@ -1447,6 +1577,7 @@ def cmd_accesibilidad(args=""):
 # Menú interactivo 100% teclado: Tab/Flechas mueven, Enter confirma,
 # Esc cancela. Sin librerías externas (termios/tty en POSIX, fallback genérico).
 
+
 def _leer_tecla_generico():
     """Fallback sin termios (Windows/scripts): lee y normaliza una línea."""
     try:
@@ -1457,13 +1588,35 @@ def _leer_tecla_generico():
     if not data:
         return "enter"
     mapa = {
-        "up": "up", "arriba": "up", "k": "up", "w": "up", "flecha-up": "up",
-        "down": "down", "abajo": "down", "j": "down", "s": "down", "flecha-down": "down",
-        "left": "left", "izquierda": "left", "h": "left", "a": "left",
-        "right": "right", "derecha": "right", "l": "right", "d": "right",
-        "tab": "tab", "\t": "tab",
-        "enter": "enter", "ok": "enter", "confirmar": "enter", "intro": "enter",
-        "esc": "esc", "escape": "esc", "q": "esc", "salir": "esc", "cancelar": "esc",
+        "up": "up",
+        "arriba": "up",
+        "k": "up",
+        "w": "up",
+        "flecha-up": "up",
+        "down": "down",
+        "abajo": "down",
+        "j": "down",
+        "s": "down",
+        "flecha-down": "down",
+        "left": "left",
+        "izquierda": "left",
+        "h": "left",
+        "a": "left",
+        "right": "right",
+        "derecha": "right",
+        "l": "right",
+        "d": "right",
+        "tab": "tab",
+        "\t": "tab",
+        "enter": "enter",
+        "ok": "enter",
+        "confirmar": "enter",
+        "intro": "enter",
+        "esc": "esc",
+        "escape": "esc",
+        "q": "esc",
+        "salir": "esc",
+        "cancelar": "esc",
     }
     return mapa.get(data, data[0])
 
@@ -1551,8 +1704,10 @@ def menu_interactivo(titulo, opciones, reader=None):
                 sys.stdout.write(f"  {C['GREEN']}> {C['RESET']}{opt}\n")
             else:
                 sys.stdout.write(f"    {opt}\n")
-        sys.stdout.write(f"  {C['GRAY']}[Tab/Flechas: mover · Enter: elegir · "
-                         f"Esc: salir]{C['RESET']}\n")
+        sys.stdout.write(
+            f"  {C['GRAY']}[Tab/Flechas: mover · Enter: elegir · "
+            f"Esc: salir]{C['RESET']}\n"
+        )
         sys.stdout.write(f"\x1b[{total_lineas}A")
         sys.stdout.flush()
 
@@ -1592,9 +1747,7 @@ _RE_EVAL_NEG = re.compile(
     r"(?:correct[oa]s?|aprobad[oa]s?)|"
     r"\bno\s+(?:correct[oa]s?|aprobad[oa]s?))"
 )
-_RE_EVAL_POS = re.compile(
-    r"(?:aprobado|correct[oa]s?|\bcumple\b|bien hecho)"
-)
+_RE_EVAL_POS = re.compile(r"(?:aprobado|correct[oa]s?|\bcumple\b|bien hecho)")
 
 # ── Historial persistente entre sesiones (#13) ──────────────
 HISTORY_FILE = os.path.expanduser("~/.config/yap/history.json")
@@ -1643,6 +1796,7 @@ def _write_history_file(sessions):
 def _now_iso():
     """Return current timestamp in ISO 8601 format."""
     from datetime import datetime
+
     return datetime.now().isoformat()
 
 
@@ -1668,10 +1822,7 @@ def cmd_historial(resume_last=False):
             HISTORY.append((turn.get("user", ""), turn.get("assistant", "")))
 
         ts = last.get("timestamp", "?")
-        return display_box(
-            t("history.restored", ts=ts, n=len(HISTORY)),
-            color="GREEN"
-        )
+        return display_box(t("history.restored", ts=ts, n=len(HISTORY)), color="GREEN")
 
     # Show summary of all sessions
     lines = [display_header(t("history.header"))]
@@ -1680,10 +1831,16 @@ def cmd_historial(resume_last=False):
         turns = session.get("turns", [])
         if turns:
             first_q = turns[0].get("user", "")[:50]
-            lines.append(f"\n  {C['BOLD']}{C['CYAN']}{t('history.session', i=i)}{C['RESET']} — {ts}")
-            lines.append(f"    {C['GRAY']}{t('history.turns_first', n=len(turns), first=first_q)}{C['RESET']}")
+            lines.append(
+                f"\n  {C['BOLD']}{C['CYAN']}{t('history.session', i=i)}{C['RESET']} — {ts}"
+            )
+            lines.append(
+                f"    {C['GRAY']}{t('history.turns_first', n=len(turns), first=first_q)}{C['RESET']}"
+            )
         else:
-            lines.append(f"\n  {C['GRAY']}{t('history.empty_label', i=i, ts=ts)}{C['RESET']}")
+            lines.append(
+                f"\n  {C['GRAY']}{t('history.empty_label', i=i, ts=ts)}{C['RESET']}"
+            )
 
     lines.append(f"\n  {C['GRAY']}{t('history.resume_hint')}{C['RESET']}")
     lines.append(f"  {C['GRAY']}{t('history.saved_in', path=HISTORY_FILE)}{C['RESET']}")
@@ -1770,16 +1927,19 @@ def _archivar_en_historial(sesion):
     if not turnos:
         return
     sesiones = _load_history_sessions()
-    sesiones.append({
-        "timestamp": sesion.get("actualizada") or _now_iso(),
-        "turns": turnos,
-    })
+    sesiones.append(
+        {
+            "timestamp": sesion.get("actualizada") or _now_iso(),
+            "turns": turnos,
+        }
+    )
     if len(sesiones) > MAX_HISTORY_SESSIONS:
         sesiones = sesiones[-MAX_HISTORY_SESSIONS:]
     _write_history_file(sesiones)
 
 
 # ── CRUD de sesiones ────────────────────────────────────────
+
 
 def sesion_nueva(curso=None, ea=None):
     """Create a new session, pausing the active one if there is one.
@@ -1895,6 +2055,7 @@ def sesion_asociar(curso=None, ea=None):
 
 # ── Presentacion de sesiones ────────────────────────────────
 
+
 def session_banner():
     """Status line for the active session. Empty string when there is none."""
     activa = _sesion_activa(_load_sessions())
@@ -1915,9 +2076,11 @@ def session_prompt():
     if _SUPER_MODO == "super":
         marca_super = f"{C['CYAN']}[SUPER]{C['RESET']} "
     if activa:
-        return (f"{C['GREEN']}Chinco{C['RESET']} "
-                f"{C['GRAY']}[S{activa['id']}]{C['RESET']} "
-                f"{marca_super}> ")
+        return (
+            f"{C['GREEN']}Chinco{C['RESET']} "
+            f"{C['GRAY']}[S{activa['id']}]{C['RESET']} "
+            f"{marca_super}> "
+        )
     return f"{C['GREEN']}Chinco{C['RESET']} {marca_super}> "
 
 
@@ -1934,9 +2097,11 @@ def _linea_sesion(s):
     if s.get("ea"):
         detalle.append(s["ea"])
     detalle.append(t("session.turns", n=len(s.get("turnos", []))))
-    return (f"  {marca} {C['BOLD']}S{s.get('id')}{C['RESET']} "
-            f"[{s.get('estado', '?')}] — {' | '.join(detalle)}\n"
-            f"      {C['GRAY']}{t('session.inicio', ts=s.get('inicio', '?'))}{C['RESET']}")
+    return (
+        f"  {marca} {C['BOLD']}S{s.get('id')}{C['RESET']} "
+        f"[{s.get('estado', '?')}] — {' | '.join(detalle)}\n"
+        f"      {C['GRAY']}{t('session.inicio', ts=s.get('inicio', '?'))}{C['RESET']}"
+    )
 
 
 def _sesion_estado():
@@ -1955,12 +2120,16 @@ def _sesion_estado():
         lines.append(f"  {C['GRAY']}{t('session.no_active')}{C['RESET']}")
 
     if pausadas:
-        lines.append(f"\n  {C['BOLD']}{t('session.paused_header', n=len(pausadas))}{C['RESET']}")
+        lines.append(
+            f"\n  {C['BOLD']}{t('session.paused_header', n=len(pausadas))}{C['RESET']}"
+        )
         for s in pausadas:
             lines.append(_linea_sesion(s))
 
     abiertas = len(_sesiones_abiertas(sessions))
-    lines.append(f"\n  {C['GRAY']}{t('session.open_count', n=abiertas, max=MAX_OPEN_SESSIONS, path=SESSIONS_FILE)}{C['RESET']}")
+    lines.append(
+        f"\n  {C['GRAY']}{t('session.open_count', n=abiertas, max=MAX_OPEN_SESSIONS, path=SESSIONS_FILE)}{C['RESET']}"
+    )
     return "\n".join(lines)
 
 
@@ -1974,7 +2143,9 @@ def _sesion_listar():
     for s in sessions:
         lines.append(_linea_sesion(s))
     abiertas = len(_sesiones_abiertas(sessions))
-    lines.append(f"\n  {C['GRAY']}{t('session.total', n=len(sessions), open=abiertas, max=MAX_OPEN_SESSIONS)}{C['RESET']}")
+    lines.append(
+        f"\n  {C['GRAY']}{t('session.total', n=len(sessions), open=abiertas, max=MAX_OPEN_SESSIONS)}{C['RESET']}"
+    )
     return "\n".join(lines)
 
 
@@ -1990,33 +2161,29 @@ def cmd_sesion(sub="", param=""):
         nueva, err = sesion_nueva()
         if err:
             return display_box(err, color="YELLOW")
-        return display_box(
-            t("session.started", id=nueva["id"]),
-            color="GREEN")
+        return display_box(t("session.started", id=nueva["id"]), color="GREEN")
 
     if sub in ("pausar", "pausa", "pause"):
         s = sesion_pausar()
         if not s:
             return display_box(t("session.none_to_pause"), color="YELLOW")
         return display_box(
-            t("session.paused", id=s["id"], n=len(s.get("turnos", []))),
-            color="GREEN")
+            t("session.paused", id=s["id"], n=len(s.get("turnos", []))), color="GREEN"
+        )
 
     if sub in ("retomar", "reanudar", "resume"):
         s, err = sesion_retomar(param or None)
         if err:
             return display_box(err, color="YELLOW")
         return display_box(
-            t("session.resumed", id=s["id"], n=len(HISTORY)),
-            color="GREEN")
+            t("session.resumed", id=s["id"], n=len(HISTORY)), color="GREEN"
+        )
 
     if sub in ("cerrar", "cierra", "terminar", "close"):
         s = sesion_cerrar()
         if not s:
             return display_box(t("session.none_to_close"), color="YELLOW")
-        return display_box(
-            t("session.closed", id=s["id"]),
-            color="GREEN")
+        return display_box(t("session.closed", id=s["id"]), color="GREEN")
 
     if sub in ("listar", "lista", "ls", "list"):
         return _sesion_listar()
@@ -2035,17 +2202,23 @@ def _sesion_al_salir():
         return
     try:
         sys.stdout.write(
-            f"\n  {C['YELLOW']}{t('session.exit_prompt', id=activa['id'])}{C['RESET']} ")
+            f"\n  {C['YELLOW']}{t('session.exit_prompt', id=activa['id'])}{C['RESET']} "
+        )
         sys.stdout.flush()
         resp = input().strip().lower()
     except (EOFError, KeyboardInterrupt):
         resp = ""
     if resp in ("p", "pausar", "pausa", "pause"):
         sesion_pausar()
-        sys.stdout.write(f"  {C['GRAY']}{t('session.exit_paused', id=activa['id'])}{C['RESET']}\n")
+        sys.stdout.write(
+            f"  {C['GRAY']}{t('session.exit_paused', id=activa['id'])}{C['RESET']}\n"
+        )
     else:
         sesion_cerrar()
-        sys.stdout.write(f"  {C['GRAY']}{t('session.exit_closed', id=activa['id'])}{C['RESET']}\n")
+        sys.stdout.write(
+            f"  {C['GRAY']}{t('session.exit_closed', id=activa['id'])}{C['RESET']}\n"
+        )
+
 
 # ── Telemetría local anónima (#38) ──────────────────────────
 # Registra únicamente contadores de uso por acción. No se almacena
@@ -2060,10 +2233,29 @@ TELEMETRY_VERSION = 1
 # Acciones que el agente sabe despachar. Sirve para detectar cuáles
 # no se han usado nunca.
 ACCIONES_CONOCIDAS = (
-    "open_app", "search", "webfetch", "pseint", "introduccion_pseint",
-    "curso", "guia", "progreso", "historial", "apparmor_status",
-    "profesor", "telemetria", "help", "query", "sesion", "perfil", "idioma",
-    "super", "super_query", "super_modo", "menu_opcion", "menu", "rag",
+    "open_app",
+    "search",
+    "webfetch",
+    "pseint",
+    "introduccion_pseint",
+    "curso",
+    "guia",
+    "progreso",
+    "historial",
+    "apparmor_status",
+    "profesor",
+    "telemetria",
+    "help",
+    "query",
+    "sesion",
+    "perfil",
+    "idioma",
+    "super",
+    "super_query",
+    "super_modo",
+    "menu_opcion",
+    "menu",
+    "rag",
 )
 
 # Nombres legibles para el resumen (español; t() los traduce en pantalla)
@@ -2182,7 +2374,9 @@ def _telemetria_resumen():
     for (accion, veces), nombre in zip(ordenados, nombres):
         pct = (veces * 100) // total
         barra = "█" * max(1, (pct * 20) // 100)
-        lines.append(f"    {nombre:<{ancho}}  {veces:>4}  {C['GREEN']}{barra}{C['RESET']} {pct}%")
+        lines.append(
+            f"    {nombre:<{ancho}}  {veces:>4}  {C['GREEN']}{barra}{C['RESET']} {pct}%"
+        )
 
     sin_usar = _acciones_sin_usar(comandos)
     if sin_usar:
@@ -2190,8 +2384,14 @@ def _telemetria_resumen():
         for accion in sin_usar:
             lines.append(f"    {C['GRAY']}{_accion_nombre(accion)}{C['RESET']}")
 
-    estado = t("telemetry.state_on") if datos.get("activa", True) else t("telemetry.state_off")
-    lines.append(f"\n  {C['GRAY']}{t('telemetry.collection', estado=estado, path=TELEMETRY_FILE)}{C['RESET']}")
+    estado = (
+        t("telemetry.state_on")
+        if datos.get("activa", True)
+        else t("telemetry.state_off")
+    )
+    lines.append(
+        f"\n  {C['GRAY']}{t('telemetry.collection', estado=estado, path=TELEMETRY_FILE)}{C['RESET']}"
+    )
     lines.append(f"  {C['GRAY']}{t('telemetry.privacy')}{C['RESET']}")
     return "\n".join(lines)
 
@@ -2260,41 +2460,46 @@ def cmd_telemetria(sub="", param=""):
 
 def run_onboarding():
     """Interactive onboarding for first-time users (#22)."""
-    sys.stdout.write(f"{C['GREEN']} ¡Bienvenido a Yap! Tu asistente y tutor personal {C['RESET']}\n")
-    
+    sys.stdout.write(
+        f"{C['GREEN']} ¡Bienvenido a Yap! Tu asistente y tutor personal {C['RESET']}\n"
+    )
+
     print(f"{C['YELLOW']}1. ¿Qué es Yap?{C['RESET']}")
     print("Yap es tu entorno de aprendizaje interactivo desde la terminal.")
     print("Puede ayudarte a abrir aplicaciones, buscar en internet o guiarte")
     print("paso a paso en tus cursos de programación y tecnología.\n")
     input(f"{C['GRAY']}[Presiona Enter para continuar]{C['RESET']}")
-    
+
     print(f"\n{C['YELLOW']}2. ¿Cómo usarlo?{C['RESET']}")
     print("Solo tienes que escribir lo que necesitas de forma natural. Por ejemplo:")
     print("  > abre firefox")
     print("  > busca historia de linux")
     print("  > ayuda\n")
     input(f"{C['GRAY']}[Presiona Enter para continuar]{C['RESET']}")
-    
+
     print(f"\n{C['YELLOW']}3. ¿Qué puedo aprender?{C['RESET']}")
     print("Yap incluye cursos interactivos donde avanzas haciendo actividades.")
     print("Prueba escribir: 'curso' para ver la lista de cursos disponibles.\n")
     input(f"{C['GRAY']}[Presiona Enter para continuar]{C['RESET']}")
-    
+
     print(f"\n{C['YELLOW']}4. Para empezar, ¿cuál es tu nombre?{C['RESET']}")
     nombre = input(f"{C['GREEN']}Nombre{C['RESET']} > ").strip()
     if not nombre:
         nombre = "Estudiante"
-        
+
     # Use cargar_perfil() to get a full profile with all defaults,
     # then update the name and mark onboarding as completed.
     perfil = cargar_perfil()
     perfil["nombre"] = nombre
     perfil["onboarding_completed"] = True
     guardar_perfil(perfil)
-    
+
     print(f"\n¡Listo, {nombre}! Ya puedes empezar a explorar.")
-    print(f"Si alguna vez quieres volver a ver esto, escribe: {C['CYAN']}yap --tutorial{C['RESET']}\n")
+    print(
+        f"Si alguna vez quieres volver a ver esto, escribe: {C['CYAN']}yap --tutorial{C['RESET']}\n"
+    )
     return perfil
+
 
 def cargar_progreso():
     """Load student progress. Returns default empty dict if no file."""
@@ -2307,6 +2512,7 @@ def cargar_progreso():
     except (json.JSONDecodeError, OSError):
         return {"cursos": {}}
 
+
 def guardar_progreso(progress):
     """Save student progress atomically to avoid corruption."""
     path = PROGRESS_FILE
@@ -2315,6 +2521,7 @@ def guardar_progreso(progress):
     with open(tmp, "w") as f:
         json.dump(progress, f, indent=2, ensure_ascii=False)
     os.replace(tmp, path)  # atomic on Linux
+
 
 # ── RAG local — BM25 CPU-only (#118) ─────────────────────────
 # Retrieval-Augmented Generation sobre recursos locales.
@@ -2332,10 +2539,12 @@ _RAG_INDEX = None
 
 _RAG_ACCENT_MAP = str.maketrans("áéíóúÁÉÍÓÚ", "aeiouaeiou")
 
+
 def _rag_tokenize(text):
     """Word tokenizer with accent folding for Spanish queries."""
     folded = text.lower().translate(_RAG_ACCENT_MAP)
-    return re.findall(r'\b[a-zñü0-9]+\b', folded)
+    return re.findall(r"\b[a-zñü0-9]+\b", folded)
+
 
 def _is_subpath(target_path, parent_dir):
     try:
@@ -2347,57 +2556,60 @@ def _is_subpath(target_path, parent_dir):
     except Exception:
         return False
 
+
 def _rag_corpus_paths():
     """Enumerate all files in the RAG corpus."""
     paths = []
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    
+
     # CURSOS_DIR/*.json
     if os.path.isdir(CURSOS_DIR):
         for p in glob.glob(os.path.join(CURSOS_DIR, "*.json")):
             if _is_subpath(p, CURSOS_DIR):
                 paths.append(os.path.realpath(p))
-            
+
     # docs/*.md
     docs_dir = os.path.join(base_dir, "docs")
     if os.path.isdir(docs_dir):
         for p in glob.glob(os.path.join(docs_dir, "*.md")):
             if _is_subpath(p, docs_dir):
                 paths.append(os.path.realpath(p))
-                
+
     # whitelist/*.conf
     wl_dir = os.path.join(base_dir, "whitelist")
     if os.path.isdir(wl_dir):
         for p in glob.glob(os.path.join(wl_dir, "*.conf")):
             if _is_subpath(p, wl_dir):
                 paths.append(os.path.realpath(p))
-                
+
     # USAGE.md
     usage = os.path.join(base_dir, "USAGE.md")
     if os.path.isfile(usage) and _is_subpath(usage, base_dir):
         paths.append(os.path.realpath(usage))
-        
+
     # AGENTS.md
     agents = os.path.join(base_dir, "AGENTS.md")
     if os.path.isfile(agents) and _is_subpath(agents, base_dir):
         paths.append(os.path.realpath(agents))
-        
+
     return sorted(list(set(paths)))
+
 
 def _rag_chunk_text(text, source, chunk_size=RAG_CHUNK_SIZE):
     """Split text by markdown headers or double newlines, group into chunks."""
     chunks = []
     # Split by header or double newline
-    parts = re.split(r'\n#{1,4} |\n\n+', text)
+    parts = re.split(r"\n#{1,4} |\n\n+", text)
     for part in parts:
         part = part.strip()
         if not part:
             continue
         words = part.split()
         for i in range(0, len(words), chunk_size):
-            chunk_words = words[i:i+chunk_size]
+            chunk_words = words[i : i + chunk_size]
             chunks.append({"text": " ".join(chunk_words), "source": source})
     return chunks
+
 
 def _rag_chunk_json_curso(data, source):
     """Chunk a course JSON into semantic pieces."""
@@ -2427,7 +2639,11 @@ def _rag_chunk_json_curso(data, source):
         ea_desc = ea.get("descripcion", "")
         ea_horas = ea.get("horas", 0)
         herramientas = ea.get("herramientas", [])
-        herrs_str = ", ".join(herramientas) if isinstance(herramientas, list) else str(herramientas)
+        herrs_str = (
+            ", ".join(herramientas)
+            if isinstance(herramientas, list)
+            else str(herramientas)
+        )
         text = f"EA {ea_id}: {ea_nombre}. {ea_desc}. {ea_horas} horas. Herramientas: {herrs_str}."
         chunks.append({"text": text, "source": source})
 
@@ -2468,10 +2684,13 @@ def _rag_chunk_json_curso(data, source):
         ev_pond_str = f" Ponderacion: {ev_pond}%." if ev_pond != "" else ""
         ev_horas = ev.get("horas", 0)
         ev_horas_str = f" {ev_horas} horas." if ev_horas else ""
-        text = f"Evaluacion {ev_nombre} ({ev_tipo}): {ev_desc}.{ev_pond_str}{ev_horas_str}"
+        text = (
+            f"Evaluacion {ev_nombre} ({ev_tipo}): {ev_desc}.{ev_pond_str}{ev_horas_str}"
+        )
         chunks.append({"text": text, "source": source})
 
     return chunks
+
 
 def _rag_build_chunks():
     """Build chunks from all corpus files."""
@@ -2494,82 +2713,84 @@ def _rag_build_chunks():
             pass
     return chunks
 
+
 class RagBM25Index:
     """Okapi BM25 index class."""
+
     def __init__(self, k1=1.5, b=0.75):
         self.k1 = k1
         self.b = b
-        self.doc_freqs = {} # term -> count of docs containing term
+        self.doc_freqs = {}  # term -> count of docs containing term
         self.doc_lens = []  # doc_idx -> length of doc
         self.avg_dl = 0
-        self.doc_tokens = [] # doc_idx -> list of tokens
-        self.chunks = [] # doc_idx -> chunk dict
+        self.doc_tokens = []  # doc_idx -> list of tokens
+        self.chunks = []  # doc_idx -> chunk dict
         self.N = 0
         self.corpus_hash = ""
-        
+
     def build(self, chunks):
         self.chunks = chunks
         self.N = len(chunks)
         self.doc_lens = []
         self.doc_tokens = []
         self.doc_freqs = {}
-        
+
         total_len = 0
         for i, chunk in enumerate(chunks):
             tokens = _rag_tokenize(chunk.get("text", ""))
             self.doc_tokens.append(tokens)
-            l = len(tokens)
-            self.doc_lens.append(l)
-            total_len += l
-            
+            doc_len = len(tokens)
+            self.doc_lens.append(doc_len)
+            total_len += doc_len
+
             seen = set(tokens)
             for t in seen:
                 self.doc_freqs[t] = self.doc_freqs.get(t, 0) + 1
-                
+
         self.avg_dl = total_len / max(1, self.N)
-        
+
     def score(self, query_tokens, doc_idx):
         score = 0.0
         doc_len = self.doc_lens[doc_idx]
         tokens = self.doc_tokens[doc_idx]
-        
+
         # Count term frequencies in this document
         term_counts = {}
         for t in tokens:
             term_counts[t] = term_counts.get(t, 0) + 1
-            
+
         for q in query_tokens:
             if q not in self.doc_freqs:
                 continue
             df = self.doc_freqs[q]
             idf = math.log((self.N - df + 0.5) / (df + 0.5) + 1.0)
             tf = term_counts.get(q, 0)
-            
+
             numerator = tf * (self.k1 + 1)
             denominator = tf + self.k1 * (1 - self.b + self.b * (doc_len / self.avg_dl))
             score += idf * (numerator / denominator)
         return score
-        
+
     def query(self, text, top_k=RAG_TOP_K):
         query_tokens = _rag_tokenize(text)
         if not query_tokens or self.N == 0:
             return []
-            
+
         scores = []
         for i in range(self.N):
             s = self.score(query_tokens, i)
             if s > 0:
                 scores.append((s, i))
-                
+
         scores.sort(key=lambda x: x[0], reverse=True)
-        
+
         results = []
         for s, i in scores[:top_k]:
             res = dict(self.chunks[i])
             res["score"] = s
             results.append(res)
         return results
-        
+
     def to_dict(self):
         return {
             "k1": self.k1,
@@ -2580,9 +2801,9 @@ class RagBM25Index:
             "doc_tokens": self.doc_tokens,
             "chunks": self.chunks,
             "N": self.N,
-            "corpus_hash": self.corpus_hash
+            "corpus_hash": self.corpus_hash,
         }
-        
+
     @classmethod
     def from_dict(cls, d):
         idx = cls(k1=d.get("k1", 1.5), b=d.get("b", 0.75))
@@ -2594,6 +2815,7 @@ class RagBM25Index:
         idx.N = d.get("N", 0)
         idx.corpus_hash = d.get("corpus_hash", "")
         return idx
+
 
 def _rag_corpus_hash():
     """Hash corpus file path, mtime, and size."""
@@ -2608,19 +2830,21 @@ def _rag_corpus_hash():
     h = hashlib.sha256(",".join(items).encode("utf-8")).hexdigest()
     return h[:16]
 
+
 def _rag_index_path():
     """Path to the index file."""
     return os.path.join(RAG_INDEX_DIR, "bm25_index.json")
+
 
 def _rag_load_or_build():
     """Lazy load or build index."""
     global _RAG_INDEX
     if _RAG_INDEX is not None:
         return _RAG_INDEX
-        
+
     curr_hash = _rag_corpus_hash()
     idx_path = _rag_index_path()
-    
+
     if os.path.isfile(idx_path):
         try:
             with open(idx_path, "r", encoding="utf-8") as f:
@@ -2631,13 +2855,13 @@ def _rag_load_or_build():
         except (OSError, json.JSONDecodeError):
             # Non-fatal: stale or corrupted cached index, force rebuild below
             pass
-            
+
     # Need to build
     chunks = _rag_build_chunks()
     idx = RagBM25Index()
     idx.build(chunks)
     idx.corpus_hash = curr_hash
-    
+
     try:
         os.makedirs(RAG_INDEX_DIR, exist_ok=True)
         tmp = idx_path + ".tmp"
@@ -2647,11 +2871,14 @@ def _rag_load_or_build():
     except OSError as err:
         # Non-fatal: if cache directory is not writable, keep index in memory only
         if os.environ.get("YAP_DEBUG") == "1":
-            sys.stderr.write(f"[yap] Aviso: No se pudo guardar caché RAG ({err}). Operando en memoria.\n")
+            sys.stderr.write(
+                f"[yap] Aviso: No se pudo guardar caché RAG ({err}). Operando en memoria.\n"
+            )
         pass
-        
+
     _RAG_INDEX = idx
     return _RAG_INDEX
+
 
 def rag_rebuild():
     """Force rebuild index."""
@@ -2673,11 +2900,14 @@ def rag_rebuild():
     except OSError as err:
         # Non-fatal: keep rebuilt index in memory if disk write fails
         if os.environ.get("YAP_DEBUG") == "1":
-            sys.stderr.write(f"[yap] Aviso: No se pudo persistir caché reconstruido ({err}).\n")
+            sys.stderr.write(
+                f"[yap] Aviso: No se pudo persistir caché reconstruido ({err}).\n"
+            )
         pass
     _RAG_INDEX = idx
     t1 = time.time()
     return _RAG_INDEX.N, int((t1 - t0) * 1000)
+
 
 def rag_retrieve(query, top_k=RAG_TOP_K, max_tokens=RAG_MAX_CONTEXT_TOKENS):
     """Retrieve fragments matching query."""
@@ -2685,7 +2915,7 @@ def rag_retrieve(query, top_k=RAG_TOP_K, max_tokens=RAG_MAX_CONTEXT_TOKENS):
         return []
     idx = _rag_load_or_build()
     results = idx.query(query, top_k=top_k)
-    
+
     # Trim to budget
     total_tokens = 0
     trimmed = []
@@ -2697,6 +2927,7 @@ def rag_retrieve(query, top_k=RAG_TOP_K, max_tokens=RAG_MAX_CONTEXT_TOKENS):
         trimmed.append(r)
         total_tokens += est_tokens
     return trimmed
+
 
 def _rag_context_for_query(prompt):
     """Build string context for prompt."""
@@ -2710,13 +2941,14 @@ def _rag_context_for_query(prompt):
         lines.append(f"— [{src}] {txt}")
     return "\n".join(lines)
 
+
 def cmd_rag(sub=""):
     """Handle rag commands."""
     sub = sub.strip()
     if sub == "rebuild" or sub == "reconstruir":
         n, ms = rag_rebuild()
         return f"Indice reconstruido: {n} fragmentos en {ms} ms."
-        
+
     if sub.startswith("buscar ") or sub.startswith("query "):
         q = sub.split(" ", 1)[1]
         res = rag_retrieve(q)
@@ -2729,7 +2961,7 @@ def cmd_rag(sub=""):
             txt = r.get("text", "")[:100] + "..."
             out.append(f"[score: {sc:.2f}] {src}: {txt}")
         return "\n".join(out)
-        
+
     # Status
     en = "Activado" if RAG_ENABLED else "Desactivado"
     idx = _rag_load_or_build() if RAG_ENABLED else None
@@ -2742,6 +2974,7 @@ def cmd_rag(sub=""):
         f"Fragmentos: {n}\n"
         f"Top-K: {RAG_TOP_K}, Max Tokens: {RAG_MAX_CONTEXT_TOKENS}"
     )
+
 
 # ── Evaluación automática de actividades (#23) ──────────────
 
@@ -2781,7 +3014,6 @@ def _buscar_ea(curso, ea_id):
             return e
     return None
 
-import math
 
 # ── Feedback pedagogico (#29) ───────────────────────────────
 # El feedback formativo acompana durante la EA: reconoce el logro antes de
@@ -2846,7 +3078,11 @@ def _contexto_sesion_activa():
             activa = None
         if activa:
             partes.append(
-                t("eval.session_ctx", id=activa.get("id"), estado=activa.get("estado", "activa"))
+                t(
+                    "eval.session_ctx",
+                    id=activa.get("id"),
+                    estado=activa.get("estado", "activa"),
+                )
             )
             if activa.get("curso"):
                 partes.append(t("eval.course_of_session", curso=activa["curso"]))
@@ -2988,7 +3224,7 @@ def parsear_json_evaluacion(raw, criterios=None):
         start = cleaned.find("{")
         end = cleaned.rfind("}")
         if start != -1 and end > start:
-            snippet = cleaned[start:end + 1]
+            snippet = cleaned[start : end + 1]
             for candidate in (
                 snippet,
                 re.sub(r",\s*}", "}", re.sub(r",\s*]", "]", snippet)),
@@ -3080,7 +3316,9 @@ def _evaluar_opcion_multiple(respuesta, actividad, criterios):
             "aprobado": True,
             "puntaje": 100,
             "feedback": t("eval.correct"),
-            "criterios_cumplidos": list(criterios) if criterios else [t("eval.correct_selection")],
+            "criterios_cumplidos": list(criterios)
+            if criterios
+            else [t("eval.correct_selection")],
             "criterios_fallidos": [],
             "sugerencia": "",
             "error": False,
@@ -3091,22 +3329,35 @@ def _evaluar_opcion_multiple(respuesta, actividad, criterios):
         "puntaje": 0,
         "feedback": t("eval.incorrect"),
         "criterios_cumplidos": [],
-        "criterios_fallidos": list(criterios) if criterios else [t("eval.correct_selection")],
+        "criterios_fallidos": list(criterios)
+        if criterios
+        else [t("eval.correct_selection")],
         "sugerencia": t("eval.review_options"),
         "error": False,
         "parseado": True,
     }
 
 
-def _prompt_evaluacion(respuesta, criterios, tipo, actividad, contexto,
-                       tipo_feedback=FEEDBACK_FORMATIVO, dificultad=None):
+def _prompt_evaluacion(
+    respuesta,
+    criterios,
+    tipo,
+    actividad,
+    contexto,
+    tipo_feedback=FEEDBACK_FORMATIVO,
+    dificultad=None,
+):
     """Compact evaluator prompt. Kept short for the 2048-token context."""
     nombre = _truncar((actividad or {}).get("nombre", ""), 80)
     descripcion = _truncar(
-        (actividad or {}).get("enunciado") or (actividad or {}).get("descripcion") or "",
+        (actividad or {}).get("enunciado")
+        or (actividad or {}).get("descripcion")
+        or "",
         400,
     )
-    crit_lines = "\n".join(f"- {c}" for c in (criterios or [])[:8]) or t("eval.prompt_no_criteria")
+    crit_lines = "\n".join(f"- {c}" for c in (criterios or [])[:8]) or t(
+        "eval.prompt_no_criteria"
+    )
     extra = ""
     if tipo == "codigo_pseint":
         extra = t("eval.prompt_pseint_extra")
@@ -3156,15 +3407,23 @@ def _llamar_llm_evaluacion(prompt):
     full_prompt = "".join(parts)
     cmd = [
         bin_path,
-        "-m", MODEL_PATH,
-        "-p", full_prompt,
-        "-n", "320",
-        "--temp", str(LLAMA_TEMP_EVAL),
-        "--ctx-size", str(MAX_CTX),
-        "--cache-type-k", "q8_0",
-        "--cache-type-v", "q8_0",
+        "-m",
+        MODEL_PATH,
+        "-p",
+        full_prompt,
+        "-n",
+        "320",
+        "--temp",
+        str(LLAMA_TEMP_EVAL),
+        "--ctx-size",
+        str(MAX_CTX),
+        "--cache-type-k",
+        "q8_0",
+        "--cache-type-v",
+        "q8_0",
         "--flash-attn",
-        "--threads", str(LLAMA_THREADS),
+        "--threads",
+        str(LLAMA_THREADS),
         "-no-cnv",
         "--no-display-prompt",
     ]
@@ -3200,18 +3459,32 @@ def _llamar_llm_evaluacion(prompt):
         return t("error.llama_missing")
 
 
-def _evaluar_con_llm(respuesta, criterios, tipo, actividad, contexto,
-                     tipo_feedback=FEEDBACK_FORMATIVO, dificultad=None):
+def _evaluar_con_llm(
+    respuesta,
+    criterios,
+    tipo,
+    actividad,
+    contexto,
+    tipo_feedback=FEEDBACK_FORMATIVO,
+    dificultad=None,
+):
     raw = _llamar_llm_evaluacion(
-        _prompt_evaluacion(respuesta, criterios, tipo, actividad, contexto,
-                           tipo_feedback, dificultad)
+        _prompt_evaluacion(
+            respuesta, criterios, tipo, actividad, contexto, tipo_feedback, dificultad
+        )
     )
     return parsear_json_evaluacion(raw, criterios)
 
 
-def evaluar_actividad(respuesta, criterios, tipo="respuesta_libre",
-                      actividad=None, contexto=None,
-                      tipo_feedback=FEEDBACK_FORMATIVO, dificultad=None):
+def evaluar_actividad(
+    respuesta,
+    criterios,
+    tipo="respuesta_libre",
+    actividad=None,
+    contexto=None,
+    tipo_feedback=FEEDBACK_FORMATIVO,
+    dificultad=None,
+):
     """Evaluate a student answer against criteria.
 
     tipo=opcion_multiple uses exact comparison. The other types call the LLM
@@ -3263,30 +3536,42 @@ def _registro_actividad(ea_prog, orden):
     """Return (creating if needed) the per-activity progress record."""
     acts = ea_prog.setdefault("actividades", {})
     key = str(orden)
-    return acts.setdefault(key, {
-        "puntaje": None,
-        "puntaje_anterior": None,
-        "intentos": 0,
-        "aprobado": False,
-        "fecha_aprobacion": None,
-        "criterios_cumplidos": [],
-        "criterios_fallidos": [],
-        # Sistema Adaptativo (#30)
-        "tiempo_actividad": 0,       # segundos dedicados a la actividad
-        "pistas_usadas": 0,          # numero de pistas usadas (0 = sin ayuda)
-        "resultado": None,           # "aprobado" | "reprobado"
-        "variante": None,            # dificultad con que se entrego: facil/normal/desafiante
-    })
+    return acts.setdefault(
+        key,
+        {
+            "puntaje": None,
+            "puntaje_anterior": None,
+            "intentos": 0,
+            "aprobado": False,
+            "fecha_aprobacion": None,
+            "criterios_cumplidos": [],
+            "criterios_fallidos": [],
+            # Sistema Adaptativo (#30)
+            "tiempo_actividad": 0,  # segundos dedicados a la actividad
+            "pistas_usadas": 0,  # numero de pistas usadas (0 = sin ayuda)
+            "resultado": None,  # "aprobado" | "reprobado"
+            "variante": None,  # dificultad con que se entrego: facil/normal/desafiante
+        },
+    )
 
 
-def registrar_intento_actividad(progress, curso_codigo, ea_id, orden, resultado,
-                                tiempo_actividad=None, pistas_usadas=None,
-                                variante=None):
+def registrar_intento_actividad(
+    progress,
+    curso_codigo,
+    ea_id,
+    orden,
+    resultado,
+    tiempo_actividad=None,
+    pistas_usadas=None,
+    variante=None,
+):
     """Persist one evaluation attempt. LLM errors do not increment intentos."""
     ea_prog = (
         progress.setdefault("cursos", {})
         .setdefault(curso_codigo, {})
-        .setdefault(ea_id, {"completada": False, "actividad_actual": 0, "actividades": {}})
+        .setdefault(
+            ea_id, {"completada": False, "actividad_actual": 0, "actividades": {}}
+        )
     )
     rec = _registro_actividad(ea_prog, orden)
     if not resultado.get("error"):
@@ -3323,7 +3608,9 @@ def saltar_actividad(progress, curso_codigo, ea_id, orden):
     ea_prog = (
         progress.setdefault("cursos", {})
         .setdefault(curso_codigo, {})
-        .setdefault(ea_id, {"completada": False, "actividad_actual": 0, "actividades": {}})
+        .setdefault(
+            ea_id, {"completada": False, "actividad_actual": 0, "actividades": {}}
+        )
     )
     rec = _registro_actividad(ea_prog, orden)
     rec["saltada"] = True
@@ -3352,8 +3639,12 @@ def _puntajes_ea(ea_prog):
 
 def _finalizar_ea(progress, curso_codigo, ea_id):
     """Mark the EA complete and store average score + Chilean grade."""
-    ea_prog = progress.setdefault("cursos", {}).setdefault(curso_codigo, {}).setdefault(
-        ea_id, {"completada": False, "actividad_actual": 0, "actividades": {}}
+    ea_prog = (
+        progress.setdefault("cursos", {})
+        .setdefault(curso_codigo, {})
+        .setdefault(
+            ea_id, {"completada": False, "actividad_actual": 0, "actividades": {}}
+        )
     )
     ea_prog["completada"] = True
     scores = _puntajes_ea(ea_prog)
@@ -3395,9 +3686,7 @@ def feedback_sumativo_ea(progress, curso_codigo, ea_id):
     LLM: en equipos de 3-8 GB una llamada extra por cierre no se justifica, y
     asi el resultado es reproducible.
     """
-    ea_prog = (
-        (progress.get("cursos") or {}).get(curso_codigo, {}).get(ea_id) or {}
-    )
+    ea_prog = (progress.get("cursos") or {}).get(curso_codigo, {}).get(ea_id) or {}
     puntajes = _puntajes_ea(ea_prog)
     if not puntajes:
         return {
@@ -3416,7 +3705,8 @@ def feedback_sumativo_ea(progress, curso_codigo, ea_id):
     fortalezas, por_mejorar = _agrupar_criterios_ea(ea_prog)
 
     reprobadas = sorted(
-        int(k) for k, rec in (ea_prog.get("actividades") or {}).items()
+        int(k)
+        for k, rec in (ea_prog.get("actividades") or {}).items()
         if isinstance(rec, dict) and not rec.get("aprobado") and str(k).isdigit()
     )
 
@@ -3427,8 +3717,7 @@ def feedback_sumativo_ea(progress, curso_codigo, ea_id):
         partes.append("A mejorar: " + ", ".join(por_mejorar[:5]))
     if reprobadas:
         partes.append(
-            "Actividades no aprobadas: "
-            + ", ".join(str(o) for o in reprobadas)
+            "Actividades no aprobadas: " + ", ".join(str(o) for o in reprobadas)
         )
 
     return {
@@ -3521,7 +3810,7 @@ def _comandos_actividad(resp):
         return "pregunta", resp.split(" ", 1)[1].strip()
     if lower.startswith("ask "):
         return "pregunta", resp.split(" ", 1)[1].strip()
-    if lower.startswith("?") :
+    if lower.startswith("?"):
         return "pregunta", resp[1:].strip()
     return "respuesta", resp
 
@@ -3552,8 +3841,13 @@ def _mostrar_resultado_evaluacion(resultado, intentos, max_intentos, registro=No
         color = "RED"
         estado = t("eval.error")
     lines = [
-        t("eval.score_line", estado=estado, puntaje=resultado.get("puntaje", 0),
-          n=intentos, max=max_intentos),
+        t(
+            "eval.score_line",
+            estado=estado,
+            puntaje=resultado.get("puntaje", 0),
+            n=intentos,
+            max=max_intentos,
+        ),
         "",
         str(resultado.get("feedback") or ""),
     ]
@@ -3578,7 +3872,12 @@ def _contexto_actividad(curso, ea, act, total):
     partes = [
         t("eval.ctx_course", codigo=curso.get("codigo"), nombre=curso.get("nombre")),
         t("eval.ctx_ea", id=ea.get("id"), nombre=ea.get("nombre")),
-        t("eval.ctx_act", orden=act.get("orden"), total=total, nombre=act.get("nombre")),
+        t(
+            "eval.ctx_act",
+            orden=act.get("orden"),
+            total=total,
+            nombre=act.get("nombre"),
+        ),
         t("eval.ctx_desc", desc=act.get("descripcion", "")),
     ]
     extra = _contexto_sesion_activa()
@@ -3706,7 +4005,7 @@ class AdaptiveEngine:
         res = self._resultados(historial)
         if len(res) < self.SUBIR_APROBADOS:
             return False
-        for r, pistas in res[-self.SUBIR_APROBADOS:]:
+        for r, pistas in res[-self.SUBIR_APROBADOS :]:
             if r != "aprobado" or pistas != self.SUBIR_SIN_PISTAS:
                 return False
         return True
@@ -3716,7 +4015,7 @@ class AdaptiveEngine:
         res = self._resultados(historial)
         if len(res) < self.BAJAR_REPROBADOS:
             return False
-        return all(r == "reprobado" for r, _ in res[-self.BAJAR_REPROBADOS:])
+        return all(r == "reprobado" for r, _ in res[-self.BAJAR_REPROBADOS :])
 
     def _secuencia_resumen(self, historial):
         """Short human-readable summary of the analyzed sequence."""
@@ -3729,8 +4028,10 @@ class AdaptiveEngine:
             return f"{ANUNCIOS_SUBIR.get(nuevo, '')} (ahora: {nuevo})"
         if accion == "bajar":
             if repaso:
-                return ("Estas en el nivel basico; ofreceremos contenido de "
-                        f"repaso para consolidar ({nuevo}).")
+                return (
+                    "Estas en el nivel basico; ofreceremos contenido de "
+                    f"repaso para consolidar ({nuevo})."
+                )
             return f"{ANUNCIOS_BAJAR.get(nuevo, '')} (ahora: {nuevo})"
         return None  # sin cambio -> sin anuncio
 
@@ -3749,7 +4050,9 @@ class AdaptiveEngine:
             if isinstance(actividad, dict):
                 return dict(actividad)
             return {}
-        nivel_ok = str(nivel or "").lower() if str(nivel or "").lower() in variantes else None
+        nivel_ok = (
+            str(nivel or "").lower() if str(nivel or "").lower() in variantes else None
+        )
         if nivel_ok is None:
             if isinstance(actividad, dict):
                 return dict(actividad)
@@ -3770,6 +4073,7 @@ class AdaptiveEngine:
 
 # ── Comandos de curso ───────────────────────────────────────
 
+
 def cmd_curso(codigo):
     """Enter a course: show overview with RAs and EAs."""
     try:
@@ -3782,17 +4086,27 @@ def cmd_curso(codigo):
     sesion_asociar(curso=curso["codigo"])
 
     lines = [display_header(f"{curso['codigo']} — {curso['nombre']}")]
-    lines.append(f"  {t('eval.hours', n=curso['horas'])} | {t('eval.weeks', n=curso['semanas'])}")
+    lines.append(
+        f"  {t('eval.hours', n=curso['horas'])} | {t('eval.weeks', n=curso['semanas'])}"
+    )
     lines.append(f"  {t('eval.env', env=curso.get('ambiente', 'N/A'))}")
     lines.append(f"  {t('eval.tools', tools=', '.join(curso.get('herramientas', [])))}")
     lines.append("")
-    lines.append(display_menu(t("eval.ras"), [
-        f"{ra['id']}: {ra['descripcion'][:70]}..." for ra in curso.get("ras", [])
-    ]))
-    lines.append(display_menu(t("eval.eas"), [
-        f"{ea['id']}: {ea['nombre']} ({ea['horas']}h, {ea.get('ponderacion', '?')}%)"
-        for ea in curso.get("eas", [])
-    ]))
+    lines.append(
+        display_menu(
+            t("eval.ras"),
+            [f"{ra['id']}: {ra['descripcion'][:70]}..." for ra in curso.get("ras", [])],
+        )
+    )
+    lines.append(
+        display_menu(
+            t("eval.eas"),
+            [
+                f"{ea['id']}: {ea['nombre']} ({ea['horas']}h, {ea.get('ponderacion', '?')}%)"
+                for ea in curso.get("eas", [])
+            ],
+        )
+    )
     lines.append(f"\n  {C['GRAY']}{t('eval.curso_hint')}{C['RESET']}")
     return "\n".join(lines)
 
@@ -3852,8 +4166,12 @@ def iniciar_ea(curso_codigo, ea_id):
 
     sys.stdout.write(display_header(f"{ea['id']}: {ea['nombre']}"))
     sys.stdout.write(f"  {ea['descripcion']}\n")
-    sys.stdout.write(f"  {t('eval.tools', tools=', '.join(ea.get('herramientas', [])))}\n")
-    sys.stdout.write(f"  {t('eval.activities_count', n=len(actividades), h=ea['horas'])}\n\n")
+    sys.stdout.write(
+        f"  {t('eval.tools', tools=', '.join(ea.get('herramientas', [])))}\n"
+    )
+    sys.stdout.write(
+        f"  {t('eval.activities_count', n=len(actividades), h=ea['horas'])}\n\n"
+    )
 
     for act in actividades:
         done = act.get("orden", 0) <= current
@@ -3867,7 +4185,9 @@ def iniciar_ea(curso_codigo, ea_id):
         else:
             status = f"{C['GRAY']}·{C['RESET']}"
         tipo_tag = f" [{act['tipo']}]" if _es_evaluable(act) else ""
-        sys.stdout.write(f"  {status} {act.get('orden', '?')}. {act['nombre']}{tipo_tag}\n")
+        sys.stdout.write(
+            f"  {status} {act.get('orden', '?')}. {act['nombre']}{tipo_tag}\n"
+        )
         sys.stdout.write(f"     {act['descripcion'][:70]}...\n")
 
     sys.stdout.write(f"\n  {C['GRAY']}{t('eval.enter_start')}{C['RESET']}\n")
@@ -3883,7 +4203,9 @@ def iniciar_ea(curso_codigo, ea_id):
     while 0 <= current < total_act:
         act = actividades[current]
         orden = act.get("orden", current + 1)
-        tool = act.get("tool_hint") or (ea["herramientas"][0] if ea.get("herramientas") else None)
+        tool = act.get("tool_hint") or (
+            ea["herramientas"][0] if ea.get("herramientas") else None
+        )
         evaluable = _es_evaluable(act)
         max_intentos = _max_intentos_actividad(act)
         rec = _registro_actividad(ea_prog, orden)
@@ -3894,10 +4216,14 @@ def iniciar_ea(curso_codigo, ea_id):
         # actividad. Si hay cambio, emitir el anuncio publico.
         historial = []
         for _ep in curso_prog.values():
-            if not isinstance(_ep, dict) or not isinstance(_ep.get("actividades"), dict):
+            if not isinstance(_ep, dict) or not isinstance(
+                _ep.get("actividades"), dict
+            ):
                 continue
-            for _key in sorted(_ep["actividades"],
-                               key=lambda k: (0, int(k)) if str(k).isdigit() else (1, 0)):
+            for _key in sorted(
+                _ep["actividades"],
+                key=lambda k: (0, int(k)) if str(k).isdigit() else (1, 0),
+            ):
                 _r = _ep["actividades"][_key]
                 if isinstance(_r, dict) and _r.get("resultado"):
                     historial.append(_r)
@@ -3927,8 +4253,11 @@ def iniciar_ea(curso_codigo, ea_id):
         if evaluable and act.get("tipo") == "opcion_multiple":
             body += "\n\n" + _formatear_opciones(act.get("opciones") or [])
         elif evaluable and act.get("criterios_evaluacion"):
-            body += "\n\n" + t("eval.criterios") + "\n" + "\n".join(
-                f"  - {c}" for c in act["criterios_evaluacion"]
+            body += (
+                "\n\n"
+                + t("eval.criterios")
+                + "\n"
+                + "\n".join(f"  - {c}" for c in act["criterios_evaluacion"])
             )
         sys.stdout.write(display_box(body, color="CYAN"))
         if tool:
@@ -3940,7 +4269,9 @@ def iniciar_ea(curso_codigo, ea_id):
         activity_done = False
         while not activity_done:
             try:
-                resp = input(_prompt_actividad(evaluable, intentos, max_intentos)).strip()
+                resp = input(
+                    _prompt_actividad(evaluable, intentos, max_intentos)
+                ).strip()
             except (EOFError, KeyboardInterrupt):
                 sys.stdout.write("\n")
                 guardar_progreso(progress)
@@ -3970,7 +4301,8 @@ def iniciar_ea(curso_codigo, ea_id):
                     cmd_query(
                         contexto + "\n" + t("eval.doubt_line", question=pregunta),
                         store_history=False,
-                    ) + "\n"
+                    )
+                    + "\n"
                 )
                 continue
 
@@ -4026,7 +4358,11 @@ def iniciar_ea(curso_codigo, ea_id):
                 dificultad=dificultad_actual,
             )
             rec = registrar_intento_actividad(
-                progress, curso_codigo, ea_id, orden, resultado,
+                progress,
+                curso_codigo,
+                ea_id,
+                orden,
+                resultado,
                 tiempo_actividad=int(time.monotonic() - tiempo_inicio),
                 pistas_usadas=pistas_usadas,
                 variante=dificultad_actual,
@@ -4035,7 +4371,8 @@ def iniciar_ea(curso_codigo, ea_id):
             sys.stdout.write(
                 _mostrar_resultado_evaluacion(
                     resultado, intentos, max_intentos, registro=rec
-                ) + "\n"
+                )
+                + "\n"
             )
             guardar_progreso(progress)
 
@@ -4086,7 +4423,11 @@ def cmd_guia():
 
     lines = [display_header(t("guia.title"))]
     for i, (titulo, contenido) in enumerate(pasos, 1):
-        lines.append(display_box(t("guia.step", n=i, titulo=titulo) + f"\n\n{contenido}", color="CYAN"))
+        lines.append(
+            display_box(
+                t("guia.step", n=i, titulo=titulo) + f"\n\n{contenido}", color="CYAN"
+            )
+        )
         lines.append(f"\n  {C['GRAY']}{t('guia.next')}{C['RESET']}\n")
     return "\n".join(lines)
 
@@ -4137,11 +4478,22 @@ def _resumen_lineas_ea(codigo, ea_id, estado, dificultad_curso=None):
     if nota is None and promedio is not None:
         nota = nota_chilena(promedio)
 
-    status = f"{C['GREEN']}✓{C['RESET']}" if completada else f"{C['YELLOW']}▶{C['RESET']}"
+    status = (
+        f"{C['GREEN']}✓{C['RESET']}" if completada else f"{C['YELLOW']}▶{C['RESET']}"
+    )
     if total is not None:
-        line = "    " + t("progress.activities", status=status, ea=ea_id, hechas=hechas, total=total, pct=pct)
+        line = "    " + t(
+            "progress.activities",
+            status=status,
+            ea=ea_id,
+            hechas=hechas,
+            total=total,
+            pct=pct,
+        )
     else:
-        line = "    " + t("progress.activities_done", status=status, ea=ea_id, hechas=hechas)
+        line = "    " + t(
+            "progress.activities_done", status=status, ea=ea_id, hechas=hechas
+        )
     if promedio is not None:
         line += " | " + t("progress.average", n=promedio)
     if nota is not None:
@@ -4161,7 +4513,11 @@ def _resumen_lineas_ea(codigo, ea_id, estado, dificultad_curso=None):
             if rec.get("saltada"):
                 tag = t("progress.skipped")
             else:
-                tag = t("progress.pts_attempts", pts=rec.get("puntaje", 0), n=rec.get("intentos", 0))
+                tag = t(
+                    "progress.pts_attempts",
+                    pts=rec.get("puntaje", 0),
+                    n=rec.get("intentos", 0),
+                )
             reprobadas.append(t("progress.act_tag", key=key, tag=tag))
     if reprobadas:
         lines.append(
@@ -4181,7 +4537,9 @@ def cmd_mostrar_progreso():
     lines = [display_header(t("progress.header"))]
     for codigo, eas in cursos_prog.items():
         lines.append(f"\n  {C['BOLD']}{C['GREEN']}{codigo}{C['RESET']}")
-        dificultad_curso = eas.get("dificultad_actual") if isinstance(eas, dict) else None
+        dificultad_curso = (
+            eas.get("dificultad_actual") if isinstance(eas, dict) else None
+        )
         if dificultad_curso and _nivel_orden(dificultad_curso) >= 0:
             lines.append(
                 f"      {C['CYAN']}Dificultad adaptativa:{C['RESET']} {dificultad_curso}"
@@ -4201,7 +4559,9 @@ def cmd_mostrar_progreso():
         if notas:
             w = sum(pesos) or 1.0
             nota_curso = round(sum(n * p for n, p in zip(notas, pesos)) / w, 1)
-            lines.append(f"    {C['CYAN']}{t('progress.course_grade', nota=nota_curso)}{C['RESET']}")
+            lines.append(
+                f"    {C['CYAN']}{t('progress.course_grade', nota=nota_curso)}{C['RESET']}"
+            )
     lines.append(f"\n  {C['GRAY']}{t('progress.saved_in')}{C['RESET']}")
     return "\n".join(lines)
 
@@ -4229,6 +4589,7 @@ def _slug(nombre):
 
 
 # ── PIN del docente ─────────────────────────────────────────
+
 
 def _derivar_pin(pin, sal):
     """Derive the stored PIN verifier. Slow on purpose: a 4-digit PIN has
@@ -4306,19 +4667,22 @@ def _autorizado(pin=""):
             "El modo profesor requiere el rol correspondiente.\n\n"
             "  yap perfil rol profesor\n\n"
             "Despues define un PIN con 'yap profesor pin'.",
-            color="YELLOW")
+            color="YELLOW",
+        )
     if not pin_configurado(perfil):
         return False, display_box(
             "Todavia no hay PIN configurado.\n\n"
             "  yap profesor pin\n\n"
             "Sin PIN el panel no se abre.",
-            color="YELLOW")
+            color="YELLOW",
+        )
     if not verificar_pin(pin or _pedir_pin()):
         return False, f"{C['YELLOW']}PIN incorrecto.{C['RESET']}"
     return True, ""
 
 
 # ── Importacion de progreso ─────────────────────────────────
+
 
 def _parece_progreso(data):
     """A progress file has a 'cursos' mapping. Anything else is rejected."""
@@ -4379,7 +4743,9 @@ def importar_progreso(origen):
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
-            errores.append(f"{os.path.basename(path)}: no se pudo leer ({e.__class__.__name__})")
+            errores.append(
+                f"{os.path.basename(path)}: no se pudo leer ({e.__class__.__name__})"
+            )
             continue
         if not _parece_progreso(data):
             errores.append(f"{os.path.basename(path)}: no parece un progress.json")
@@ -4416,6 +4782,7 @@ def cargar_alumnos():
 
 
 # ── Metricas ────────────────────────────────────────────────
+
 
 def _ultima_actividad(progreso):
     """Most recent approval date across every activity, or None."""
@@ -4455,7 +4822,8 @@ def metricas_alumno(registro, curso=None, ea=None):
                 continue
             actividades = estado.get("actividades") or {}
             evaluadas += sum(
-                1 for r in actividades.values()
+                1
+                for r in actividades.values()
                 if isinstance(r, dict) and r.get("puntaje") is not None
             )
             declarado = _total_actividades_ea(codigo, ea_id)
@@ -4493,6 +4861,7 @@ def _fecha_corta(iso):
 
 # ── Presentacion ────────────────────────────────────────────
 
+
 def panel_aula(curso=None, ea=None):
     """The teacher panel: one row per student."""
     alumnos = cargar_alumnos()
@@ -4503,7 +4872,8 @@ def panel_aula(curso=None, ea=None):
             "  yap profesor importar ~/progresos/maria.json\n\n"
             "Acepta un archivo, un directorio con varios JSON, o un\n"
             "directorio con una carpeta por estudiante.",
-            color="YELLOW")
+            color="YELLOW",
+        )
 
     filas = [metricas_alumno(a, curso=curso, ea=ea) for a in alumnos]
     titulo = "Panel del docente"
@@ -4515,7 +4885,8 @@ def panel_aula(curso=None, ea=None):
     lineas = [display_header(titulo)]
     lineas.append(
         f"\n  {C['BOLD']}{'Estudiante':<22}{'Avance':>10}{'Nota':>8}"
-        f"{'Ultima':>13}{C['RESET']}")
+        f"{'Ultima':>13}{C['RESET']}"
+    )
     lineas.append(f"  {C['GRAY']}{'─' * 53}{C['RESET']}")
 
     con_nota = []
@@ -4529,7 +4900,8 @@ def panel_aula(curso=None, ea=None):
         avance = f"{m['evaluadas']}/{m['total']}" if m["total"] else "—"
         lineas.append(
             f"  {m['nombre'][:22]:<22}{avance:>10}{color}{nota:>8}{C['RESET']}"
-            f"{_fecha_corta(m['ultima']):>13}")
+            f"{_fecha_corta(m['ultima']):>13}"
+        )
 
     lineas.append(f"  {C['GRAY']}{'─' * 53}{C['RESET']}")
     lineas.append(f"  {len(filas)} estudiante(s)")
@@ -4553,8 +4925,10 @@ def ficha_alumno(nombre):
             continue
         m = metricas_alumno(registro)
         lineas = [display_header(m["nombre"])]
-        lineas.append(f"\n  Avance:   {m['evaluadas']}/{m['total']} actividades "
-                      f"({m['porcentaje']}%)")
+        lineas.append(
+            f"\n  Avance:   {m['evaluadas']}/{m['total']} actividades "
+            f"({m['porcentaje']}%)"
+        )
         lineas.append(f"  Nota:     {m['nota'] if m['nota'] is not None else '—'}")
         lineas.append(f"  Ultima:   {_fecha_corta(m['ultima'])}")
         lineas.append(f"  Importado:{_fecha_corta(m['importado']):>11}")
@@ -4565,20 +4939,26 @@ def ficha_alumno(nombre):
                 continue
             for ea_id, estado in eas.items():
                 sub = metricas_alumno(registro, curso=codigo, ea=ea_id)
-                estado_txt = "completada" if (
-                    isinstance(estado, dict) and estado.get("completada")
-                ) else "en curso"
+                estado_txt = (
+                    "completada"
+                    if (isinstance(estado, dict) and estado.get("completada"))
+                    else "en curso"
+                )
                 nota = sub["nota"] if sub["nota"] is not None else "—"
                 lineas.append(
                     f"    {ea_id:<8} {sub['evaluadas']}/{sub['total']:<6} "
-                    f"nota {nota:<5} {estado_txt}")
+                    f"nota {nota:<5} {estado_txt}"
+                )
         return "\n".join(lineas)
 
-    return (f"[ERROR] No hay ningun estudiante llamado '{nombre}'. "
-            "Usa 'yap profesor listar' para ver los importados.")
+    return (
+        f"[ERROR] No hay ningun estudiante llamado '{nombre}'. "
+        "Usa 'yap profesor listar' para ver los importados."
+    )
 
 
 # ── Exportacion ─────────────────────────────────────────────
+
 
 def exportar_csv(destino=None, curso=None, ea=None):
     """Write one row per student. Returns the path, or an [ERROR] string."""
@@ -4588,8 +4968,15 @@ def exportar_csv(destino=None, curso=None, ea=None):
 
     destino = destino or os.path.join(AULA_DIR, "reporte.csv")
     tmp = destino + ".tmp"
-    columnas = ["nombre", "actividades_evaluadas", "actividades_totales",
-                "porcentaje", "nota", "aprobado", "ultima_actividad"]
+    columnas = [
+        "nombre",
+        "actividades_evaluadas",
+        "actividades_totales",
+        "porcentaje",
+        "nota",
+        "aprobado",
+        "ultima_actividad",
+    ]
     try:
         os.makedirs(os.path.dirname(os.path.abspath(destino)), exist_ok=True)
         with open(tmp, "w", encoding="utf-8", newline="") as f:
@@ -4597,12 +4984,17 @@ def exportar_csv(destino=None, curso=None, ea=None):
             escritor.writerow(columnas)
             for registro in alumnos:
                 m = metricas_alumno(registro, curso=curso, ea=ea)
-                escritor.writerow([
-                    m["nombre"], m["evaluadas"], m["total"], m["porcentaje"],
-                    "" if m["nota"] is None else m["nota"],
-                    "si" if m["aprobado"] else "no",
-                    m["ultima"] or "",
-                ])
+                escritor.writerow(
+                    [
+                        m["nombre"],
+                        m["evaluadas"],
+                        m["total"],
+                        m["porcentaje"],
+                        "" if m["nota"] is None else m["nota"],
+                        "si" if m["aprobado"] else "no",
+                        m["ultima"] or "",
+                    ]
+                )
         os.replace(tmp, destino)
     except OSError as e:
         return f"[ERROR] No se pudo escribir el CSV: {e}"
@@ -4629,8 +5021,8 @@ def _cmd_pin(param):
     perfil = cargar_perfil()
     if not es_profesor(perfil):
         return display_box(
-            "Primero asigna el rol:\n\n  yap perfil rol profesor",
-            color="YELLOW")
+            "Primero asigna el rol:\n\n  yap perfil rol profesor", color="YELLOW"
+        )
     if pin_configurado(perfil):
         if not verificar_pin(_pedir_pin()):
             return f"{C['YELLOW']}PIN actual incorrecto.{C['RESET']}"
@@ -4684,7 +5076,8 @@ def cmd_profesor(sub="", param=""):
             return "No hay estudiantes importados."
         return "\n".join(
             f"  {a.get('nombre')}  ({_fecha_corta(a.get('importado'))})"
-            for a in alumnos)
+            for a in alumnos
+        )
     if sub == "estudiante":
         if not param:
             return "[ERROR] Indica el nombre: yap profesor estudiante Maria"
@@ -4706,8 +5099,10 @@ def notify(title, msg, urgency="normal"):
     try:
         subprocess.run(
             ["notify-send", "-u", urgency, title, msg],
-            check=False, timeout=3,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=3,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL,
         )
     except FileNotFoundError:
@@ -4752,7 +5147,9 @@ def apparmor_status():
     try:
         result = subprocess.run(
             ["aa-status", "--json"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
             stdin=subprocess.DEVNULL,
         )
         if result.returncode == 0:
@@ -4802,8 +5199,14 @@ def cmd_apparmor_status():
         desc = t("apparmor.unknown_desc")
 
     return display_box(
-        t("apparmor.active", profile=APPARMOR_PROFILE, mode=mode, desc=desc, path=APPARMOR_PROFILE_PATH),
-        color=color
+        t(
+            "apparmor.active",
+            profile=APPARMOR_PROFILE,
+            mode=mode,
+            desc=desc,
+            path=APPARMOR_PROFILE_PATH,
+        ),
+        color=color,
     )
 
 
@@ -4812,7 +5215,9 @@ def cmd_open_app(app_name):
     key = app_name.strip().lower()
     if key not in apps:
         available = ", ".join(sorted(apps.keys(), key=str.title))
-        return t("error.app_unavailable", app=app_name.strip().title(), available=available)
+        return t(
+            "error.app_unavailable", app=app_name.strip().title(), available=available
+        )
 
     candidates = apps[key]
     bin_path = None
@@ -4832,14 +5237,20 @@ def cmd_open_app(app_name):
     # ponytail: stdin al vacio. La aplicacion vive mas que la llamada y, con
     # la terminal heredada, compite por ella con el REPL de Yap
     # start_new_session=True desacopla el proceso de la sesion del terminal (#104).
-    subprocess.Popen([bin_path], stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
-                     start_new_session=True)
+    subprocess.Popen(
+        [bin_path],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
 
     try:
         result = subprocess.run(
             [chosen, "--version"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
             stdin=subprocess.DEVNULL,
         )
         version = result.stdout.strip() or result.stderr.strip() or t("app.no_version")
@@ -4898,7 +5309,10 @@ def _super_habilitado():
 
 
 def _super_endpoint():
-    return os.environ.get("YAP_SUPER_ENDPOINT", SUPER_DEFAULT_ENDPOINT).strip() or SUPER_DEFAULT_ENDPOINT
+    return (
+        os.environ.get("YAP_SUPER_ENDPOINT", SUPER_DEFAULT_ENDPOINT).strip()
+        or SUPER_DEFAULT_ENDPOINT
+    )
 
 
 def _super_timeout():
@@ -5051,8 +5465,12 @@ def _payload_super(prompt, context=None):
     """Build the Yap contract. HISTORY is the source of truth."""
     historial = []
     for user_msg, assistant_msg in HISTORY[-SUPER_HISTORY_MAX:]:
-        historial.append({"rol": "user", "texto": _sanitizar_texto_super(user_msg, 500)})
-        historial.append({"rol": "assistant", "texto": _sanitizar_texto_super(assistant_msg, 500)})
+        historial.append(
+            {"rol": "user", "texto": _sanitizar_texto_super(user_msg, 500)}
+        )
+        historial.append(
+            {"rol": "assistant", "texto": _sanitizar_texto_super(assistant_msg, 500)}
+        )
     mensaje = _sanitizar_texto_super(prompt)
     if context:
         mensaje = _sanitizar_texto_super(f"Contexto:\n{context}\n\n{prompt}")
@@ -5274,7 +5692,7 @@ def _descubrir_gradio(html, fallback_root):
         return None, None, None, "root Gradio no permitido"
     fn_index = 6
     for m in re.finditer(r'"api_name"\s*:\s*"chat"', html):
-        prev = html[max(0, m.start() - 250): m.start()]
+        prev = html[max(0, m.start() - 250) : m.start()]
         ids = re.findall(r'"id"\s*:\s*(\d+)', prev)
         if ids:
             fn_index = int(ids[-1])
@@ -5363,10 +5781,12 @@ def _historial_gradio():
     """Chatbot State: lista [user, assistant] para no perder el hilo."""
     pares = []
     for user_msg, assistant_msg in HISTORY[-SUPER_HISTORY_MAX:]:
-        pares.append([
-            _sanitizar_texto_super(user_msg, 500),
-            _sanitizar_texto_super(assistant_msg, 500),
-        ])
+        pares.append(
+            [
+                _sanitizar_texto_super(user_msg, 500),
+                _sanitizar_texto_super(assistant_msg, 500),
+            ]
+        )
     return pares
 
 
@@ -5384,7 +5804,9 @@ def _post_super_gradio(payload):
         if not root_url or api_prefix is None or fn_index is None:
             req = urllib.request.Request(_gradio_url(base, "/"), headers=headers)
             with _gradio_urlopen(req, timeout=SUPER_GRADIO_HTML_TIMEOUT) as resp:
-                html = resp.read(SUPER_GRADIO_HTML_MAX).decode("utf-8", errors="replace")
+                html = resp.read(SUPER_GRADIO_HTML_MAX).decode(
+                    "utf-8", errors="replace"
+                )
             root_url, api_prefix, fn_index, err = _descubrir_gradio(html, base)
             if err:
                 return None, err
@@ -5392,11 +5814,13 @@ def _post_super_gradio(payload):
             _GRADIO_CACHE["api_prefix"] = api_prefix
             _GRADIO_CACHE["fn_index"] = fn_index
         session_hash = os.urandom(16).hex()
-        join_body = json.dumps({
-            "data": [{"text": pregunta, "files": []}, _historial_gradio()],
-            "fn_index": fn_index,
-            "session_hash": session_hash,
-        }).encode("utf-8")
+        join_body = json.dumps(
+            {
+                "data": [{"text": pregunta, "files": []}, _historial_gradio()],
+                "fn_index": fn_index,
+                "session_hash": session_hash,
+            }
+        ).encode("utf-8")
         join_headers = dict(headers)
         join_headers["Content-Type"] = "application/json"
         join_req = urllib.request.Request(
@@ -5424,7 +5848,13 @@ def _post_super_gradio(payload):
         if not texto:
             return None, "respuesta vacia"
         return {"texto": texto[:SUPER_RESPUESTA_MAX]}, None
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError) as err:
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        json.JSONDecodeError,
+        OSError,
+        ValueError,
+    ) as err:
         _gradio_reset_cache()
         return None, str(err)
 
@@ -5446,7 +5876,13 @@ def _post_super(payload):
             raw = resp.read(SUPER_RESPUESTA_MAX + 1024)
         data = json.loads(raw.decode("utf-8", errors="replace"))
         return data, None
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError) as err:
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        json.JSONDecodeError,
+        OSError,
+        ValueError,
+    ) as err:
         return None, str(err)
 
 
@@ -5528,7 +5964,9 @@ def cmd_query_super(prompt, context=None, store_history=True, skip_local=False):
         if skip_local:
             return "[WARN] Super Yap no disponible."
         return cmd_query(
-            prompt, context=context, store_history=store_history,
+            prompt,
+            context=context,
+            store_history=store_history,
             allow_super_fallback=False,
         )
     payload = _payload_super(prompt, context=context)
@@ -5540,7 +5978,9 @@ def cmd_query_super(prompt, context=None, store_history=True, skip_local=False):
         if skip_local:
             return f"[WARN] Super Yap no disponible. ({motivo})"
         local = cmd_query(
-            prompt, context=context, store_history=store_history,
+            prompt,
+            context=context,
+            store_history=store_history,
             allow_super_fallback=False,
         )
         return f"[WARN] Super Yap no disponible, usando LLM local. ({motivo})\n{local}"
@@ -5565,7 +6005,10 @@ def _clean_output(result):
 def _responder_super_por_fallback(prompt, context, store_history, motivo):
     """Local timeout / too many tokens → Super Yap. No reintenta el 1B/3B."""
     out = cmd_query_super(
-        prompt, context=context, store_history=store_history, skip_local=True,
+        prompt,
+        context=context,
+        store_history=store_history,
+        skip_local=True,
     )
     if out and not out.startswith("[WARN]") and not out.startswith("[ERROR]"):
         return f"[INFO] {motivo} Respuesta de Super Yap:\n{out}"
@@ -5588,7 +6031,10 @@ def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=Tru
             else "La consulta supera los tokens del modelo local."
         )
         super_out = _responder_super_por_fallback(
-            prompt, context, store_history, motivo,
+            prompt,
+            context,
+            store_history,
+            motivo,
         )
         if super_out:
             return super_out
@@ -5610,7 +6056,9 @@ def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=Tru
     if rag_ctx:
         parts.append(f"{HEADER}user{FOOTER}\n\n{rag_ctx}{EOT}")
     if context:
-        parts.append(f"{HEADER}user{FOOTER}\n\n{t('query.context', context=context)}{EOT}")
+        parts.append(
+            f"{HEADER}user{FOOTER}\n\n{t('query.context', context=context)}{EOT}"
+        )
     parts.append(f"{HEADER}user{FOOTER}\n\n{prompt}{EOT}")
     parts.append(f"{HEADER}assistant{FOOTER}\n\n")
 
@@ -5618,15 +6066,23 @@ def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=Tru
 
     cmd = [
         "llama-cli",
-        "-m", MODEL_PATH,
-        "-p", full_prompt,
-        "-n", "384",
-        "--temp", str(LLAMA_TEMP_QUERY),
-        "--ctx-size", str(MAX_CTX),
-        "--cache-type-k", "q8_0",
-        "--cache-type-v", "q8_0",
+        "-m",
+        MODEL_PATH,
+        "-p",
+        full_prompt,
+        "-n",
+        "384",
+        "--temp",
+        str(LLAMA_TEMP_QUERY),
+        "--ctx-size",
+        str(MAX_CTX),
+        "--cache-type-k",
+        "q8_0",
+        "--cache-type-v",
+        "q8_0",
         "--flash-attn",
-        "--threads", str(LLAMA_THREADS),
+        "--threads",
+        str(LLAMA_THREADS),
         "-no-cnv",
         "--no-display-prompt",
     ]
@@ -5636,7 +6092,10 @@ def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=Tru
         # que hereda y apaga el eco; si no sale limpio, se queda apagado y el
         # estudiante escribe a ciegas la consulta siguiente (#99)
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout_s,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
             stdin=subprocess.DEVNULL,
         )
         out = _clean_output(result)
@@ -5648,7 +6107,9 @@ def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=Tru
     except subprocess.TimeoutExpired:
         if allow_super_fallback and _super_disponible():
             super_out = _responder_super_por_fallback(
-                prompt, context, store_history,
+                prompt,
+                context,
+                store_history,
                 "El modelo local tardo demasiado.",
             )
             if super_out:
@@ -5668,21 +6129,33 @@ def cmd_pseint(query):
     full_prompt = "".join(parts)
 
     cmd = [
-        "llama-cli", "-m", MODEL_PATH,
-        "-p", full_prompt,
-        "-n", "512",
-        "--temp", str(LLAMA_TEMP_PSEINT),
-        "--ctx-size", "1024",
-        "--cache-type-k", "q8_0",
-        "--cache-type-v", "q8_0",
+        "llama-cli",
+        "-m",
+        MODEL_PATH,
+        "-p",
+        full_prompt,
+        "-n",
+        "512",
+        "--temp",
+        str(LLAMA_TEMP_PSEINT),
+        "--ctx-size",
+        "1024",
+        "--cache-type-k",
+        "q8_0",
+        "--cache-type-v",
+        "q8_0",
         "--flash-attn",
-        "--threads", str(LLAMA_THREADS),
+        "--threads",
+        str(LLAMA_THREADS),
         "-no-cnv",
         "--no-display-prompt",
     ]
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=120,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
             stdin=subprocess.DEVNULL,
         )
         return _clean_output(result)
@@ -5704,10 +6177,12 @@ def cmd_intro_pseint():
     # 1. Abrir PDF estatico con la guia de ejercicios
     if os.path.exists(PSEINT_GUIA_PDF):
         try:
-            subprocess.Popen(["xdg-open", PSEINT_GUIA_PDF],
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL,
-                             stdin=subprocess.DEVNULL)
+            subprocess.Popen(
+                ["xdg-open", PSEINT_GUIA_PDF],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+            )
             print(t("pseint.guide_opened"))
         except FileNotFoundError:
             print(t("pseint.pdf_at", path=PSEINT_GUIA_PDF))
@@ -5745,7 +6220,13 @@ def cmd_intro_pseint():
                     return
                 elif resp:
                     print("\n" + t("pseint.assist"))
-                    print(cmd_pseint(t("llm.exercise", title=titulo, desc=desc) + "\n" + t("llm.student_doubt", question=resp)))
+                    print(
+                        cmd_pseint(
+                            t("llm.exercise", title=titulo, desc=desc)
+                            + "\n"
+                            + t("llm.student_doubt", question=resp)
+                        )
+                    )
             continue
 
         # Mostrar guia de resolucion paso a paso
@@ -5757,9 +6238,7 @@ def cmd_intro_pseint():
 
             while True:
                 try:
-                    resp = input(
-                        t("pseint.prompt_nav") + "\n  > "
-                    ).strip()
+                    resp = input(t("pseint.prompt_nav") + "\n  > ").strip()
                 except (EOFError, KeyboardInterrupt):
                     print("\n\n" + t("pseint.interrupted"))
                     return
@@ -5782,11 +6261,18 @@ def cmd_intro_pseint():
                 # El estudiante tiene una duda - la IA responde con contexto completo
                 guia_completa = " ; ".join(pasos_guia)
                 print("\n" + t("pseint.assist"))
-                print(cmd_pseint(t(
-                    "llm.exercise_full",
-                    title=titulo, desc=desc, guide=guia_completa,
-                    step=paso, question=resp,
-                )))
+                print(
+                    cmd_pseint(
+                        t(
+                            "llm.exercise_full",
+                            title=titulo,
+                            desc=desc,
+                            guide=guia_completa,
+                            step=paso,
+                            question=resp,
+                        )
+                    )
+                )
 
             if paso_actual >= len(pasos_guia) and lower not in ("siguiente", "next"):
                 print("\n" + t("pseint.completed_ex", title=titulo))
@@ -5843,18 +6329,33 @@ def classify_intent(user_input):
     )
 
     cmd = [
-        "llama-cli", "-m", MODEL_PATH,
-        "-p", prompt, "-n", "15", "--temp", str(LLAMA_TEMP_CLASSIFY),
-        "--ctx-size", "512",
-        "--cache-type-k", "q8_0",
-        "--cache-type-v", "q8_0",
+        "llama-cli",
+        "-m",
+        MODEL_PATH,
+        "-p",
+        prompt,
+        "-n",
+        "15",
+        "--temp",
+        str(LLAMA_TEMP_CLASSIFY),
+        "--ctx-size",
+        "512",
+        "--cache-type-k",
+        "q8_0",
+        "--cache-type-v",
+        "q8_0",
         "--flash-attn",
-        "--threads", str(LLAMA_THREADS),
-        "-no-cnv", "--no-display-prompt",
+        "--threads",
+        str(LLAMA_THREADS),
+        "-no-cnv",
+        "--no-display-prompt",
     ]
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=30,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
             stdin=subprocess.DEVNULL,
         )
         out = result.stdout.strip()
@@ -5869,12 +6370,27 @@ def classify_intent(user_input):
             # ponytail: 'sesion' se acepta como accion valida, pero no se
             # documenta en el prompt: interpret() la enruta por palabra clave
             # antes del LLM, y alargar este prompt degrada al modelo 1B.
-            if action in ("open_app", "search", "webfetch", "pseint", "introduccion_pseint", "curso", "guia", "progreso", "sesion", "help", "query", "perfil", "idioma"):
+            if action in (
+                "open_app",
+                "search",
+                "webfetch",
+                "pseint",
+                "introduccion_pseint",
+                "curso",
+                "guia",
+                "progreso",
+                "sesion",
+                "help",
+                "query",
+                "perfil",
+                "idioma",
+            ):
                 return action, param
     except subprocess.TimeoutExpired:
         pass
 
     return "query", user_input.strip()
+
 
 def interpret(user_input, interactivo=False):
     """Keyword router before LLM classifier for known commands."""
@@ -5902,22 +6418,46 @@ def interpret(user_input, interactivo=False):
         return "menu_opcion", f"[ERROR] Opcion {n} no existe. Elige 1-{len(menu)}."
 
     # Exact/prefix keyword routing (bypasses LLM for speed & reliability)
-    if stripped in ("guia", "guia rapida", "tutorial", "como usar", "--tutorial",
-                    "guide", "quick guide", "how to"):
+    if stripped in (
+        "guia",
+        "guia rapida",
+        "tutorial",
+        "como usar",
+        "--tutorial",
+        "guide",
+        "quick guide",
+        "how to",
+    ):
         return "guia", "guia"
-    if stripped in ("progreso", "avance", "mi progreso", "mi avance", "avance curso",
-                    "progress", "my progress"):
+    if stripped in (
+        "progreso",
+        "avance",
+        "mi progreso",
+        "mi avance",
+        "avance curso",
+        "progress",
+        "my progress",
+    ):
         return "progreso", "progreso"
-    if stripped in ("historial", "historial --ultimo", "retomar", "history", "history --last", "history --ultimo"):
+    if stripped in (
+        "historial",
+        "historial --ultimo",
+        "retomar",
+        "history",
+        "history --last",
+        "history --ultimo",
+    ):
         if "--ultimo" in stripped or stripped == "retomar" or "--last" in stripped:
             return "historial", "--ultimo"
         return "historial", "historial"
 
     # accesibilidad [opción]  → ("perfil", "accesibilidad [opción]")
-    if stripped in ("accesibilidad", "a11y") or stripped.startswith(("accesibilidad ", "a11y ")):
+    if stripped in ("accesibilidad", "a11y") or stripped.startswith(
+        ("accesibilidad ", "a11y ")
+    ):
         head = "a11y" if stripped.startswith("a11y") else "accesibilidad"
         idx = stripped.find(head)
-        return "perfil", "accesibilidad " + user_input[idx + len(head):].strip()
+        return "perfil", "accesibilidad " + user_input[idx + len(head) :].strip()
 
     # sesion | sesion nueva | session resume 3
     if stripped in ("sesion", "sesión", "session") or stripped.startswith(
@@ -5934,15 +6474,23 @@ def interpret(user_input, interactivo=False):
         return "telemetria", partes[1].strip() if len(partes) > 1 else ""
 
     # perfil [nombre|nivel|idioma <valor>] | profile language arn
-    if stripped in ("perfil", "mi perfil", "profile") or stripped.startswith(("perfil ", "profile ")):
+    if stripped in ("perfil", "mi perfil", "profile") or stripped.startswith(
+        ("perfil ", "profile ")
+    ):
         if stripped in ("perfil", "mi perfil", "profile"):
             return "perfil", ""
         partes = user_input.strip().split(" ", 1)
         return "perfil", partes[1].strip() if len(partes) > 1 else ""
 
     # idioma | language en | cambiar idioma
-    if stripped in ("idioma", "language", "lang", "dungun",
-                    "cambiar idioma", "change language"):
+    if stripped in (
+        "idioma",
+        "language",
+        "lang",
+        "dungun",
+        "cambiar idioma",
+        "change language",
+    ):
         return "idioma", ""
     if stripped.startswith(("idioma ", "language ", "lang ")):
         partes = stripped.split(" ", 1)
@@ -5956,13 +6504,22 @@ def interpret(user_input, interactivo=False):
     if stripped in ("super", "nube", "super yap", "superyap"):
         return "super", ""
     if stripped in (
-        "super on", "super activar", "nube on", "nube activar",
-        "usar super", "cambiar a super", "cambiar a superyap",
+        "super on",
+        "super activar",
+        "nube on",
+        "nube activar",
+        "usar super",
+        "cambiar a super",
+        "cambiar a superyap",
     ):
         return "super_modo", "on"
     if stripped in (
-        "super off", "super local", "nube off", "nube local",
-        "usar local", "cambiar a local",
+        "super off",
+        "super local",
+        "nube off",
+        "nube local",
+        "usar local",
+        "cambiar a local",
     ):
         return "super_modo", "off"
     if stripped.startswith(("super ", "nube ")):
@@ -5985,7 +6542,7 @@ def interpret(user_input, interactivo=False):
         if stripped.startswith(prefijo):
             # ponytail: se corta sobre el texto original, no sobre el
             # normalizado, porque el nombre del estudiante lleva mayusculas
-            return "profesor", user_input.strip()[len(prefijo):].strip()
+            return "profesor", user_input.strip()[len(prefijo) :].strip()
 
     if stripped in ("ayuda", "help", "--help", "-h", "comandos", "ayuda yap", "kellu"):
         return "help", "ayuda"
@@ -6001,23 +6558,27 @@ def interpret(user_input, interactivo=False):
         if stripped.startswith(prefijo):
             # ponytail: se corta sobre el texto original, no sobre el
             # normalizado, porque el parametro es del usuario
-            param = user_input.strip()[len(prefijo):].strip()
+            param = user_input.strip()[len(prefijo) :].strip()
             if param:
                 return "open_app", param
 
     for prefijo in ("busca ", "buscar "):
         if stripped.startswith(prefijo):
-            param = user_input.strip()[len(prefijo):].strip()
+            param = user_input.strip()[len(prefijo) :].strip()
             if param:
                 return "search", param
 
-    if stripped in ("aprender pseint", "quiero aprender pseint",
-                    "ejercicios pseint", "tutorial pseint"):
+    if stripped in (
+        "aprender pseint",
+        "quiero aprender pseint",
+        "ejercicios pseint",
+        "tutorial pseint",
+    ):
         return "introduccion_pseint", "inicio"
 
     for prefijo in ("pseint ", "tutor pseint "):
         if stripped.startswith(prefijo):
-            param = user_input.strip()[len(prefijo):].strip()
+            param = user_input.strip()[len(prefijo) :].strip()
             if param:
                 return "pseint", param
 
@@ -6063,6 +6624,7 @@ def main():
         # readline: historial con flechas ↑↓
         try:
             import readline
+
             histfile = os.path.expanduser("~/.config/yap/history.txt")
             try:
                 readline.read_history_file(histfile)
@@ -6080,8 +6642,8 @@ def main():
         if not perfil.get("onboarding_completed"):
             perfil = run_onboarding()
         else:
-            nombre = perfil.get('nombre', 'Estudiante')
-            
+            nombre = perfil.get("nombre", "Estudiante")
+
             resumen_progreso = "Sin cursos iniciados."
             progreso = cargar_progreso().get("cursos", {})
             if progreso:
@@ -6089,17 +6651,20 @@ def main():
                     for ea_id, data in eas.items():
                         if not data.get("completada", False):
                             act = data.get("actividad_actual", 1)
-                            total = data.get("total_actividades", 5) # Default 5
-                            resumen_progreso = f"Curso: {curso} ({ea_id}, actividad {act}/{total})"
+                            total = data.get("total_actividades", 5)  # Default 5
+                            resumen_progreso = (
+                                f"Curso: {curso} ({ea_id}, actividad {act}/{total})"
+                            )
                             break
                     if resumen_progreso != "Sin cursos iniciados.":
                         break
-            
+
             sesiones = _load_history_sessions()
             if sesiones:
                 ultima_ts = sesiones[-1].get("timestamp", "")
                 try:
                     import datetime as dt_mod
+
                     ultima_dt = dt_mod.datetime.fromisoformat(ultima_ts)
                     ahora = dt_mod.datetime.now()
                     dias = (ahora - ultima_dt).days
@@ -6109,15 +6674,21 @@ def main():
                         hace = "ayer"
                     else:
                         hace = f"hace {dias} días"
-                except:
+                except Exception:
                     hace = "desconocido"
             else:
                 hace = "nunca"
-                
-            sys.stdout.write(f"\n{C['CYAN']}Bienvenido de vuelta, {nombre}.{C['RESET']}\n")
-            sys.stdout.write(f"{C['GRAY']}Sesión anterior: {hace} | {resumen_progreso}{C['RESET']}\n")
-            sys.stdout.write(f"{C['GRAY']}Escribe 'retomar' para continuar donde quedaste, o 'ayuda' para ver comandos.{C['RESET']}\n\n")
-        sys.stdout.write(render_art(CHINCO_ART, C['CYAN']) + "\n")
+
+            sys.stdout.write(
+                f"\n{C['CYAN']}Bienvenido de vuelta, {nombre}.{C['RESET']}\n"
+            )
+            sys.stdout.write(
+                f"{C['GRAY']}Sesión anterior: {hace} | {resumen_progreso}{C['RESET']}\n"
+            )
+            sys.stdout.write(
+                f"{C['GRAY']}Escribe 'retomar' para continuar donde quedaste, o 'ayuda' para ver comandos.{C['RESET']}\n\n"
+            )
+        sys.stdout.write(render_art(CHINCO_ART, C["CYAN"]) + "\n")
         sys.stdout.write(f"  {C['GRAY']}{'─' * 50}{C['RESET']}\n")
         sys.stdout.write(cmd_menu())
         banner = session_banner()
@@ -6228,7 +6799,6 @@ def handle_action(action, param, original_input):
     elif action == "historial":
         resume = param == "--ultimo"
         print(cmd_historial(resume_last=resume))
-
 
     elif action == "sesion":
         partes = param.split(" ", 1)

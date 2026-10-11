@@ -51,6 +51,7 @@ def _historial_pasos(resultados, pistas=0):
 # 1. REGLAS DEL ALGORITMO
 # ============================================================
 
+
 class TestReglaSubida:
     """Requisito: 3 aprobados seguidos sin pistas => subir nivel."""
 
@@ -75,8 +76,7 @@ class TestReglaSubida:
     def test_tres_aprobados_uno_con_pistas_no_suben(self):
         e = yap.AdaptiveEngine()
         d = e.analizar(
-            _historial_pasos(["aprobado", "aprobado", "aprobado"],
-                             pistas=[0, 0, 1]),
+            _historial_pasos(["aprobado", "aprobado", "aprobado"], pistas=[0, 0, 1]),
             dificultad_actual="normal",
         )
         assert d["accion"] == "mantener"
@@ -164,8 +164,7 @@ class TestMantenimiento:
 
     def test_dos_aprobados_y_uno_con_pistas(self):
         e = yap.AdaptiveEngine()
-        hist = _historial_pasos(
-            ["aprobado", "aprobado", "aprobado"], pistas=[0, 0, 1])
+        hist = _historial_pasos(["aprobado", "aprobado", "aprobado"], pistas=[0, 0, 1])
         d = e.analizar(hist, dificultad_actual="normal")
         assert d["accion"] == "mantener"
         assert d["nuevo"] == "normal"
@@ -174,8 +173,9 @@ class TestMantenimiento:
     def test_secuencia_aprobado_reprobado_mantiene(self):
         e = yap.AdaptiveEngine()
         d = e.analizar(
-            _historial_pasos(["aprobado", "reprobado", "reprobado", "aprobado"],
-                             pistas=0),
+            _historial_pasos(
+                ["aprobado", "reprobado", "reprobado", "aprobado"], pistas=0
+            ),
             dificultad_actual="normal",
         )
         assert d["accion"] == "mantener"
@@ -188,7 +188,9 @@ class TestMantenimiento:
 
     def test_historial_con_registros_invalidos_no_revienta(self):
         e = yap.AdaptiveEngine()
-        d = e.analizar([None, {"resultado": None}, "basura"], dificultad_actual="normal")
+        d = e.analizar(
+            [None, {"resultado": None}, "basura"], dificultad_actual="normal"
+        )
         assert d["accion"] == "mantener"
         assert d["nuevo"] == "normal"
 
@@ -196,6 +198,7 @@ class TestMantenimiento:
 # ============================================================
 # 2. MAPEO DEL NIVEL BASE DEL PERFIL (#24)
 # ============================================================
+
 
 class TestMapeoPerfil:
     """Requisito: el nivel base del perfil se lee como punto de partida."""
@@ -226,6 +229,7 @@ class TestMapeoPerfil:
 # 3. SELECCION DE VARIANTES
 # ============================================================
 
+
 class TestVariantes:
     """Requisito: las actividades pueden definir variantes facil/normal/desafiante."""
 
@@ -239,7 +243,10 @@ class TestVariantes:
             "variantes": {
                 "facil": {"enunciado": "Consigna facil"},
                 "normal": {"enunciado": "Consigna normal"},
-                "desafiante": {"enunciado": "Consigna dificil", "criterios_evaluacion": ["c1", "c2"]},
+                "desafiante": {
+                    "enunciado": "Consigna dificil",
+                    "criterios_evaluacion": ["c1", "c2"],
+                },
             },
         }
 
@@ -281,6 +288,7 @@ class TestVariantes:
 # 4. METRICAS EN PROGRESS.JSON
 # ============================================================
 
+
 class TestMetricas:
     """Requisito: cada actividad registra tiempo, intentos, puntaje, pistas y resultado."""
 
@@ -298,15 +306,27 @@ class TestMetricas:
 
     def test_registro_nace_con_las_metricas(self):
         rec = yap._registro_actividad({}, 1)
-        for clave in ("tiempo_actividad", "pistas_usadas", "resultado", "variante",
-                      "intentos", "puntaje"):
+        for clave in (
+            "tiempo_actividad",
+            "pistas_usadas",
+            "resultado",
+            "variante",
+            "intentos",
+            "puntaje",
+        ):
             assert clave in rec, f"falta '{clave}'"
 
     def test_se_guardan_todas_las_metricas(self):
         progress = {"cursos": {}}
         yap.registrar_intento_actividad(
-            progress, "FPY1101", "EA1", 1, self._resultado(aprobado=True, puntaje=90),
-            tiempo_actividad=420, pistas_usadas=1, variante="normal",
+            progress,
+            "FPY1101",
+            "EA1",
+            1,
+            self._resultado(aprobado=True, puntaje=90),
+            tiempo_actividad=420,
+            pistas_usadas=1,
+            variante="normal",
         )
         rec = progress["cursos"]["FPY1101"]["EA1"]["actividades"]["1"]
         assert rec["tiempo_actividad"] == 420
@@ -319,7 +339,11 @@ class TestMetricas:
     def test_resultado_reprobado(self):
         progress = {"cursos": {}}
         yap.registrar_intento_actividad(
-            progress, "FPY1101", "EA1", 2, self._resultado(aprobado=False, puntaje=30),
+            progress,
+            "FPY1101",
+            "EA1",
+            2,
+            self._resultado(aprobado=False, puntaje=30),
         )
         rec = progress["cursos"]["FPY1101"]["EA1"]["actividades"]["2"]
         assert rec["resultado"] == "reprobado"
@@ -328,7 +352,10 @@ class TestMetricas:
     def test_error_llm_no_marca_resultado(self):
         progress = {"cursos": {}}
         yap.registrar_intento_actividad(
-            progress, "FPY1101", "EA1", 1,
+            progress,
+            "FPY1101",
+            "EA1",
+            1,
             {**self._resultado(), "error": True},
         )
         rec = progress["cursos"]["FPY1101"]["EA1"]["actividades"]["1"]
@@ -337,14 +364,22 @@ class TestMetricas:
 
     def test_guardar_y_leer_metricas_desde_archivo(self):
         import tempfile
+
         pdir = tempfile.mkdtemp()
         try:
-            with mock.patch.object(yap, "PROGRESS_FILE",
-                                   os.path.join(pdir, "progress.json")):
+            with mock.patch.object(
+                yap, "PROGRESS_FILE", os.path.join(pdir, "progress.json")
+            ):
                 progress = {"cursos": {}}
                 yap.registrar_intento_actividad(
-                    progress, "FPY1101", "EA1", 1, self._resultado(),
-                    tiempo_actividad=300, pistas_usadas=0, variante="facil",
+                    progress,
+                    "FPY1101",
+                    "EA1",
+                    1,
+                    self._resultado(),
+                    tiempo_actividad=300,
+                    pistas_usadas=0,
+                    variante="facil",
                 )
                 yap.guardar_progreso(progress)
                 loaded = yap.cargar_progreso()
@@ -355,6 +390,7 @@ class TestMetricas:
                 assert act["resultado"] == "aprobado"
         finally:
             import shutil
+
             shutil.rmtree(pdir, ignore_errors=True)
 
 
@@ -362,12 +398,13 @@ class TestMetricas:
 # 5. ANUNCIOS PUBLICOS
 # ============================================================
 
+
 class TestAnuncios:
     """Requisito: al cambiar de nivel se genera un anuncio para el estudiante."""
 
     def test_subida_genera_anuncio(self):
         e = yap.AdaptiveEngine()
-        d = e.analizar([], dificultad_actual=None)  # toca el anuncio directo
+        e.analizar([], dificultad_actual=None)  # toca el anuncio directo
         msg = e.anuncio("subir", "normal")
         assert "subir" in msg
         assert "🚀" in msg
@@ -396,12 +433,17 @@ class TestAnuncios:
 # 6. INTEGRACION CON EL FEEDBACK (#29)
 # ============================================================
 
+
 class TestFeedbackAdaptativo:
     """Requisito: el feedback se adapta al nivel actual (facil/normal/desafiante)."""
 
     def test_el_prompt_de_evaluacion_conoce_la_dificultad(self):
         p = yap._prompt_evaluacion(
-            "mi respuesta", ["c1"], "respuesta_libre", {}, "",
+            "mi respuesta",
+            ["c1"],
+            "respuesta_libre",
+            {},
+            "",
             dificultad="desafiante",
         )
         assert "Dificultad actual: desafiante" in p
@@ -411,22 +453,25 @@ class TestFeedbackAdaptativo:
         assert "Dificultad actual" not in p
 
     def test_dificultad_invalida_no_se_menciona(self):
-        p = yap._prompt_evaluacion("x", ["c1"], "respuesta_libre", {}, "",
-                                   dificultad="imposible")
+        p = yap._prompt_evaluacion(
+            "x", ["c1"], "respuesta_libre", {}, "", dificultad="imposible"
+        )
         assert "Dificultad actual" not in p
 
     def test_evaluar_actividad_propaga_la_dificultad(self):
-        with mock.patch.object(yap, "_llamar_llm_evaluacion",
-                               return_value='{"aprobado": true, "puntaje": 80}') as llm:
-            yap.evaluar_actividad(
-                "resp", ["c1"], contexto="", dificultad="facil"
-            )
+        with mock.patch.object(
+            yap,
+            "_llamar_llm_evaluacion",
+            return_value='{"aprobado": true, "puntaje": 80}',
+        ) as llm:
+            yap.evaluar_actividad("resp", ["c1"], contexto="", dificultad="facil")
         assert "Dificultad actual: facil" in llm.call_args[0][0]
 
 
 # ============================================================
 # 7. VALIDACION DEL ESQUEMA DE CURSOS
 # ============================================================
+
 
 class TestEsquemaCurso:
     """Requisito: los cursos (FPY1101) cargan con variantes de dificultad."""
@@ -442,8 +487,12 @@ class TestEsquemaCurso:
         assert set(act1["variantes"].keys()) >= {"facil", "normal", "desafiante"}
 
     def test_variante_opcion_multiple_mantiene_respuesta_valida(self):
-        act = [a for e in self._curso()["eas"] for a in e["actividades"]
-               if a.get("variantes") and a.get("tipo") == "opcion_multiple"][0]
+        act = [
+            a
+            for e in self._curso()["eas"]
+            for a in e["actividades"]
+            if a.get("variantes") and a.get("tipo") == "opcion_multiple"
+        ][0]
         for nivel, v in act["variantes"].items():
             if v.get("opciones"):
                 assert v["opciones"]
@@ -462,7 +511,6 @@ class TestDificultadConfigurable:
     """Requisito: la dificultad puede configurarse por curso o EA si aplica."""
 
     def test_curso_puede_definir_dificultad_inicial(self):
-        engine = yap.AdaptiveEngine()
         # El curso FPY1101 no fija dificultad -> se usa el perfil por defecto
         assert yap.DIFFICULTAD_DEFAULT == "normal"
 
@@ -470,30 +518,35 @@ class TestDificultadConfigurable:
         return {
             "codigo": "TEST101",
             "nombre": "Curso",
-            "horas": 50, "semanas": 10,
+            "horas": 50,
+            "semanas": 10,
             "ras": [],
-            "eas": [{
-                "id": "EA1",
-                "nombre": "EA",
-                "descripcion": "d",
-                "horas": 20,
-                "ponderacion": 100,
-                "dificultad": nivel,
-                "actividades": [{
-                    "orden": 1,
-                    "nombre": "A",
+            "eas": [
+                {
+                    "id": "EA1",
+                    "nombre": "EA",
                     "descripcion": "d",
-                    "tipo": "respuesta_libre",
-                    "enunciado": "q",
-                    "criterios_evaluacion": ["c1"],
-                    "variantes": {
-                        "facil": {"enunciado": "f"},
-                        "normal": {"enunciado": "n"},
-                        "desafiante": {"enunciado": "d2"},
-                    },
-                }],
-                "evaluaciones": [],
-            }],
+                    "horas": 20,
+                    "ponderacion": 100,
+                    "dificultad": nivel,
+                    "actividades": [
+                        {
+                            "orden": 1,
+                            "nombre": "A",
+                            "descripcion": "d",
+                            "tipo": "respuesta_libre",
+                            "enunciado": "q",
+                            "criterios_evaluacion": ["c1"],
+                            "variantes": {
+                                "facil": {"enunciado": "f"},
+                                "normal": {"enunciado": "n"},
+                                "desafiante": {"enunciado": "d2"},
+                            },
+                        }
+                    ],
+                    "evaluaciones": [],
+                }
+            ],
             "evaluaciones": [],
         }
 
@@ -501,22 +554,24 @@ class TestDificultadConfigurable:
         """Al iniciar una EA con 'dificultad' configurada, esa es la inicial."""
         import tempfile
         import shutil
+
         pdir = tempfile.mkdtemp()
         try:
             copia = dict(self._curso_con_dificultad("desafiante"))
-            with mock.patch.object(yap, "CURSOS_DIR", pdir), \
-                 mock.patch.object(yap, "PROGRESS_FILE",
-                                   os.path.join(pdir, "progress.json")), \
-                 mock.patch.object(yap, "PROFILE_FILE",
-                                   os.path.join(pdir, "profile.json")), \
-                 mock.patch.object(yap, "sesion_asociar",
-                                   lambda **kw: {"id": 1}, create=True), \
-                 mock.patch("builtins.input", side_effect=["", "salir"]), \
-                 mock.patch("sys.stdout.write", lambda s: len(str(s))), \
-                 mock.patch("shutil.get_terminal_size",
-                            return_value=mock.Mock(columns=80, lines=24)):
-                with open(os.path.join(pdir, "TEST101.json"), "w",
-                          encoding="utf-8") as f:
+            with mock.patch.object(yap, "CURSOS_DIR", pdir), mock.patch.object(
+                yap, "PROGRESS_FILE", os.path.join(pdir, "progress.json")
+            ), mock.patch.object(
+                yap, "PROFILE_FILE", os.path.join(pdir, "profile.json")
+            ), mock.patch.object(
+                yap, "sesion_asociar", lambda **kw: {"id": 1}, create=True
+            ), mock.patch("builtins.input", side_effect=["", "salir"]), mock.patch(
+                "sys.stdout.write", lambda s: len(str(s))
+            ), mock.patch(
+                "shutil.get_terminal_size", return_value=mock.Mock(columns=80, lines=24)
+            ):
+                with open(
+                    os.path.join(pdir, "TEST101.json"), "w", encoding="utf-8"
+                ) as f:
                     json.dump(copia, f)
                 yap.guardar_perfil({"nombre": "Ana", "nivel": "basico"})
                 yap.iniciar_ea("TEST101", "EA1")
@@ -529,22 +584,24 @@ class TestDificultadConfigurable:
         """Sin dificultad en el JSON, el perfil base define la inicial."""
         import tempfile
         import shutil
+
         pdir = tempfile.mkdtemp()
         try:
             copia = dict(self._curso_con_dificultad(""))
-            with mock.patch.object(yap, "CURSOS_DIR", pdir), \
-                 mock.patch.object(yap, "PROGRESS_FILE",
-                                   os.path.join(pdir, "progress.json")), \
-                 mock.patch.object(yap, "PROFILE_FILE",
-                                   os.path.join(pdir, "profile.json")), \
-                 mock.patch.object(yap, "sesion_asociar",
-                                   lambda **kw: {"id": 1}, create=True), \
-                 mock.patch("builtins.input", side_effect=["", "salir"]), \
-                 mock.patch("sys.stdout.write", lambda s: len(str(s))), \
-                 mock.patch("shutil.get_terminal_size",
-                            return_value=mock.Mock(columns=80, lines=24)):
-                with open(os.path.join(pdir, "TEST101.json"), "w",
-                          encoding="utf-8") as f:
+            with mock.patch.object(yap, "CURSOS_DIR", pdir), mock.patch.object(
+                yap, "PROGRESS_FILE", os.path.join(pdir, "progress.json")
+            ), mock.patch.object(
+                yap, "PROFILE_FILE", os.path.join(pdir, "profile.json")
+            ), mock.patch.object(
+                yap, "sesion_asociar", lambda **kw: {"id": 1}, create=True
+            ), mock.patch("builtins.input", side_effect=["", "salir"]), mock.patch(
+                "sys.stdout.write", lambda s: len(str(s))
+            ), mock.patch(
+                "shutil.get_terminal_size", return_value=mock.Mock(columns=80, lines=24)
+            ):
+                with open(
+                    os.path.join(pdir, "TEST101.json"), "w", encoding="utf-8"
+                ) as f:
                     json.dump(copia, f)
                 yap.guardar_perfil({"nombre": "Ana", "nivel": "basico"})
                 yap.iniciar_ea("TEST101", "EA1")
@@ -557,4 +614,5 @@ class TestDificultadConfigurable:
 
 if __name__ == "__main__":
     import pytest
+
     pytest.main([__file__, "-v", "--tb=short"])

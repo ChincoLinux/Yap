@@ -26,6 +26,7 @@ import yap
 # 1. WHITELIST DE APLICACIONES
 # ============================================================
 
+
 class TestAppWhitelist:
     """Requisito: Solo aplicaciones en whitelist pueden ejecutarse."""
 
@@ -41,6 +42,7 @@ class TestAppWhitelist:
 
     def teardown_method(self):
         import shutil
+
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_app_permitida_devuelve_ok(self):
@@ -51,8 +53,6 @@ class TestAppWhitelist:
 
     def test_app_bloqueada_muestra_alternativas(self):
         """App NO en whitelist debe mostrar lista de alternativas."""
-        apps = yap.load_whitelist(self.apps_path)
-
         with mock.patch.object(yap, "WHITELIST_APPS", self.apps_path):
             result = yap.cmd_open_app("Chrome")
 
@@ -78,6 +78,7 @@ class TestAppWhitelist:
 # 2. WHITELIST DE DOMINIOS
 # ============================================================
 
+
 class TestDomainWhitelist:
     """Requisito: Solo dominios en whitelist pueden ser accedidos."""
 
@@ -91,6 +92,7 @@ class TestDomainWhitelist:
 
     def teardown_method(self):
         import shutil
+
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_dominio_permitido_exacto(self):
@@ -117,7 +119,6 @@ class TestDomainWhitelist:
 
     def test_notwikipedia_no_coincide(self):
         """'notwikipedia.org' NO debe coincidir con 'wikipedia.org' (fix commit 348e9b0)."""
-        domains = yap.load_domain_whitelist(self.web_path)
         # Antes del fix: domain.endswith("wikipedia.org") daba True para "notwikipedia.org"
         # Ahora: domain == d or domain.endswith("." + d)
         assert not ("notwikipedia.org" == "wikipedia.org")
@@ -128,6 +129,7 @@ class TestDomainWhitelist:
 # 3. SEGURIDAD DE COMANDOS (INJECTION)
 # ============================================================
 
+
 class TestCommandSecurity:
     """Requisito: Sin command injection, shell=True, eval(), os.system()."""
 
@@ -136,23 +138,23 @@ class TestCommandSecurity:
         source = open(yap.__file__, encoding="utf-8").read()
         # Buscar shell=True en el codigo fuente
         # Nota: shell=True es peligroso porque permite injection
-        assert "shell=True" not in source, (
-            "shell=True detectado en el codigo — riesgo de command injection"
-        )
+        assert (
+            "shell=True" not in source
+        ), "shell=True detectado en el codigo — riesgo de command injection"
 
     def test_no_eval(self):
         """Verificar que no se usa eval() en el codigo."""
         source = open(yap.__file__, encoding="utf-8").read()
-        assert "eval(" not in source, (
-            "eval() detectado — riesgo de ejecucion de codigo arbitrario"
-        )
+        assert (
+            "eval(" not in source
+        ), "eval() detectado — riesgo de ejecucion de codigo arbitrario"
 
     def test_no_os_system(self):
         """Verificar que no se usa os.system()."""
         source = open(yap.__file__, encoding="utf-8").read()
-        assert "os.system(" not in source, (
-            "os.system() detectado — riesgo de shell injection"
-        )
+        assert (
+            "os.system(" not in source
+        ), "os.system() detectado — riesgo de shell injection"
 
     def test_command_injection_app_name(self):
         """Intentar injection en nombre de app debe fallar gracefulmente."""
@@ -172,11 +174,12 @@ class TestCommandSecurity:
             ]
             for injection in injections:
                 result = yap.cmd_open_app(injection)
-                assert "[ERROR]" in result, (
-                    f"Injection '{injection}' deberia ser bloqueada"
-                )
+                assert (
+                    "[ERROR]" in result
+                ), f"Injection '{injection}' deberia ser bloqueada"
 
         import shutil
+
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def test_url_injection(self):
@@ -196,17 +199,19 @@ class TestCommandSecurity:
             ]
             for url, _ in malicious:
                 result = yap.cmd_webfetch(url)
-                assert "[ERROR]" in result, (
-                    f"URL maliciosa '{url}' deberia ser bloqueada"
-                )
+                assert (
+                    "[ERROR]" in result
+                ), f"URL maliciosa '{url}' deberia ser bloqueada"
 
         import shutil
+
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 # ============================================================
 # 4. CARGA DE CONFIGURACION
 # ============================================================
+
 
 class TestConfigLoading:
     """Requisito: Los archivos de configuracion se cargan correctamente."""
@@ -225,6 +230,7 @@ class TestConfigLoading:
         assert "app" in apps
 
         import shutil
+
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def test_whitelist_ignora_lineas_vacias(self):
@@ -240,6 +246,7 @@ class TestConfigLoading:
         assert len(apps) == 1
 
         import shutil
+
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def test_formato_invalido_ignorado(self):
@@ -254,12 +261,14 @@ class TestConfigLoading:
         assert len(apps) == 1
 
         import shutil
+
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 # ============================================================
 # 5. NOTIFICACIONES Y LIMITES
 # ============================================================
+
 
 class TestSecurityLimits:
     """Requisito: Limites de contenido y notificaciones seguras."""
@@ -268,15 +277,16 @@ class TestSecurityLimits:
         """El contenido webfetch debe limitarse a 3000 caracteres."""
         # Verificar que la funcion cmd_webfetch limita la salida
         source = open(yap.__file__, encoding="utf-8").read()
-        assert "text[:3000]" in source or "text[:2000]" in source, (
-            "No se encontro limite de caracteres en cmd_webfetch"
-        )
+        assert (
+            "text[:3000]" in source or "text[:2000]" in source
+        ), "No se encontro limite de caracteres en cmd_webfetch"
 
     def test_timeout_en_subprocess(self):
         """Todas las llamadas a subprocess deben tener timeout."""
         source = open(yap.__file__, encoding="utf-8").read()
         # Buscar subprocess.run sin timeout
         import re
+
         # Encontrar todas las llamadas a subprocess.run
         calls = re.findall(r"subprocess\.run\([^)]+\)", source)
         for call in calls:
@@ -291,6 +301,7 @@ class TestSecurityLimits:
 # 6. SEGURIDAD DEL SISTEMA DE ARCHIVOS
 # ============================================================
 
+
 class TestFileSystemSecurity:
     """Requisito: El agente no modifica archivos del sistema."""
 
@@ -300,31 +311,31 @@ class TestFileSystemSecurity:
         # No debe haber open() con 'w' fuera de load_whitelist
         # (load_whitelist solo LEE archivos)
         dangerous_patterns = [
-            'open(',  # Escritura a archivos
-            'os.remove',
-            'os.unlink',
-            'shutil.rmtree',
-            'shutil.move',
+            "open(",  # Escritura a archivos
+            "os.remove",
+            "os.unlink",
+            "shutil.rmtree",
+            "shutil.move",
         ]
         for pattern in dangerous_patterns:
-            if pattern == 'open(':
+            if pattern == "open(":
                 # open() es necesario para lectura, verificar que no sea 'w'
                 import re
+
                 writes = re.findall(r'open\([^)]+[\'"]w[\'"]', source)
                 # ponytail: permitir escritura atomica de progreso (guardar_progreso)
                 writes = [w for w in writes if "tmp" not in w.lower()]
-                assert len(writes) == 0, (
-                    f"Operacion de escritura detectada: {writes}"
-                )
+                assert len(writes) == 0, f"Operacion de escritura detectada: {writes}"
             else:
-                assert pattern not in source, (
-                    f"Operacion peligrosa detectada: {pattern}"
-                )
+                assert (
+                    pattern not in source
+                ), f"Operacion peligrosa detectada: {pattern}"
 
 
 # ============================================================
 # 7. PRUEBAS DE CARGA DE CONFIGURACION REAL
 # ============================================================
+
 
 class TestRealConfig:
     """Verificar que los archivos de configuracion reales existen y son validos."""
@@ -356,6 +367,7 @@ class TestRealConfig:
 # 8. VERIFICACION DE CODIGO FUENTE
 # ============================================================
 
+
 class TestCodeQuality:
     """Revision estatica del codigo fuente para buenas practicas de seguridad."""
 
@@ -363,9 +375,9 @@ class TestCodeQuality:
         """Verificar que el shebang es correcto."""
         with open(yap.__file__, encoding="utf-8") as f:
             first_line = f.readline().strip()
-        assert first_line == "#!/usr/bin/env python3", (
-            f"Shebang incorrecto: {first_line}"
-        )
+        assert (
+            first_line == "#!/usr/bin/env python3"
+        ), f"Shebang incorrecto: {first_line}"
 
     def test_imports_minimos(self):
         """Verificar que solo se importan modulos necesarios."""
@@ -378,9 +390,9 @@ class TestCodeQuality:
         peligrosos = ["socket", "ctypes", "pickle", "base64", "codecs"]
         for imp in imports:
             for peligroso in peligrosos:
-                assert peligroso not in imp, (
-                    f"Modulo potencialmente peligroso importado: {imp}"
-                )
+                assert (
+                    peligroso not in imp
+                ), f"Modulo potencialmente peligroso importado: {imp}"
 
 
 if __name__ == "__main__":

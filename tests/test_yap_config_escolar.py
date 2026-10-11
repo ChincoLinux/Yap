@@ -35,12 +35,20 @@ def leer(path):
 # 1. APLICACIONES EDUCATIVAS
 # ============================================================
 
+
 class TestAppsEducativas:
     """Requisito: whitelist de aplicaciones preconfigurada para el aula."""
 
     APPS_REQUERIDAS = [
-        "libreoffice", "firefox", "pseint", "thonny", "scratch",
-        "kalzium", "geogebra", "krita", "gcompris",
+        "libreoffice",
+        "firefox",
+        "pseint",
+        "thonny",
+        "scratch",
+        "kalzium",
+        "geogebra",
+        "krita",
+        "gcompris",
     ]
 
     def test_todas_las_apps_requeridas_estan(self):
@@ -51,7 +59,9 @@ class TestAppsEducativas:
     def test_cada_app_tiene_al_menos_un_binario(self):
         for nombre, binarios in yap.load_whitelist(APPS_CONF).items():
             assert binarios, f"'{nombre}' no declara ningun binario"
-            assert all(b.strip() for b in binarios), f"'{nombre}' tiene un binario vacio"
+            assert all(
+                b.strip() for b in binarios
+            ), f"'{nombre}' tiene un binario vacio"
 
     def test_no_hay_claves_duplicadas(self):
         """Una clave repetida se sobrescribe en silencio al cargar."""
@@ -66,12 +76,15 @@ class TestAppsEducativas:
         """El nombre del binario cambia entre versiones de Debian."""
         apps = yap.load_whitelist(APPS_CONF)
         assert len(apps["firefox"]) > 1, "firefox debe declarar firefox-esr y firefox"
-        assert len(apps["gcompris"]) > 1, "gcompris debe declarar gcompris-qt y gcompris"
+        assert (
+            len(apps["gcompris"]) > 1
+        ), "gcompris debe declarar gcompris-qt y gcompris"
 
     def test_ninguna_linea_valida_se_pierde_al_parsear(self):
         entradas = sum(
-            1 for l in leer(APPS_CONF).splitlines()
-            if l.strip() and not l.strip().startswith("#")
+            1
+            for line in leer(APPS_CONF).splitlines()
+            if line.strip() and not line.strip().startswith("#")
         )
         assert len(yap.load_whitelist(APPS_CONF)) == entradas
 
@@ -80,12 +93,16 @@ class TestAppsEducativas:
 # 2. DOMINIOS EDUCATIVOS
 # ============================================================
 
+
 class TestDominiosEducativos:
     """Requisito: whitelist de dominios preconfigurada para el aula."""
 
     DOMINIOS_REQUERIDOS = [
-        "wikipedia.org", "debian.org",
-        "scratch.mit.edu", "khanacademy.org", "coursera.org",
+        "wikipedia.org",
+        "debian.org",
+        "scratch.mit.edu",
+        "khanacademy.org",
+        "coursera.org",
     ]
 
     def test_todos_los_dominios_requeridos_estan(self):
@@ -134,6 +151,7 @@ class TestDominiosEducativos:
 # 3. APPARMOR EN MODO ENFORCE
 # ============================================================
 
+
 class TestAppArmorEnforce:
     """Requisito: el perfil se carga en modo enforce por defecto."""
 
@@ -156,6 +174,7 @@ class TestAppArmorEnforce:
 # 4. DESCARGA DEL MODELO GGUF (setup.sh)
 # ============================================================
 
+
 class TestSetupDescargaModelo:
     """El instalador debe obtener el mismo GGUF Q4_K_M sin caer en el 401 de wget."""
 
@@ -170,7 +189,9 @@ class TestSetupDescargaModelo:
     def test_techo_local_es_3b_nunca_8b(self):
         assert yap.MODEL_PATH.endswith("Llama-3.2-3B-Instruct-Q4_K_M.gguf")
         ocho = "/opt/yap/models/Llama-3.1-8B-Instruct-Q4_K_M.gguf"
-        assert yap._modelo_local_path(ocho).endswith("Llama-3.2-3B-Instruct-Q4_K_M.gguf")
+        assert yap._modelo_local_path(ocho).endswith(
+            "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+        )
         uno = "/opt/yap/models/Llama-3.2-1B-Instruct-Q4_K_M.gguf"
         assert yap._modelo_local_path(uno) == uno
 

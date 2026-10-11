@@ -54,6 +54,7 @@ def parse_control(text):
 # Plantillas del paquete yap
 # ============================================================
 
+
 class TestYapDebianTemplates:
     """Requisito: DEBIAN/control, postinst, prerm, postrm existen y son validos."""
 
@@ -132,13 +133,17 @@ class TestYapDebianTemplates:
 # Paquetes de modelo
 # ============================================================
 
+
 class TestModelPackages:
     """Requisito: yap-models-1b / yap-models-3b descargan el GGUF."""
 
-    @pytest.mark.parametrize("pkg,filename", [
-        ("yap-models-1b", "Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
-        ("yap-models-3b", "Llama-3.2-3B-Instruct-Q4_K_M.gguf"),
-    ])
+    @pytest.mark.parametrize(
+        "pkg,filename",
+        [
+            ("yap-models-1b", "Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
+            ("yap-models-3b", "Llama-3.2-3B-Instruct-Q4_K_M.gguf"),
+        ],
+    )
     def test_control_depends_on_yap(self, pkg, filename):
         text = _read(os.path.join(PACKAGING, pkg, "DEBIAN", "control"))
         fields = parse_control(text)
@@ -147,10 +152,13 @@ class TestModelPackages:
         assert "yap" in fields.get("Depends", "")
         assert "wget" in fields.get("Depends", "")
 
-    @pytest.mark.parametrize("pkg,filename", [
-        ("yap-models-1b", "Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
-        ("yap-models-3b", "Llama-3.2-3B-Instruct-Q4_K_M.gguf"),
-    ])
+    @pytest.mark.parametrize(
+        "pkg,filename",
+        [
+            ("yap-models-1b", "Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
+            ("yap-models-3b", "Llama-3.2-3B-Instruct-Q4_K_M.gguf"),
+        ],
+    )
     def test_postinst_downloads_huggingface(self, pkg, filename):
         text = _read(os.path.join(PACKAGING, pkg, "DEBIAN", "postinst"))
         assert text.startswith("#!/bin/sh")
@@ -178,6 +186,7 @@ class TestModelPackages:
 # build-deb.sh
 # ============================================================
 
+
 class TestBuildDebScript:
     """Requisito: build-deb.sh funcional, dpkg-deb, llama.cpp estatico."""
 
@@ -204,8 +213,14 @@ class TestBuildDebScript:
 
     def test_cli_flags(self):
         text = _read(BUILD_DEB)
-        for flag in ("--stub-llama", "--skip-llama", "--llama-cli",
-                     "--embed-models", "--no-models", "--outdir"):
+        for flag in (
+            "--stub-llama",
+            "--skip-llama",
+            "--llama-cli",
+            "--embed-models",
+            "--no-models",
+            "--outdir",
+        ):
             assert flag in text
 
     def test_packages_payload_paths(self):
@@ -228,13 +243,16 @@ class TestBuildDebScript:
 # Layout de fuentes empaquetadas
 # ============================================================
 
+
 class TestSourcePayload:
     """Los archivos que el .deb debe incluir existen en el repo."""
 
     def test_whitelist_files(self):
         assert os.path.isfile(os.path.join(REPO_ROOT, "whitelist", "apps.conf"))
         assert os.path.isfile(os.path.join(REPO_ROOT, "whitelist", "web.conf"))
-        assert os.path.isfile(os.path.join(REPO_ROOT, "whitelist", "pseint", "ejercicios.conf"))
+        assert os.path.isfile(
+            os.path.join(REPO_ROOT, "whitelist", "pseint", "ejercicios.conf")
+        )
 
     def test_apparmor_profile(self):
         assert os.path.isfile(os.path.join(REPO_ROOT, "apparmor", "usr.local.bin.yap"))
@@ -250,11 +268,14 @@ class TestSourcePayload:
 # Build real (solo si hay dpkg-deb + bash)
 # ============================================================
 
+
 def _have_deb_toolchain():
     return shutil.which("bash") and shutil.which("dpkg-deb")
 
 
-@pytest.mark.skipif(not _have_deb_toolchain(), reason="requiere bash y dpkg-deb (Linux)")
+@pytest.mark.skipif(
+    not _have_deb_toolchain(), reason="requiere bash y dpkg-deb (Linux)"
+)
 class TestBuildDebSmoke:
     """Construye yap_*.deb con llama-cli stub y verifica el archivo."""
 
@@ -294,7 +315,9 @@ class TestBuildDebSmoke:
             yap_deb = os.path.join(tmp, f"yap_{version}_amd64.deb")
             listing = subprocess.run(
                 [dpkg_deb, "-c", yap_deb],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             assert listing.returncode == 0
             out = listing.stdout
@@ -306,7 +329,9 @@ class TestBuildDebSmoke:
             assert "usr/share/user-tmpfiles.d/yap.conf" in out
             conffiles = subprocess.run(
                 [dpkg_deb, "-I", yap_deb, "conffiles"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             assert conffiles.returncode == 0, conffiles.stderr
             assert conffiles.stdout.strip() == "/etc/apparmor.d/usr.local.bin.yap"
@@ -316,6 +341,7 @@ class TestBuildDebSmoke:
 # Ejecucion de maintainer scripts con rutas aisladas (sin root ni red)
 # ============================================================
 
+
 @pytest.fixture
 def maintainer_env(tmp_path):
     """Run the actual shell scripts; relocate only absolute installation paths."""
@@ -324,7 +350,8 @@ def maintainer_env(tmp_path):
     root = tmp_path / "root"
     share = root / "usr/share/yap"
     for dirname, source in (
-        ("whitelist", "whitelist"), ("cursos", "cursos"),
+        ("whitelist", "whitelist"),
+        ("cursos", "cursos"),
         ("pseint", "whitelist/pseint"),
     ):
         shutil.copytree(Path(REPO_ROOT) / source, share / dirname)
@@ -340,23 +367,37 @@ def maintainer_env(tmp_path):
         'case "$1" in\n'
         '  -r) exit "${YAP_TEST_LOAD_RC:-0}" ;;\n'
         '  --skip-kernel-load) exit "${YAP_TEST_PARSE_RC:-0}" ;;\n'
-        'esac\n', encoding="utf-8",
+        "esac\n",
+        encoding="utf-8",
     )
     parser.chmod(0o755)
     log = tmp_path / "parser.log"
-    env = dict(os.environ, PATH=f"{fake_bin}:{os.environ['PATH']}",
-               YAP_TEST_PARSER_LOG=str(log))
+    env = dict(
+        os.environ,
+        PATH=f"{fake_bin}:{os.environ['PATH']}",
+        YAP_TEST_PARSER_LOG=str(log),
+    )
 
     def run(name="postinst", action="configure"):
         script = _read(os.path.join(PACKAGING, "yap", "DEBIAN", name))
-        for path in ("/usr/share/yap", "/etc/yap", "/opt/yap",
-                     "/usr/local/bin", "/etc/apparmor.d",
-                     "/sys/kernel/security/apparmor"):
+        for path in (
+            "/usr/share/yap",
+            "/etc/yap",
+            "/opt/yap",
+            "/usr/local/bin",
+            "/etc/apparmor.d",
+            "/sys/kernel/security/apparmor",
+        ):
             script = script.replace(path, str(root) + path)
         target = tmp_path / name
         target.write_text(script, encoding="utf-8")
-        return subprocess.run(["sh", str(target), action], env=env,
-                              capture_output=True, text=True, timeout=15)
+        return subprocess.run(
+            ["sh", str(target), action],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
 
     return root, env, log, run
 
@@ -369,7 +410,9 @@ class TestMaintainerScripts:
         etc = root / "etc/yap"
         apps = etc / "whitelist/apps.conf"
         web = etc / "whitelist/web.conf"
-        assert apps.read_bytes() == (Path(REPO_ROOT) / "whitelist/apps.conf").read_bytes()
+        assert (
+            apps.read_bytes() == (Path(REPO_ROOT) / "whitelist/apps.conf").read_bytes()
+        )
         assert web.is_file()
         assert (etc / "cursos/FPY1101.json").is_file()
         assert (etc / "pseint/ejercicios.conf").is_file()
@@ -462,24 +505,40 @@ class TestMaintainerScripts:
         assert not log.exists()
 
 
-@pytest.mark.skipif(not shutil.which("apparmor_parser"), reason="requiere apparmor_parser")
+@pytest.mark.skipif(
+    not shutil.which("apparmor_parser"), reason="requiere apparmor_parser"
+)
 def test_apparmor_profile_compiles_without_kernel():
     result = subprocess.run(
-        ["apparmor_parser", "--skip-kernel-load", "--skip-cache",
-         os.path.join(REPO_ROOT, "apparmor", "usr.local.bin.yap")],
-        capture_output=True, text=True, timeout=30,
+        [
+            "apparmor_parser",
+            "--skip-kernel-load",
+            "--skip-cache",
+            os.path.join(REPO_ROOT, "apparmor", "usr.local.bin.yap"),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.skipif(not shutil.which("systemd-tmpfiles"), reason="requiere systemd-tmpfiles")
+@pytest.mark.skipif(
+    not shutil.which("systemd-tmpfiles"), reason="requiere systemd-tmpfiles"
+)
 def test_user_tmpfiles_creates_private_directory_without_deleting_progress(tmp_path):
     user_home = tmp_path / "student"
     user_home.mkdir()
     env = dict(os.environ, HOME=str(user_home))
-    command = ["systemd-tmpfiles", "--user", "--create",
-               os.path.join(PACKAGING, "yap", "user-tmpfiles.d", "yap.conf")]
-    result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=15)
+    command = [
+        "systemd-tmpfiles",
+        "--user",
+        "--create",
+        os.path.join(PACKAGING, "yap", "user-tmpfiles.d", "yap.conf"),
+    ]
+    result = subprocess.run(
+        command, env=env, capture_output=True, text=True, timeout=15
+    )
     assert result.returncode == 0, result.stderr
     config = user_home / ".config/yap"
     assert config.is_dir()
@@ -487,7 +546,9 @@ def test_user_tmpfiles_creates_private_directory_without_deleting_progress(tmp_p
     assert config.stat().st_uid == os.getuid()
     progress = config / "progress.json"
     progress.write_text('{"progress": 1}', encoding="utf-8")
-    result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=15)
+    result = subprocess.run(
+        command, env=env, capture_output=True, text=True, timeout=15
+    )
     assert result.returncode == 0, result.stderr
     assert progress.read_text() == '{"progress": 1}'
 
