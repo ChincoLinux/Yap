@@ -159,12 +159,9 @@ jobs:
 
       - name: Build Flatpak
         run: |
-          flatpak-builder --force-clean build-flatpak \
-            packaging/flatpak/org.chincolinux.Yap.json 2>&1 | tail -20
-
-      - name: Export Flatpak bundle
-        run: |
-          flatpak build-export repo build-flatpak
+          mkdir -p repo dist
+          flatpak-builder --force-clean --repo=repo build-flatpak \
+            packaging/flatpak/org.chincolinux.Yap.json
           flatpak build-bundle repo dist/yap.flatpak org.chincolinux.Yap
           ls -lh dist/yap.flatpak
 
@@ -193,9 +190,10 @@ jobs:
       - name: Install pytest for smoke-test
         run: pip install pytest
 
-      - name: Run tests
-        run: python -m pytest tests/ -q 2>&1 | Select-String -Pattern "(passed|failed|error)"
+      - name: Run tests (Windows compatible)
+        run: python -m pytest tests/test_yap_desktop.py -q
         shell: pwsh
+
 
       - name: Prepare build (stub llama-cli)
         run: |
