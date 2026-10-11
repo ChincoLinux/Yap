@@ -82,7 +82,9 @@ class TestTranslate:
 
     def test_en_traduce(self):
         yap.set_lang("en", persist=False)
-        assert "is not available" in yap.t("error.app_unavailable", app="X", available="Y")
+        assert "is not available" in yap.t(
+            "error.app_unavailable", app="X", available="Y"
+        )
         assert yap.t("ui.goodbye") == "Bye"
 
     def test_arn_traduce_nucleo(self):
@@ -93,7 +95,10 @@ class TestTranslate:
     def test_arn_fallback_a_es(self):
         yap.set_lang("arn", persist=False)
         # telemetry.privacy no está en arn.json → español
-        assert "dato" in yap.t("telemetry.privacy").lower() or "envia" in yap.t("telemetry.privacy").lower()
+        assert (
+            "dato" in yap.t("telemetry.privacy").lower()
+            or "envia" in yap.t("telemetry.privacy").lower()
+        )
 
     def test_clave_inexistente_devuelve_la_clave(self):
         assert yap.t("no.existe.nunca") == "no.existe.nunca"
@@ -252,7 +257,11 @@ class TestMensajesPorIdioma:
     def test_help_en_ingles(self):
         yap.set_lang("en", persist=False)
         body = yap.t("help.body")
-        assert "Open app" in body or "profile language" in body or "language" in body.lower()
+        assert (
+            "Open app" in body
+            or "profile language" in body
+            or "language" in body.lower()
+        )
         assert "Preguntar:" not in body
 
 

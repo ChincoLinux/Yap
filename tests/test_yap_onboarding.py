@@ -1,8 +1,7 @@
 import os
-import json
 import tempfile
 import yap
-from unittest.mock import patch, mock_open
+from unittest.mock import patch
 
 
 def test_cargar_perfil_autogenerates_on_missing():

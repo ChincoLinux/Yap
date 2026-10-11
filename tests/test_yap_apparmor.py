@@ -48,9 +48,9 @@ class TestAppArmorStatus:
         with mock.patch("os.path.isdir", return_value=True):
             with mock.patch("subprocess.run") as mock_run:
                 import json
+
                 mock_run.return_value = mock.MagicMock(
-                    returncode=0,
-                    stdout=json.dumps({"profiles": {"yap": "enforce"}})
+                    returncode=0, stdout=json.dumps({"profiles": {"yap": "enforce"}})
                 )
                 status = yap.apparmor_status()
                 assert status["installed"] is True
@@ -62,9 +62,9 @@ class TestAppArmorStatus:
         with mock.patch("os.path.isdir", return_value=True):
             with mock.patch("subprocess.run") as mock_run:
                 import json
+
                 mock_run.return_value = mock.MagicMock(
-                    returncode=0,
-                    stdout=json.dumps({"profiles": {"yap": "complain"}})
+                    returncode=0, stdout=json.dumps({"profiles": {"yap": "complain"}})
                 )
                 status = yap.apparmor_status()
                 assert status["profile_loaded"] is True
@@ -73,19 +73,24 @@ class TestAppArmorStatus:
     @pytest.mark.parametrize("mode", ["enforce", "complain"])
     def test_kernel_fallback_uses_exact_profile_name(self, mode):
         profiles = f"other-yap (enforce)\nyap-child (enforce)\nyap ({mode})\n"
-        with mock.patch("os.path.isdir", return_value=True), \
-             mock.patch("subprocess.run", side_effect=FileNotFoundError), \
-             mock.patch("builtins.open", mock.mock_open(read_data=profiles)):
+        with mock.patch("os.path.isdir", return_value=True), mock.patch(
+            "subprocess.run", side_effect=FileNotFoundError
+        ), mock.patch("builtins.open", mock.mock_open(read_data=profiles)):
             assert yap.apparmor_status() == {
-                "installed": True, "profile_loaded": True, "mode": mode,
+                "installed": True,
+                "profile_loaded": True,
+                "mode": mode,
             }
 
     def test_kernel_fallback_rejects_similar_names(self):
-        with mock.patch("os.path.isdir", return_value=True), \
-             mock.patch("subprocess.run", side_effect=FileNotFoundError), \
-             mock.patch("builtins.open", mock.mock_open(
-                 read_data="other-yap (enforce)\nyap-child (enforce)\n",
-             )):
+        with mock.patch("os.path.isdir", return_value=True), mock.patch(
+            "subprocess.run", side_effect=FileNotFoundError
+        ), mock.patch(
+            "builtins.open",
+            mock.mock_open(
+                read_data="other-yap (enforce)\nyap-child (enforce)\n",
+            ),
+        ):
             assert yap.apparmor_status()["profile_loaded"] is False
 
     def test_profile_name_and_filename_are_distinct(self):
@@ -94,18 +99,20 @@ class TestAppArmorStatus:
 
     @pytest.mark.parametrize("mode", ["enforce", "complain"])
     def test_confined_user_reads_own_label_without_subprocess(self, mode):
-        with mock.patch("os.path.isdir", return_value=False), \
-             mock.patch("builtins.open", mock.mock_open(read_data=f"yap ({mode})\n")), \
-             mock.patch("subprocess.run") as run:
+        with mock.patch("os.path.isdir", return_value=False), mock.patch(
+            "builtins.open", mock.mock_open(read_data=f"yap ({mode})\n")
+        ), mock.patch("subprocess.run") as run:
             assert yap.apparmor_status() == {
-                "installed": True, "profile_loaded": True, "mode": mode,
+                "installed": True,
+                "profile_loaded": True,
+                "mode": mode,
             }
             run.assert_not_called()
 
     def test_permission_errors_do_not_crash_status(self):
-        with mock.patch("os.path.isdir", return_value=True), \
-             mock.patch("builtins.open", side_effect=PermissionError), \
-             mock.patch("subprocess.run", side_effect=PermissionError):
+        with mock.patch("os.path.isdir", return_value=True), mock.patch(
+            "builtins.open", side_effect=PermissionError
+        ), mock.patch("subprocess.run", side_effect=PermissionError):
             assert yap.apparmor_status()["profile_loaded"] is False
 
 
@@ -113,31 +120,43 @@ class TestCmdAppArmorStatus:
     """Requisito: cmd_apparmor_status() muestra mensajes informativos."""
 
     def test_no_instalado(self):
-        with mock.patch.object(yap, "apparmor_status", return_value={
-            "installed": False, "profile_loaded": False, "mode": None
-        }):
+        with mock.patch.object(
+            yap,
+            "apparmor_status",
+            return_value={"installed": False, "profile_loaded": False, "mode": None},
+        ):
             result = yap.cmd_apparmor_status()
             assert "no está instalado" in result
 
     def test_perfil_no_cargado(self):
-        with mock.patch.object(yap, "apparmor_status", return_value={
-            "installed": True, "profile_loaded": False, "mode": None
-        }):
+        with mock.patch.object(
+            yap,
+            "apparmor_status",
+            return_value={"installed": True, "profile_loaded": False, "mode": None},
+        ):
             result = yap.cmd_apparmor_status()
             assert "no está cargado" in result
 
     def test_enforce_activo(self):
-        with mock.patch.object(yap, "apparmor_status", return_value={
-            "installed": True, "profile_loaded": True, "mode": "enforce"
-        }):
+        with mock.patch.object(
+            yap,
+            "apparmor_status",
+            return_value={"installed": True, "profile_loaded": True, "mode": "enforce"},
+        ):
             result = yap.cmd_apparmor_status()
             assert "ACTIVO" in result
             assert "enforce" in result
 
     def test_complain_activo(self):
-        with mock.patch.object(yap, "apparmor_status", return_value={
-            "installed": True, "profile_loaded": True, "mode": "complain"
-        }):
+        with mock.patch.object(
+            yap,
+            "apparmor_status",
+            return_value={
+                "installed": True,
+                "profile_loaded": True,
+                "mode": "complain",
+            },
+        ):
             result = yap.cmd_apparmor_status()
             assert "ACTIVO" in result
             assert "complain" in result
@@ -160,11 +179,15 @@ class TestProfileExists:
     """Requisito: El perfil AppArmor existe en el repo."""
 
     def test_profile_file_exists(self):
-        path = os.path.join(os.path.dirname(yap.__file__), "apparmor", "usr.local.bin.yap")
+        path = os.path.join(
+            os.path.dirname(yap.__file__), "apparmor", "usr.local.bin.yap"
+        )
         assert os.path.exists(path), f"Perfil AppArmor no encontrado: {path}"
 
     def test_profile_has_enforce_mode(self):
-        path = os.path.join(os.path.dirname(yap.__file__), "apparmor", "usr.local.bin.yap")
+        path = os.path.join(
+            os.path.dirname(yap.__file__), "apparmor", "usr.local.bin.yap"
+        )
         with open(path, encoding="utf-8") as f:
             content = f.read()
         # AppArmor default-deny means the profile enforces by default
@@ -175,7 +198,9 @@ class TestProfileExists:
 
     def test_profile_deny_by_default(self):
         """El perfil debe tener default-deny (no allow everything)."""
-        path = os.path.join(os.path.dirname(yap.__file__), "apparmor", "usr.local.bin.yap")
+        path = os.path.join(
+            os.path.dirname(yap.__file__), "apparmor", "usr.local.bin.yap"
+        )
         with open(path, encoding="utf-8") as f:
             content = f.read()
         # No debe tener allow all (root-level wildcard without specific path)
@@ -187,7 +212,11 @@ class TestProfileExists:
                 continue
             # Check for dangerous broad permissions (root wildcard)
             # /tmp/** rw is fine (scoped to /tmp), but / ** rw is not
-            if stripped.startswith("/ **") or stripped == "/** rw," or stripped == "/** rwx,":
+            if (
+                stripped.startswith("/ **")
+                or stripped == "/** rw,"
+                or stripped == "/** rwx,"
+            ):
                 pytest.fail(f"Permiso demasiado amplio: {stripped}")
 
 
@@ -212,7 +241,11 @@ class TestSetupShIntegration:
         for i, line in enumerate(lines, 1):
             if script_dir_line is None and line.startswith("SCRIPT_DIR="):
                 script_dir_line = i
-            if version_line is None and line.startswith("YAP_VERSION=") and "VERSION" in line:
+            if (
+                version_line is None
+                and line.startswith("YAP_VERSION=")
+                and "VERSION" in line
+            ):
                 version_line = i
         assert script_dir_line is not None, "SCRIPT_DIR assignment not found"
         assert version_line is not None, "YAP_VERSION assignment not found"
@@ -228,7 +261,9 @@ class TestCiWorkflows:
     def test_fallback_merge_workflow_removed(self):
         path = os.path.join(
             os.path.dirname(yap.__file__),
-            ".github", "workflows", "fallback-merge.yml",
+            ".github",
+            "workflows",
+            "fallback-merge.yml",
         )
         assert not os.path.exists(path), (
             "fallback-merge.yml must stay removed: it merged PRs with stale "
@@ -238,7 +273,9 @@ class TestCiWorkflows:
     def test_auto_release_imports_os_before_environ(self):
         path = os.path.join(
             os.path.dirname(yap.__file__),
-            ".github", "workflows", "auto-release.yml",
+            ".github",
+            "workflows",
+            "auto-release.yml",
         )
         with open(path, encoding="utf-8") as f:
             content = f.read()

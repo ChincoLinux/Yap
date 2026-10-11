@@ -20,7 +20,7 @@ class TestLabelPRState(unittest.TestCase):
         pr.merged = False
         pr.draft = False
         pr.mergeable = True
-        
+
         # Simular que los checks pasaron
         commits = MagicMock()
         commits.totalCount = 1
@@ -47,7 +47,7 @@ class TestLabelPRState(unittest.TestCase):
         """Una PR efectivamente mergeada sí debe recibir pr:merged."""
         pr = MagicMock()
         pr.merged = True
-        
+
         label = label_pr_state.determine_label(pr)
         self.assertEqual(label, label_pr_state.LABEL_MERGED)
 
