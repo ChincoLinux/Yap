@@ -4098,6 +4098,9 @@ def cmd_curso(codigo):
         curso = cargar_curso(codigo)
     except FileNotFoundError as e:
         return f"[ERROR] {e}"
+    except PermissionError as e:
+        # #170: sin permiso de lectura se informa, no se traza la excepcion
+        return t("error.course_permission", error=e)
     except (ValueError, json.JSONDecodeError) as e:
         return t("error.course_corrupt", error=e)
 

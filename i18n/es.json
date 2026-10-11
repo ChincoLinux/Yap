@@ -34,6 +34,7 @@
     "llama_missing": "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap.",
     "no_exercises": "[ERROR] No hay ejercicios configurados en {path}",
     "course_corrupt": "[ERROR] Curso corrupto: {error}",
+    "course_permission": "[ERROR] Sin permiso de lectura del curso: {error}",
     "ea_not_found": "[ERROR] Experiencia '{ea}' no encontrada en {curso}",
     "timeout_cleanup": "[WARN] Error limpiando proceso llama-cli tras timeout: {error}"
   },

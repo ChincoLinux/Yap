@@ -34,6 +34,7 @@
     "llama_missing": "[ERROR] llama-cli is not installed. Run Yap setup.",
     "no_exercises": "[ERROR] No exercises configured in {path}",
     "course_corrupt": "[ERROR] Corrupt course: {error}",
+    "course_permission": "[ERROR] No permission to read the course: {error}",
     "ea_not_found": "[ERROR] Learning experience '{ea}' not found in {curso}",
     "timeout_cleanup": "[WARN] Error cleaning up llama-cli after timeout: {error}"
   },
