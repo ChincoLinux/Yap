@@ -10,6 +10,7 @@ import textwrap
 import json
 import glob
 import csv
+import html
 import getpass
 import hashlib
 import hmac
@@ -4982,10 +4983,20 @@ def ficha_alumno(nombre):
 # ── Exportacion ─────────────────────────────────────────────
 
 
-def exportar_csv(destino=None, curso=None, ea=None):
+def _filtrar_alumnos(alumnos, estudiante=None):
+    """Subset por nombre: coincidencia parcial sin distinguir mayusculas (#30)."""
+    if not estudiante:
+        return alumnos
+    busqueda = str(estudiante).strip().lower()
+    return [a for a in alumnos if busqueda in str(a.get("nombre", "")).lower()]
+
+
+def exportar_csv(destino=None, curso=None, ea=None, estudiante=None):
     """Write one row per student. Returns the path, or an [ERROR] string."""
-    alumnos = cargar_alumnos()
+    alumnos = _filtrar_alumnos(cargar_alumnos(), estudiante)
     if not alumnos:
+        if estudiante:
+            return f"[ERROR] Ningun estudiante coincide con '{estudiante}'."
         return "[ERROR] No hay estudiantes importados; no se exporta nada."
 
     destino = destino or os.path.join(AULA_DIR, "reporte.csv")
@@ -5023,6 +5034,87 @@ def exportar_csv(destino=None, curso=None, ea=None):
     return destino
 
 
+def exportar_html(destino=None, curso=None, ea=None, estudiante=None):
+    """Reporte HTML listo para imprimir (#30).
+
+    Un solo archivo con CSS embebido y sin dependencias externas, pensado para
+    imprimirse desde el navegador (Imprimir -> Guardar como PDF).
+    """
+    alumnos = _filtrar_alumnos(cargar_alumnos(), estudiante)
+    if not alumnos:
+        if estudiante:
+            return f"[ERROR] Ningun estudiante coincide con '{estudiante}'."
+        return "[ERROR] No hay estudiantes importados; no se exporta nada."
+
+    destino = destino or os.path.join(AULA_DIR, "reporte.html")
+    filtros = []
+    if curso:
+        filtros.append(f"curso {html.escape(str(curso))}")
+    if ea:
+        filtros.append(f"EA {html.escape(str(ea))}")
+    if estudiante:
+        filtros.append(f"estudiante {html.escape(str(estudiante))}")
+
+    filas = []
+    for registro in alumnos:
+        m = metricas_alumno(registro, curso=curso, ea=ea)
+        filas.append(
+            "<tr>"
+            f"<td>{html.escape(str(m['nombre']))}</td>"
+            f"<td>{m['evaluadas']}</td>"
+            f"<td>{m['total']}</td>"
+            f"<td>{m['porcentaje']}%</td>"
+            f"<td>{'—' if m['nota'] is None else m['nota']}</td>"
+            f"<td>{'sí' if m['aprobado'] else 'no'}</td>"
+            f"<td>{html.escape(str(m['ultima'] or '—'))}</td>"
+            "</tr>"
+        )
+    cuerpo = "\n".join(filas)
+    contexto = ", ".join(filtros) if filtros else "ninguno"
+
+    documento = (
+        "<!DOCTYPE html>\n"
+        '<html lang="es">\n'
+        "<head>\n"
+        '<meta charset="utf-8">\n'
+        "<title>Reporte de progreso — Yap</title>\n"
+        "<style>\n"
+        "  body { font-family: sans-serif; margin: 2rem; color: #111; }\n"
+        "  h1 { font-size: 1.3rem; }\n"
+        "  table { border-collapse: collapse; width: 100%; }\n"
+        "  th, td { border: 1px solid #999; padding: .45rem .6rem; text-align: left; }\n"
+        "  th { background: #eee; }\n"
+        "  .filtros { color: #444; }\n"
+        "  .pie { margin-top: 1rem; font-size: .8rem; color: #555; }\n"
+        "</style>\n"
+        "</head>\n"
+        "<body>\n"
+        "<h1>Reporte de progreso</h1>\n"
+        f'<p class="filtros">Filtros: {contexto} · Generado: '
+        f"{time.strftime('%Y-%m-%d %H:%M')}</p>\n"
+        "<table>\n"
+        "<thead><tr><th>Estudiante</th><th>Actividades evaluadas</th>"
+        "<th>Actividades totales</th><th>Avance</th><th>Nota</th>"
+        "<th>Aprobado</th><th>Última actividad</th></tr></thead>\n"
+        f"<tbody>\n{cuerpo}\n</tbody>\n"
+        "</table>\n"
+        '<p class="pie">Yap — agente educativo local. Para guardar en PDF: '
+        "Imprimir → Guardar como PDF.</p>\n"
+        "</body>\n"
+        "</html>\n"
+    )
+
+    tmp = destino + ".tmp"
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(destino)), exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(documento)
+        os.replace(tmp, destino)
+    except OSError as e:
+        return f"[ERROR] No se pudo escribir el HTML: {e}"
+    return destino
+
+
 # ── Comando ─────────────────────────────────────────────────
 
 AYUDA_PROFESOR = (
@@ -5033,6 +5125,9 @@ AYUDA_PROFESOR = (
     "  yap profesor estudiante <nombre>  Ficha individual\n"
     "  yap profesor curso <codigo>       Filtrar el panel por curso\n"
     "  yap profesor exportar [ruta]      Reporte CSV\n"
+    "  yap exportar --csv|--html         Reporte con filtros (#30):\n"
+    "                                    [--curso C] [--ea E] [--estudiante N] [ruta]\n"
+    "                                    --pdf genera el HTML para imprimir a PDF\n"
     "  yap profesor pin                  Definir o cambiar el PIN\n"
 )
 
@@ -5109,12 +5204,70 @@ def cmd_profesor(sub="", param=""):
             return "[ERROR] Indica el curso: yap profesor curso FPY1101"
         return panel_aula(curso=param)
     if sub == "exportar":
-        resultado = exportar_csv(param or None)
-        if resultado.startswith("[ERROR]"):
-            return resultado
-        return f"[OK] Reporte escrito en {resultado}"
+        # Mismo motor que `yap exportar` (#30): filtros y formato HTML
+        return _exportar(param)
 
     return display_box(AYUDA_PROFESOR, color="CYAN")
+
+
+def _exportar(param):
+    """Parsea flags y escribe el reporte (#30). El gate de rol vive en cmd_exportar."""
+    # --curso=FPY1101 se convierte en dos tokens para recorrer una sola vez
+    partes = []
+    for token in (param or "").split():
+        if token.startswith("--") and "=" in token:
+            clave, _, valor = token.partition("=")
+            partes.extend([clave, valor])
+        else:
+            partes.append(token)
+
+    formato = "csv"
+    curso = ea = estudiante = None
+    destino = None
+    i = 0
+    while i < len(partes):
+        token = partes[i]
+        if token in ("--csv", "-c"):
+            formato = "csv"
+        elif token in ("--html", "--pdf"):
+            formato = "html"
+        elif token in ("--curso", "--ea", "--estudiante"):
+            if i + 1 >= len(partes):
+                return f"[ERROR] Falta el valor de {token}. Ejemplo: {token} FPY1101"
+            valor = partes[i + 1]
+            if token == "--curso":
+                curso = valor
+            elif token == "--ea":
+                ea = valor
+            else:
+                estudiante = valor
+            i += 1
+        elif token.startswith("-"):
+            return f"[ERROR] Opcion desconocida: {token}"
+        else:
+            destino = token
+        i += 1
+
+    if formato == "html":
+        resultado = exportar_html(destino, curso=curso, ea=ea, estudiante=estudiante)
+    else:
+        resultado = exportar_csv(destino, curso=curso, ea=ea, estudiante=estudiante)
+    if resultado.startswith("[ERROR]"):
+        return resultado
+    if formato == "html":
+        return (
+            f"[OK] Reporte escrito en {resultado}\n"
+            "Para PDF: abrilo en el navegador y usa Imprimir -> Guardar como PDF."
+        )
+    return f"[OK] Reporte escrito en {resultado}"
+
+
+def cmd_exportar(param=""):
+    """`yap exportar [--csv|--html|--pdf] [--curso C] [--ea E] [--estudiante N] [ruta]` (#30)."""
+    ok, mensaje = _autorizado()
+    if not ok:
+        return mensaje
+    return _exportar(param)
 
 
 def notify(title, msg, urgency="normal"):
@@ -6887,6 +7040,13 @@ def interpret(user_input, interactivo=False):
         return "super", ""
     if stripped in ("menu", "menú", "opciones"):
         return "menu", ""
+    # exportar [--csv|--html] [flags] [ruta]  ->  ("exportar", "<flags>")
+    for prefijo in ("exportar ", "export "):
+        if stripped.startswith(prefijo):
+            return "exportar", user_input.strip()[len(prefijo) :].strip()
+    if stripped in ("exportar", "export"):
+        return "exportar", ""
+
     # profesor | profesor importar /media/usb  -> ("profesor", "importar ...")
     if stripped in ("profesor", "modo profesor", "docente"):
         return "profesor", ""
@@ -7177,6 +7337,9 @@ def handle_action(action, param, original_input):
         sub = partes[0] if partes else ""
         arg = partes[1] if len(partes) > 1 else ""
         print(cmd_profesor(sub, arg))
+
+    elif action == "exportar":
+        print(cmd_exportar(param))
 
     elif action == "telemetria":
         print(cmd_telemetria(param))
