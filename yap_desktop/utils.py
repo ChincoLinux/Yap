@@ -28,31 +28,32 @@ def md_to_html(text: str) -> str:
 
     # 2. Bloques de código (```...```)
     text = re.sub(
-        r'```(.*?)```',
+        r"```(.*?)```",
         r'<pre style="background:#1e1e1e;color:#d4d4d4;padding:6px;'
         r'border-radius:4px;font-family:monospace;">\1</pre>',
-        text, flags=re.DOTALL
+        text,
+        flags=re.DOTALL,
     )
 
     # 3. Código inline (`...`)
     text = re.sub(
-        r'`([^`]+)`',
+        r"`([^`]+)`",
         r'<code style="background:#2d2d2d;color:#ce9178;padding:1px 4px;'
         r'border-radius:2px;font-family:monospace;">\1</code>',
-        text
+        text,
     )
 
     # 4. Negrita (**...**)
-    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
 
     # 5. Cursiva (*...*)
-    text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
+    text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
 
     # 6. Listas (- item)
-    text = re.sub(r'^- (.+)$', r'<li>\1</li>', text, flags=re.MULTILINE)
-    text = re.sub(r'(<li>.*</li>)', r'<ul>\1</ul>', text, flags=re.DOTALL)
+    text = re.sub(r"^- (.+)$", r"<li>\1</li>", text, flags=re.MULTILINE)
+    text = re.sub(r"(<li>.*</li>)", r"<ul>\1</ul>", text, flags=re.DOTALL)
 
     # 7. Saltos de línea
-    text = text.replace('\n', '<br>')
+    text = text.replace("\n", "<br>")
 
     return text

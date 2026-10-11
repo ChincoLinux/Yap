@@ -59,6 +59,7 @@ def _save_hotkey_config(hotkey: str) -> None:
 
 # ─── Backend: pynput ─────────────────────────────────────────────────────────
 
+
 def _try_pynput(hotkey_str: str, callback: Callable) -> Optional[object]:
     """Intenta usar pynput para el atajo global.
 
@@ -74,9 +75,9 @@ def _try_pynput(hotkey_str: str, callback: Callable) -> Optional[object]:
             except Exception as e:
                 logger.error("Error en callback de atajo pynput: %s", e)
 
-        listener = keyboard.GlobalHotKeys({
-            f"<{hotkey_str.replace('+', '><')}>": _on_activate
-        })
+        listener = keyboard.GlobalHotKeys(
+            {f"<{hotkey_str.replace('+', '><')}>": _on_activate}
+        )
         return listener
     except ImportError:
         return None
@@ -86,6 +87,7 @@ def _try_pynput(hotkey_str: str, callback: Callable) -> Optional[object]:
 
 
 # ─── Backend: keyboard ────────────────────────────────────────────────────────
+
 
 def _try_keyboard(hotkey_str: str, callback: Callable) -> Optional[object]:
     """Intenta usar el módulo keyboard para el atajo global.
@@ -125,6 +127,7 @@ def _try_keyboard(hotkey_str: str, callback: Callable) -> Optional[object]:
 
 # ─── HotkeyListener ──────────────────────────────────────────────────────────
 
+
 class HotkeyListener:
     """Registra y gestiona el atajo global de teclado para Yap.
 
@@ -154,7 +157,9 @@ class HotkeyListener:
         if listener is not None:
             self._backend = listener
             self._backend_name = "pynput"
-            t = threading.Thread(target=listener.start, daemon=True, name="YapHotkeyPynput")
+            t = threading.Thread(
+                target=listener.start, daemon=True, name="YapHotkeyPynput"
+            )
             t.start()
             logger.info("Atajo global registrado con pynput: %s", self._hotkey)
             return "pynput"

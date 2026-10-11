@@ -10,39 +10,49 @@ Implementa:
 
 from __future__ import annotations
 
-from typing import Optional, Callable
 from yap_desktop.utils import md_to_html as _md_to_html
 
 try:
     from PyQt6.QtWidgets import (
-        QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit,
-        QTextEdit, QLabel, QFrame, QSizePolicy, QScrollArea,
+        QWidget,
+        QVBoxLayout,
+        QHBoxLayout,
+        QPushButton,
+        QLineEdit,
+        QTextEdit,
+        QLabel,
+        QFrame,
     )
-    from PyQt6.QtGui import QFont, QColor, QPalette, QKeySequence, QShortcut
-    from PyQt6.QtCore import Qt, QTimer, pyqtSignal as Signal, QPoint, QSize
+    from PyQt6.QtGui import QKeySequence, QShortcut
+    from PyQt6.QtCore import Qt, QTimer, pyqtSignal as Signal
     from PyQt6.QtWidgets import QApplication
 except ImportError:
     from PySide6.QtWidgets import (
-        QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit,
-        QTextEdit, QLabel, QFrame, QSizePolicy, QScrollArea,
+        QWidget,
+        QVBoxLayout,
+        QHBoxLayout,
+        QPushButton,
+        QLineEdit,
+        QTextEdit,
+        QLabel,
+        QFrame,
     )
-    from PySide6.QtGui import QFont, QColor, QPalette, QKeySequence, QShortcut
-    from PySide6.QtCore import Qt, QTimer, Signal, QPoint, QSize
+    from PySide6.QtGui import QKeySequence, QShortcut
+    from PySide6.QtCore import Qt, QTimer, Signal
     from PySide6.QtWidgets import QApplication
-
 
 
 # Paleta de colores (dark theme educativo)
 _COLORS = {
-    "bg_window":   "#1a1a2e",
-    "bg_header":   "#16213e",
-    "bg_input":    "#0f3460",
+    "bg_window": "#1a1a2e",
+    "bg_header": "#16213e",
+    "bg_input": "#0f3460",
     "bg_user_msg": "#0f3460",
-    "bg_yap_msg":  "#1a1a2e",
-    "accent":      "#2ecc71",
-    "text":        "#e0e0e0",
-    "text_dim":    "#888888",
-    "border":      "#2ecc71",
+    "bg_yap_msg": "#1a1a2e",
+    "accent": "#2ecc71",
+    "text": "#e0e0e0",
+    "text_dim": "#888888",
+    "border": "#2ecc71",
 }
 
 _QSS = f"""
@@ -120,9 +130,9 @@ class YapWidget(QWidget):
         """Configura la ventana como widget flotante sin bordes."""
         self.setObjectName("YapWidget")
         self.setWindowFlags(
-            Qt.WindowType.Tool |
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint
+            Qt.WindowType.Tool
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedWidth(400)
@@ -137,13 +147,17 @@ class YapWidget(QWidget):
 
         # ── Header ────────────────────────────────────────────────────────
         header = QFrame()
-        header.setStyleSheet(f"background-color: {_COLORS['bg_header']}; "
-                              f"border-radius: 10px 10px 0 0;")
+        header.setStyleSheet(
+            f"background-color: {_COLORS['bg_header']}; "
+            f"border-radius: 10px 10px 0 0;"
+        )
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(12, 8, 8, 8)
 
         title = QLabel("🤖 Yap")
-        title.setStyleSheet(f"color: {_COLORS['accent']}; font-weight: bold; font-size: 14px;")
+        title.setStyleSheet(
+            f"color: {_COLORS['accent']}; font-weight: bold; font-size: 14px;"
+        )
         header_layout.addWidget(title)
 
         header_layout.addStretch()
@@ -171,10 +185,10 @@ class YapWidget(QWidget):
         actions_layout.setSpacing(6)
 
         quick_actions = [
-            ("📚 Cursos",     "curso FPY1101"),
+            ("📚 Cursos", "curso FPY1101"),
             ("✏️ Ejercicios", "ejercicios"),
-            ("📋 Historial",  "historial"),
-            ("👤 Perfil",     "perfil"),
+            ("📋 Historial", "historial"),
+            ("👤 Perfil", "perfil"),
         ]
         for label, cmd in quick_actions:
             btn = QPushButton(label)
@@ -225,9 +239,8 @@ class YapWidget(QWidget):
         # Mensaje de bienvenida
         self._append_message(
             "Yap",
-            "¡Hola! Soy Yap, tu asistente IA local. "
-            "¿En qué puedo ayudarte hoy?",
-            is_user=False
+            "¡Hola! Soy Yap, tu asistente IA local. " "¿En qué puedo ayudarte hoy?",
+            is_user=False,
         )
 
     def _setup_shortcuts(self) -> None:
@@ -272,9 +285,12 @@ class YapWidget(QWidget):
             self._daemon.query(text, self._on_response)
         else:
             # Sin daemon: respuesta de placeholder
-            QTimer.singleShot(500, lambda: self._on_response(
-                "(Daemon no disponible. Verifica que Yap está instalado.)"
-            ))
+            QTimer.singleShot(
+                500,
+                lambda: self._on_response(
+                    "(Daemon no disponible. Verifica que Yap está instalado.)"
+                ),
+            )
 
     def _send_quick(self, cmd: str) -> None:
         """Envía un comando rápido al daemon."""

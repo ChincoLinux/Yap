@@ -23,6 +23,7 @@ import shutil
 from pathlib import Path
 from typing import Callable, Optional
 
+
 # Ruta al script principal yap.py (busca relativo a este módulo y luego en PATH)
 def _find_yap_script() -> Path:
     """Devuelve la ruta a yap.py."""
@@ -48,6 +49,7 @@ YAP_SCRIPT = None  # se resuelve la primera vez que se necesita
 
 class DaemonStatus:
     """Estado del daemon."""
+
     IDLE = "idle"
     BUSY = "busy"
     ERROR = "error"
@@ -56,6 +58,7 @@ class DaemonStatus:
 
 class _WorkerTask:
     """Tarea interna enviada al hilo worker."""
+
     __slots__ = ("text", "callback", "cancelled")
 
     def __init__(self, text: str, callback: Callable[[str], None]):
@@ -136,7 +139,7 @@ class YapDaemon:
         try:
             if YAP_SCRIPT is None:
                 YAP_SCRIPT = _find_yap_script()
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             with self._status_lock:
                 self._status = DaemonStatus.ERROR
             return

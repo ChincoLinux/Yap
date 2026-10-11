@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -29,21 +28,19 @@ def _parse_args():
         description="Yap — Asistente IA local (interfaz de escritorio)",
     )
     parser.add_argument(
-        "--minimized", action="store_true",
-        help="Arrancar minimizado en la bandeja (no mostrar la ventana al inicio)"
+        "--minimized",
+        action="store_true",
+        help="Arrancar minimizado en la bandeja (no mostrar la ventana al inicio)",
     )
     parser.add_argument(
-        "--hotkey", default=None,
-        help="Atajo de teclado global (ej. 'ctrl+shift+y'). Sobreescribe la config."
+        "--hotkey",
+        default=None,
+        help="Atajo de teclado global (ej. 'ctrl+shift+y'). Sobreescribe la config.",
     )
     parser.add_argument(
-        "--python", default=None,
-        help="Intérprete Python a usar para invocar yap.py"
+        "--python", default=None, help="Intérprete Python a usar para invocar yap.py"
     )
-    parser.add_argument(
-        "--debug", action="store_true",
-        help="Activa logging detallado"
-    )
+    parser.add_argument("--debug", action="store_true", help="Activa logging detallado")
     return parser.parse_args()
 
 
@@ -84,18 +81,16 @@ def main() -> int:
     # ── Importar Qt ───────────────────────────────────────────────────────
     try:
         from PyQt6.QtWidgets import QApplication
-        from PyQt6.QtCore import Qt
     except ImportError:
         try:
             from PySide6.QtWidgets import QApplication
-            from PySide6.QtCore import Qt
         except ImportError:
             print(
                 "ERROR: Se requiere PyQt6 o PySide6.\n"
                 "  pip install PyQt6\n"
                 "  # o\n"
                 "  pip install PySide6",
-                file=sys.stderr
+                file=sys.stderr,
             )
             return 1
 
@@ -108,24 +103,28 @@ def main() -> int:
     app.setQuitOnLastWindowClosed(False)
 
     from PyQt6.QtWidgets import QSystemTrayIcon
+
     if not QSystemTrayIcon.isSystemTrayAvailable():
         print(
             "ERROR: No hay bandeja del sistema disponible en este escritorio.",
-            file=sys.stderr
+            file=sys.stderr,
         )
         return 1
 
     # ── Daemon ────────────────────────────────────────────────────────────
     from yap_desktop.daemon import YapDaemon
+
     daemon = YapDaemon(python_exe=args.python)
     daemon.start()
 
     # ── Widget ────────────────────────────────────────────────────────────
     from yap_desktop.widget import YapWidget
+
     widget = YapWidget(daemon=daemon)
 
     # ── Tray ──────────────────────────────────────────────────────────────
     from yap_desktop.tray import YapTrayIcon
+
     tray = YapTrayIcon(widget=widget, daemon=daemon)
     tray.show()
 

@@ -20,18 +20,19 @@ import os
 import sys
 import webbrowser
 from pathlib import Path
-from typing import Optional
 
 try:
     from PyQt6.QtWidgets import QSystemTrayIcon, QMenu, QApplication
     from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
-    from PyQt6.QtCore import Qt, QSize
+    from PyQt6.QtCore import Qt
+
     _QT_BACKEND = "PyQt6"
 except ImportError:
     try:
         from PySide6.QtWidgets import QSystemTrayIcon, QMenu, QApplication
         from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
-        from PySide6.QtCore import Qt, QSize
+        from PySide6.QtCore import Qt
+
         _QT_BACKEND = "PySide6"
     except ImportError:
         raise ImportError(
@@ -165,9 +166,14 @@ class YapTrayIcon(QSystemTrayIcon):
             os.startfile(str(config_dir))
         else:
             import subprocess
+
             xdg = "xdg-open"
-            subprocess.Popen([xdg, str(config_dir)], stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, timeout=5)
+            subprocess.Popen(
+                [xdg, str(config_dir)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
 
     def _open_help(self) -> None:
         """Abre la guía de uso en el navegador."""
@@ -189,9 +195,9 @@ class YapTrayIcon(QSystemTrayIcon):
         """
         icons = {"idle": "●", "busy": "◌", "error": "✗", "stopped": "○"}
         labels = {
-            "idle":    "Modelo listo",
-            "busy":    "Procesando...",
-            "error":   "Error en el modelo",
+            "idle": "Modelo listo",
+            "busy": "Procesando...",
+            "error": "Error en el modelo",
             "stopped": "Daemon detenido",
         }
         icon = icons.get(status, "?")
