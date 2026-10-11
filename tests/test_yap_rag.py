@@ -73,7 +73,10 @@ SAMPLE_CURSO = {
                     "descripcion": "Crear un programa que sume, reste, multiplique y divida.",
                     "tipo": "practica",
                     "enunciado": "Escribe un algoritmo que lea dos numeros y muestre las 4 operaciones.",
-                    "criterios_evaluacion": ["Usa variables correctamente", "Maneja division por cero"],
+                    "criterios_evaluacion": [
+                        "Usa variables correctamente",
+                        "Maneja division por cero",
+                    ],
                     "variantes": {
                         "basico": {
                             "enunciado": "Solo suma y resta.",
@@ -181,6 +184,7 @@ class RagTestBase:
 
         def _mock_corpus_paths():
             import glob as g
+
             paths = []
             cd = yap.CURSOS_DIR
             if os.path.isdir(cd):
@@ -222,6 +226,7 @@ class RagTestBase:
 
 # ── 1. Tokenización ────────────────────────────────────────────
 
+
 class TestRagTokenize:
     """Pruebas de _rag_tokenize."""
 
@@ -259,6 +264,7 @@ class TestRagTokenize:
 
 # ── 2. Chunking de texto ───────────────────────────────────────
 
+
 class TestRagChunkText:
     """Pruebas de _rag_chunk_text."""
 
@@ -289,6 +295,7 @@ class TestRagChunkText:
 
 
 # ── 3. Chunking de JSON de curso ───────────────────────────────
+
 
 class TestRagChunkJsonCurso:
     """Pruebas de _rag_chunk_json_curso."""
@@ -340,6 +347,7 @@ class TestRagChunkJsonCurso:
 
 
 # ── 4. BM25 Index ──────────────────────────────────────────────
+
 
 class TestRagBM25Index:
     """Pruebas del índice BM25."""
@@ -415,6 +423,7 @@ class TestRagBM25Index:
 
 # ── 5. Corpus hash e índice persistente ─────────────────────────
 
+
 class TestRagCorpusHash(RagTestBase):
     """Pruebas de _rag_corpus_hash e índice incremental."""
 
@@ -469,6 +478,7 @@ class TestRagPersistence(RagTestBase):
 
 # ── 6. rag_rebuild ──────────────────────────────────────────────
 
+
 class TestRagRebuild(RagTestBase):
     """Pruebas de rag_rebuild."""
 
@@ -487,6 +497,7 @@ class TestRagRebuild(RagTestBase):
 
 
 # ── 7. rag_retrieve y presupuesto ───────────────────────────────
+
 
 class TestRagRetrieve(RagTestBase):
     """Pruebas de rag_retrieve con budget enforcement."""
@@ -525,6 +536,7 @@ class TestRagRetrieve(RagTestBase):
 
 # ── 8. Contexto RAG para LLM ──────────────────────────────────
 
+
 class TestRagContextForQuery(RagTestBase):
     """Pruebas de _rag_context_for_query."""
 
@@ -546,6 +558,7 @@ class TestRagContextForQuery(RagTestBase):
 
 
 # ── 9. cmd_rag subcomandos ──────────────────────────────────────
+
 
 class TestCmdRag(RagTestBase):
     """Pruebas de cmd_rag."""
@@ -576,6 +589,7 @@ class TestCmdRag(RagTestBase):
 
 # ── 10. Protección path traversal ───────────────────────────────
 
+
 class TestRagPathTraversal(RagTestBase):
     """Verifica que no se indexan archivos fuera del corpus."""
 
@@ -601,13 +615,14 @@ class TestRagPathTraversal(RagTestBase):
 
 # ── 11. Degradación graciosa ─────────────────────────────────────
 
+
 class TestRagGracefulDegradation:
     """RAG debe degradar sin fallar si el corpus no existe."""
 
     def test_no_corpus_no_crash(self):
-        with mock.patch.object(yap, "RAG_ENABLED", True), \
-             mock.patch.object(yap, "_RAG_INDEX", None), \
-             mock.patch.object(yap, "_rag_corpus_paths", return_value=[]):
+        with mock.patch.object(yap, "RAG_ENABLED", True), mock.patch.object(
+            yap, "_RAG_INDEX", None
+        ), mock.patch.object(yap, "_rag_corpus_paths", return_value=[]):
             idx_dir = tempfile.mkdtemp()
             try:
                 with mock.patch.object(yap, "RAG_INDEX_DIR", idx_dir):
@@ -623,6 +638,7 @@ class TestRagGracefulDegradation:
 
 
 # ── 12. interpret() routing ──────────────────────────────────────
+
 
 class TestRagInterpretRouting:
     """Pruebas de enrutado en interpret() para RAG."""
@@ -650,6 +666,7 @@ class TestRagInterpretRouting:
 
 # ── 13. ACCIONES_CONOCIDAS incluye rag ─────────────────────────
 
+
 class TestRagRegistration:
     """Verifica que RAG está registrado en las acciones."""
 
@@ -661,6 +678,7 @@ class TestRagRegistration:
 
 
 # ── 14. Golden set — ≥30 consultas educativas ───────────────────
+
 
 class TestRagGoldenSet(RagTestBase):
     """
@@ -740,12 +758,13 @@ class TestRagGoldenSet(RagTestBase):
                     hits += 1
         # At least 60% of queries should have relevant results
         min_hits = len(self.GOLDEN_QUERIES) * 0.6
-        assert hits >= min_hits, (
-            f"Solo {hits}/{len(self.GOLDEN_QUERIES)} queries con resultados relevantes"
-        )
+        assert (
+            hits >= min_hits
+        ), f"Solo {hits}/{len(self.GOLDEN_QUERIES)} queries con resultados relevantes"
 
 
 # ── 15. Rendimiento ────────────────────────────────────────────
+
 
 class TestRagPerformance(RagTestBase):
     """Pruebas de rendimiento: retrieval <300ms, rebuild <60s."""

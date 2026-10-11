@@ -58,6 +58,7 @@ def _entorno_accesibilidad_limpio():
 # 1. DEFAULTS Y NORMALIZACIÓN EN EL PERFIL
 # ============================================================
 
+
 class TestDefaultsPerfil:
     """Requisito: el perfil incluye preferencias.accesibilidad con defaults off."""
 
@@ -89,9 +90,19 @@ class TestDefaultsPerfil:
     @pytest.mark.parametrize(
         "valor,esperado",
         [
-            ("si", True), ("sí", True), ("on", True), ("1", True), ("true", True),
-            (1, True), (True, True), (0, False), ("no", False), ("off", False),
-            (False, False), ("basura", False), ("", False),
+            ("si", True),
+            ("sí", True),
+            ("on", True),
+            ("1", True),
+            ("true", True),
+            (1, True),
+            (True, True),
+            (0, False),
+            ("no", False),
+            ("off", False),
+            (False, False),
+            ("basura", False),
+            ("", False),
         ],
     )
     def test_normalizacion_coerce_bool(self, valor, esperado):
@@ -118,6 +129,7 @@ class TestDefaultsPerfil:
 # 2. ACTUALIZACIÓN DE OPCIONES
 # ============================================================
 
+
 class TestActualizarAccesibilidad:
     """Requisito: cada opción se activa, guarda y persiste en el perfil."""
 
@@ -129,19 +141,36 @@ class TestActualizarAccesibilidad:
                 clave = yap.OPCIONES_ACCESIBILIDAD[opcion]
                 assert perfil["preferencias"]["accesibilidad"][clave] is True
                 # Persistido en disco
-                assert yap.cargar_perfil()["preferencias"]["accesibilidad"][clave] is True
+                assert (
+                    yap.cargar_perfil()["preferencias"]["accesibilidad"][clave] is True
+                )
 
     def test_sin_valor_activa(self):
         pf = perfil_tmp()
         with mock.patch.object(yap, "PROFILE_FILE", pf):
             yap.actualizar_accesibilidad("lector-pantalla")
-            assert yap.cargar_perfil()["preferencias"]["accesibilidad"]["lector_pantalla"] is True
+            assert (
+                yap.cargar_perfil()["preferencias"]["accesibilidad"]["lector_pantalla"]
+                is True
+            )
 
-    @pytest.mark.parametrize("valor,esperado", [
-        ("on", True), ("off", False), ("1", True), ("0", False),
-        ("si", True), ("sí", True), ("no", False), ("yes", True),
-        ("true", True), ("false", False), ("activar", True), ("desactivar", False),
-    ])
+    @pytest.mark.parametrize(
+        "valor,esperado",
+        [
+            ("on", True),
+            ("off", False),
+            ("1", True),
+            ("0", False),
+            ("si", True),
+            ("sí", True),
+            ("no", False),
+            ("yes", True),
+            ("true", True),
+            ("false", False),
+            ("activar", True),
+            ("desactivar", False),
+        ],
+    )
     def test_valores_on_off_aceptados(self, valor, esperado):
         pf = perfil_tmp()
         with mock.patch.object(yap, "PROFILE_FILE", pf):
@@ -154,14 +183,19 @@ class TestActualizarAccesibilidad:
         pf = perfil_tmp()
         with mock.patch.object(yap, "PROFILE_FILE", pf):
             yap.actualizar_accesibilidad("fuentes-grandes", "quizas")
-            got = yap.cargar_perfil()["preferencias"]["accesibilidad"]["fuentes_grandes"]
+            got = yap.cargar_perfil()["preferencias"]["accesibilidad"][
+                "fuentes_grandes"
+            ]
             assert got is False
 
     def test_aliases_normalizan_a_clave_canonica(self):
         pf = perfil_tmp()
         with mock.patch.object(yap, "PROFILE_FILE", pf):
             yap.actualizar_accesibilidad("lector de pantalla", "on")
-            assert yap.cargar_perfil()["preferencias"]["accesibilidad"]["lector_pantalla"] is True
+            assert (
+                yap.cargar_perfil()["preferencias"]["accesibilidad"]["lector_pantalla"]
+                is True
+            )
 
     def test_guiones_y_guiones_bajos_equivalentes(self):
         pf = perfil_tmp()
@@ -200,6 +234,7 @@ class TestActualizarAccesibilidad:
 # ============================================================
 # 3. SANITIZACIÓN ANSI
 # ============================================================
+
 
 class TestSanitizarSalida:
     """Requisito: con lector de pantalla u Orca, la salida no lleva ANSI."""
@@ -255,38 +290,44 @@ class TestSanitizarSalida:
 # 4. DETECCIÓN DE ORCA
 # ============================================================
 
+
 class TestDetectarOrca:
     """Requisito: detección con shutil.which y procesos (sin modo shell)."""
 
     def test_sin_binario_no_consulta_procesos(self):
-        with mock.patch.object(yap.shutil, "which", return_value=None) as mw, \
-             mock.patch("subprocess.run") as mr:
+        with mock.patch.object(
+            yap.shutil, "which", return_value=None
+        ) as mw, mock.patch("subprocess.run") as mr:
             assert yap.detectar_orca() is False
             mw.assert_called_once_with("orca")
             mr.assert_not_called()
 
     def test_proceso_orca_activo_devuelve_true(self):
-        with mock.patch.object(yap.shutil, "which", return_value="/usr/bin/orca"), \
-             mock.patch("subprocess.run") as mr:
+        with mock.patch.object(
+            yap.shutil, "which", return_value="/usr/bin/orca"
+        ), mock.patch("subprocess.run") as mr:
             mr.return_value = mock.Mock(stdout="bash\norca\nxterm", returncode=0)
             assert yap.detectar_orca() is True
 
     def test_binario_sin_proceso_devuelve_false(self):
-        with mock.patch.object(yap.shutil, "which", return_value="/usr/bin/orca"), \
-             mock.patch("subprocess.run") as mr:
+        with mock.patch.object(
+            yap.shutil, "which", return_value="/usr/bin/orca"
+        ), mock.patch("subprocess.run") as mr:
             mr.return_value = mock.Mock(stdout="bash\npython3", returncode=0)
             assert yap.detectar_orca() is False
 
     def test_sin_ps_asume_activo_fail_safe(self):
         """Si no se puede comprobar, se asume activo (a11y fail-safe)."""
-        with mock.patch.object(yap.shutil, "which", return_value="/usr/bin/orca"), \
-             mock.patch("subprocess.run", side_effect=FileNotFoundError):
+        with mock.patch.object(
+            yap.shutil, "which", return_value="/usr/bin/orca"
+        ), mock.patch("subprocess.run", side_effect=FileNotFoundError):
             assert yap.detectar_orca() is True
 
     def test_llamada_subprocess_segura(self):
         """HD-YAP-SEC-001: lista explícita de args, shell=False, timeout=."""
-        with mock.patch.object(yap.shutil, "which", return_value="/usr/bin/orca"), \
-             mock.patch("subprocess.run") as mr:
+        with mock.patch.object(
+            yap.shutil, "which", return_value="/usr/bin/orca"
+        ), mock.patch("subprocess.run") as mr:
             mr.return_value = mock.Mock(stdout="orca\n", returncode=0)
             yap.detectar_orca()
             args = mr.call_args[0][0]
@@ -320,6 +361,7 @@ class TestDetectarOrca:
 # 5. ALTO CONTRASTE
 # ============================================================
 
+
 class TestAltoContraste:
     """Requisito: esquema de blanco puro sobre fondo negro, sin degradados."""
 
@@ -331,7 +373,7 @@ class TestAltoContraste:
             assert yap.C["YELLOW"] == "\033[97m"
             assert yap.C["RED"] == "\033[97m"
             assert yap.C["BLUE"] == "\033[97m"
-            assert yap.C["GRAY"] == "\033[97m"      # sin gris degradado
+            assert yap.C["GRAY"] == "\033[97m"  # sin gris degradado
             assert yap.C["RESET"] == "\033[0m"
             assert yap.C["BOLD"] == "\033[1;97m"
         finally:
@@ -364,6 +406,7 @@ class TestAltoContraste:
 # ============================================================
 # 6. FUENTES GRANDES (2X)
 # ============================================================
+
 
 class TestFuentesGrandes:
     """Requisito: escala 2x de la salida tipográfica e interfaz CLI."""
@@ -403,6 +446,7 @@ class TestFuentesGrandes:
 # 7. ESTRUCTURA CLI: yap perfil accesibilidad [OPCION]
 # ============================================================
 
+
 class TestCmdAccesibilidad:
     """Requisito: subcomandos de configuración bajo `yap perfil accesibilidad`."""
 
@@ -422,7 +466,10 @@ class TestCmdAccesibilidad:
             assert out.startswith("[OK]")
             assert "Lector de pantalla" in out
             assert "activada" in out
-            assert yap.cargar_perfil()["preferencias"]["accesibilidad"]["lector_pantalla"] is True
+            assert (
+                yap.cargar_perfil()["preferencias"]["accesibilidad"]["lector_pantalla"]
+                is True
+            )
 
     def test_desactiva_con_off(self):
         pf = perfil_tmp()
@@ -445,7 +492,10 @@ class TestCmdAccesibilidad:
             out = yap.cmd_perfil("accesibilidad fuentes-grandes")
             assert out.startswith("[OK]")
             assert "Fuentes grandes" in out
-            assert yap.cargar_perfil()["preferencias"]["accesibilidad"]["fuentes_grandes"] is True
+            assert (
+                yap.cargar_perfil()["preferencias"]["accesibilidad"]["fuentes_grandes"]
+                is True
+            )
 
     def test_cmd_perfil_accesibilidad_muestra_estado(self):
         pf = perfil_tmp()
@@ -459,7 +509,12 @@ class TestCmdAccesibilidad:
         with mock.patch.object(yap, "PROFILE_FILE", pf):
             out = yap.cmd_perfil("a11y navegacion-teclado on")
             assert out.startswith("[OK]")
-            assert yap.cargar_perfil()["preferencias"]["accesibilidad"]["navegacion_teclado"] is True
+            assert (
+                yap.cargar_perfil()["preferencias"]["accesibilidad"][
+                    "navegacion_teclado"
+                ]
+                is True
+            )
 
     def test_perfil_formateado_muestra_accesibilidad(self):
         pf = perfil_tmp()
@@ -480,22 +535,29 @@ class TestCmdAccesibilidad:
 # 8. NAVEGACIÓN POR TECLADO
 # ============================================================
 
+
 class TestNavegacionTeclado:
     """Requisito: menús recorribles solo con Tab/Flechas/Enter/Esc."""
 
     def test_enter_elegir_primera(self):
         teclas = iter(["enter"])
-        resultado = yap.menu_interactivo("Menu", ["A", "B"], reader=lambda: next(teclas))
+        resultado = yap.menu_interactivo(
+            "Menu", ["A", "B"], reader=lambda: next(teclas)
+        )
         assert resultado == 0
 
     def test_flechas_mueven_seleccion(self):
         teclas = iter(["down", "down", "enter"])
-        resultado = yap.menu_interactivo("Menu", ["A", "B", "C"], reader=lambda: next(teclas))
+        resultado = yap.menu_interactivo(
+            "Menu", ["A", "B", "C"], reader=lambda: next(teclas)
+        )
         assert resultado == 2
 
     def test_tab_cicla(self):
         teclas = iter(["tab", "tab", "tab", "tab", "enter"])
-        resultado = yap.menu_interactivo("M", ["A", "B", "C"], reader=lambda: next(teclas))
+        resultado = yap.menu_interactivo(
+            "M", ["A", "B", "C"], reader=lambda: next(teclas)
+        )
         assert resultado == 1
 
     def test_flecha_arriba_envuelve(self):
@@ -505,11 +567,15 @@ class TestNavegacionTeclado:
 
     def test_esc_cancela(self):
         teclas = iter(["esc"])
-        assert yap.menu_interactivo("M", ["A", "B"], reader=lambda: next(teclas)) is None
+        assert (
+            yap.menu_interactivo("M", ["A", "B"], reader=lambda: next(teclas)) is None
+        )
 
     def test_q_cancela_tras_navegar(self):
         teclas = iter(["down", "q"])
-        assert yap.menu_interactivo("M", ["A", "B"], reader=lambda: next(teclas)) is None
+        assert (
+            yap.menu_interactivo("M", ["A", "B"], reader=lambda: next(teclas)) is None
+        )
 
     def test_mayusculas_en_tokens(self):
         teclas = iter(["DOWN", "ENTER"])
@@ -523,6 +589,7 @@ class TestNavegacionTeclado:
 # ============================================================
 # 9. RUTEO Y APLICACIÓN AL ARRANQUE
 # ============================================================
+
 
 class TestRoutingYArranque:
     """Requisito: yap perfil accesibilidad ... y arranque aplica el entorno."""
@@ -545,11 +612,17 @@ class TestRoutingYArranque:
     def test_handle_action_actualiza_accesibilidad(self, capsys):
         pf = perfil_tmp()
         with mock.patch.object(yap, "PROFILE_FILE", pf):
-            yap.handle_action("perfil", "accesibilidad alto-contraste",
-                              "perfil accesibilidad alto-contraste")
+            yap.handle_action(
+                "perfil",
+                "accesibilidad alto-contraste",
+                "perfil accesibilidad alto-contraste",
+            )
             captured = capsys.readouterr()
             assert "[OK]" in captured.out
-            assert yap.cargar_perfil()["preferencias"]["accesibilidad"]["alto_contraste"] is True
+            assert (
+                yap.cargar_perfil()["preferencias"]["accesibilidad"]["alto_contraste"]
+                is True
+            )
 
     def test_instalar_filtro_con_lector_activo(self):
         original_stdout = yap.sys.stdout

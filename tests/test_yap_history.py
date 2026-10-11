@@ -129,8 +129,14 @@ class TestCmdHistorial:
         tmp = tempfile.mkdtemp()
         hist_file = os.path.join(tmp, "history.json")
         sessions = [
-            {"timestamp": "2026-01-01T10:00:00", "turns": [{"user": "hola", "assistant": "hi"}]},
-            {"timestamp": "2026-01-02T11:00:00", "turns": [{"user": "chao", "assistant": "bye"}]},
+            {
+                "timestamp": "2026-01-01T10:00:00",
+                "turns": [{"user": "hola", "assistant": "hi"}],
+            },
+            {
+                "timestamp": "2026-01-02T11:00:00",
+                "turns": [{"user": "chao", "assistant": "bye"}],
+            },
         ]
         with open(hist_file, "w") as f:
             json.dump(sessions, f)
@@ -145,10 +151,13 @@ class TestCmdHistorial:
         tmp = tempfile.mkdtemp()
         hist_file = os.path.join(tmp, "history.json")
         sessions = [
-            {"timestamp": "2026-01-01T10:00:00", "turns": [
-                {"user": "que es python", "assistant": "un lenguaje"},
-                {"user": "y java", "assistant": "otro lenguaje"},
-            ]},
+            {
+                "timestamp": "2026-01-01T10:00:00",
+                "turns": [
+                    {"user": "que es python", "assistant": "un lenguaje"},
+                    {"user": "y java", "assistant": "otro lenguaje"},
+                ],
+            },
         ]
         with open(hist_file, "w") as f:
             json.dump(sessions, f)
@@ -173,7 +182,11 @@ class TestCmdHistorial:
             json.dump(sessions, f)
         with mock.patch.object(yap, "HISTORY_FILE", hist_file):
             result = yap.cmd_historial(resume_last=True)
-            assert "no tiene conversación" in result or "vacía" in result or "vacia" in result
+            assert (
+                "no tiene conversación" in result
+                or "vacía" in result
+                or "vacia" in result
+            )
 
 
 class TestInterpretRouting:

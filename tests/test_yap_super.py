@@ -16,9 +16,7 @@ import yap
 
 
 def _json_endpoint():
-    return (
-        f"http://{yap.SUPER_NUBE_HOST_LEGACY}:{yap.SUPER_NUBE_PORT_LEGACY}/v1/query"
-    )
+    return f"http://{yap.SUPER_NUBE_HOST_LEGACY}:{yap.SUPER_NUBE_PORT_LEGACY}/v1/query"
 
 
 class SuperTestBase:
@@ -29,9 +27,7 @@ class SuperTestBase:
         yap._SUPER_ELECCION = None
         yap._gradio_reset_cache()
         self._env_backup = {
-            k: os.environ.get(k)
-            for k in list(os.environ)
-            if k.startswith("YAP_SUPER")
+            k: os.environ.get(k) for k in list(os.environ) if k.startswith("YAP_SUPER")
         }
         for k in list(os.environ):
             if k.startswith("YAP_SUPER"):
@@ -88,7 +84,9 @@ class TestConsultaParaSuper(SuperTestBase):
         assert yap.consulta_para_super("que hora es") is False
 
     def test_pista_explica_delega(self):
-        assert yap.consulta_para_super("explica la diferencia entre while y for") is True
+        assert (
+            yap.consulta_para_super("explica la diferencia entre while y for") is True
+        )
 
     def test_texto_largo_delega(self):
         assert yap.consulta_para_super("x" * 80) is True
@@ -112,7 +110,10 @@ class TestHostSuperPermitido(SuperTestBase):
         assert yap._host_super_permitido("http://137.184.146.113:80/v1/query") is True
 
     def test_run_app_ajeno_bloqueado(self):
-        assert yap._host_super_permitido("https://otro.southamerica-west1.run.app") is False
+        assert (
+            yap._host_super_permitido("https://otro.southamerica-west1.run.app")
+            is False
+        )
 
     def test_rfc1918_permitido(self):
         assert yap._host_super_permitido("http://10.40.0.10:8742/v1/query") is True
@@ -170,14 +171,18 @@ class TestSanitizarYPayload(SuperTestBase):
 class TestDelegacion(SuperTestBase):
     def test_deshabilitada_no_delega(self):
         os.environ["YAP_SUPER_ENABLED"] = "0"
-        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        assert (
+            yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        )
 
     def test_auto_sin_internet_no_delega(self):
         """Sin red, auto se queda en el Llama local."""
         assert yap._super_habilitado() is True
         assert yap.super_configurada() is True
         assert yap._hay_internet() is False
-        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        assert (
+            yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        )
         assert yap.debe_delegar_super("hola") is False
 
     def test_auto_con_internet_delega_a_la_nube(self):
@@ -190,16 +195,22 @@ class TestDelegacion(SuperTestBase):
     def test_auto_ip_legacy_sin_env_no_delega(self):
         os.environ["YAP_SUPER_ENDPOINT"] = _json_endpoint()
         assert yap._super_habilitado() is False
-        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        assert (
+            yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        )
 
     def test_auto_loopback_sin_env_no_delega(self):
         os.environ["YAP_SUPER_ENDPOINT"] = "http://127.0.0.1:8742/v1/query"
         assert yap._super_habilitado() is False
-        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        assert (
+            yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        )
 
     def test_habilitada_compleja_tampoco_adelanta(self):
         self.habilitar()
-        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        assert (
+            yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        )
 
     def test_habilitada_corta_no_delega(self):
         self.habilitar()
@@ -253,9 +264,11 @@ class TestCmdQuerySuper(SuperTestBase):
     def test_respuesta_contrato_yap_conserva_historial(self, mock_urlopen):
         self.habilitar()
         yap.HISTORY.append(("que es un mientras", "Un ciclo con condicion."))
-        mock_urlopen.return_value = _urlopen_json({
-            "texto": "Algoritmo Ejemplo...",
-        })
+        mock_urlopen.return_value = _urlopen_json(
+            {
+                "texto": "Algoritmo Ejemplo...",
+            }
+        )
         out = yap.cmd_query_super("ahora un ejemplo", store_history=True)
         assert "Algoritmo Ejemplo" in out
         assert "[WARN]" not in out
@@ -400,10 +413,12 @@ def _urlopen_html(html, status=200):
 
 
 def _urlopen_sse(texto="Hola desde Super Yap"):
-    payload = json.dumps({
-        "msg": "process_completed",
-        "output": {"data": [texto]},
-    })
+    payload = json.dumps(
+        {
+            "msg": "process_completed",
+            "output": {"data": [texto]},
+        }
+    )
     lines = [
         f"data: {payload}\n".encode("utf-8"),
         b"",
@@ -483,6 +498,7 @@ class TestFallbackLocalASuper(SuperTestBase):
     def test_timeout_local_usa_super(self, mock_run, mock_super):
         self.habilitar()
         from subprocess import TimeoutExpired
+
         mock_run.side_effect = TimeoutExpired("llama-cli", 180)
         out = yap.cmd_query("hola", store_history=False)
         mock_super.assert_called_once()
