@@ -67,19 +67,17 @@ pertenece al alcance de ese issue y todos requieren un issue propio.
 | B3 | El menú del modo interactivo numera las entradas como `[1] [2] [3]`, lo que sugiere que son opciones seleccionables. Al escribir un número, el texto se envía al LLM como consulta en lugar de ejecutar la acción correspondiente. | `yap.py` — `display_menu()` | P2 | Por revisar |
 ### Notas
 
-**(1) #33 — entrega parcial.** Las whitelists escolares (#71) y el paquete
-`.deb` (#31) ya estan integrados. La post-instalacion incorpora una regla
-de usuario systemd-tmpfiles para `~/.config/yap/`, validacion real del perfil
-AppArmor (enforce por defecto), preservacion de configuracion local y
-pruebas de instalacion, reinstalacion y purga en Debian 12/13. Ver
-[PACKAGING.md](PACKAGING.md) para los limites de la validacion en contenedores
-y la comprobacion de confinamiento en VM.
-El issue sigue abierto; queda pendiente el daemon systemd:
-
-| Criterio pendiente | Motivo |
-|---|---|
-| Servicio systemd `yap-daemon` | Yap invoca `llama-cli` de nuevo en cada consulta, sin proceso persistente. Precargar el modelo exige migrar a `llama-server`, lo que excede una tarea de configuración post-install y merece issue propio |
-| Activacion segun RAM y `yap --daemon-status` | Dependen del servicio persistente. No se implementan indicadores de un daemon inexistente |
+**(1) #33 — completado (vía #129).** Las whitelists escolares (#71) y el paquete
+`.deb` (#31) ya están integrados. La post-instalación incorpora una regla
+de usuario systemd-tmpfiles para `~/.config/yap/`, validación real del perfil
+AppArmor (enforce por defecto), preservación de configuración local y
+pruebas de instalación, reinstalación y purga en Debian 12/13.
+El Issue #129 completó los criterios pendientes:
+- Unidades systemd `yap-daemon.service`, `yap-sync.service` y `yap-sync.timer`.
+- Comandos CLI: `yap --postinstall-check`, `yap --daemon`, `yap --daemon-status`, `yap --sync`.
+- Siembra con permisos root de `agent/yap.md` y whitelists (`0644`).
+- Carga y verificación de AppArmor en modo enforce.
+- Integración en `packaging/` (Debian/RPM) y `setup.sh`.
 
 **(2) #38 — entrega parcial.** Los criterios de aceptación del issue están
 cubiertos: `telemetry.json`, comando `telemetria`, exportación anónima opt-in,

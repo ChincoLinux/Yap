@@ -5,6 +5,10 @@ set -e
 
 case "$1" in
     remove|deconfigure)
+        if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+            systemctl stop yap-daemon.service >/dev/null 2>&1 || true
+            systemctl disable yap-daemon.service >/dev/null 2>&1 || true
+        fi
         if [ -f /etc/apparmor.d/usr.local.bin.yap ] && command -v apparmor_parser >/dev/null 2>&1; then
             apparmor_parser -R /etc/apparmor.d/usr.local.bin.yap 2>/dev/null || true
         fi

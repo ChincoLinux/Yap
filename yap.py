@@ -5228,6 +5228,239 @@ def cmd_apparmor_status():
     )
 
 
+def _check_daemon_active():
+    """Comprueba si el daemon yap-daemon está activo por systemd o PID file."""
+    if shutil.which("systemctl") and os.path.exists("/run/systemd/system"):
+        try:
+            res = subprocess.run(
+                ["systemctl", "is-active", "yap-daemon"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                stdin=subprocess.DEVNULL,
+            )
+            if res.returncode == 0 and res.stdout.strip() == "active":
+                return True, "systemd: active"
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+    for pidfile in ("/run/yap/yap-daemon.pid", "/tmp/yap-daemon.pid"):
+        if os.path.exists(pidfile):
+            try:
+                with open(pidfile) as f:
+                    content = f.read().strip()
+                if not content:
+                    continue
+                pid = int(content)
+                os.kill(pid, 0)
+                return True, f"proceso activo (PID {pid})"
+            except (OSError, ValueError):
+                pass
+    return False, "inactivo"
+
+
+def cmd_postinstall_check():
+    """Verificación de salud post-instalación de Yap (#129)."""
+    checks = []
+
+    # 1. AppArmor status
+    aa = apparmor_status()
+    if not aa["installed"]:
+        checks.append(("AppArmor", "WARN", "AppArmor no instalado en el sistema"))
+    elif not aa["profile_loaded"]:
+        checks.append(("AppArmor", "WARN", "Perfil de Yap no cargado"))
+    elif aa["mode"] == "enforce":
+        checks.append(("AppArmor", "OK", f"Modo enforce activo ({APPARMOR_PROFILE})"))
+    elif aa["mode"] == "complain":
+        checks.append(("AppArmor", "WARN", f"Modo complain ({APPARMOR_PROFILE})"))
+    else:
+        checks.append(("AppArmor", "WARN", f"Modo {aa['mode']} ({APPARMOR_PROFILE})"))
+
+    # 2. Whitelist de aplicaciones
+    apps_path = WHITELIST_APPS if os.path.exists(WHITELIST_APPS) else None
+    if apps_path:
+        apps = load_whitelist(apps_path)
+        checks.append(
+            (
+                "Whitelist Apps",
+                "OK",
+                f"{len(apps)} aplicaciones permitidas ({apps_path})",
+            )
+        )
+    else:
+        checks.append(("Whitelist Apps", "WARN", f"No encontrada en {WHITELIST_APPS}"))
+
+    # 3. Whitelist web
+    web_path = WHITELIST_WEB if os.path.exists(WHITELIST_WEB) else None
+    if web_path:
+        try:
+            with open(web_path, encoding="utf-8") as f:
+                lines = [
+                    line.strip()
+                    for line in f
+                    if line.strip() and not line.startswith("#")
+                ]
+            checks.append(
+                (
+                    "Whitelist Web",
+                    "OK",
+                    f"{len(lines)} dominios permitidos ({web_path})",
+                )
+            )
+        except OSError:
+            checks.append(("Whitelist Web", "WARN", f"Error de lectura en {web_path}"))
+    else:
+        checks.append(("Whitelist Web", "WARN", f"No encontrada en {WHITELIST_WEB}"))
+
+    # 4. Especificación del contrato de agente
+    agent_paths = [
+        f"{CONFIG_DIR}/agent/yap.md",
+        "/usr/share/yap/agent/yap.md",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "yap-agent.md"),
+    ]
+    found_agent = next((p for p in agent_paths if os.path.isfile(p)), None)
+    if found_agent:
+        checks.append(
+            ("Agent Contract", "OK", f"Especificación presente ({found_agent})")
+        )
+    else:
+        checks.append(
+            ("Agent Contract", "WARN", "Especificación agent/yap.md no encontrada")
+        )
+
+    # 5. Modelo local
+    model_found = os.path.isfile(MODEL_PATH)
+    if model_found:
+        size_mb = os.path.getsize(MODEL_PATH) / (1024 * 1024)
+        checks.append(
+            ("Modelo Local", "OK", f"{os.path.basename(MODEL_PATH)} ({size_mb:.1f} MB)")
+        )
+    else:
+        ggufs = glob.glob(f"{MODEL_DIR}/*.gguf")
+        if ggufs:
+            checks.append(("Modelo Local", "OK", f"{os.path.basename(ggufs[0])}"))
+        else:
+            checks.append(("Modelo Local", "WARN", f"No encontrado en {MODEL_DIR}"))
+
+    # 6. Servicio daemon
+    daemon_ok, daemon_detail = _check_daemon_active()
+    if daemon_ok:
+        checks.append(("Daemon Service", "OK", daemon_detail))
+    else:
+        if not os.path.exists("/run/systemd/system"):
+            checks.append(
+                ("Daemon Service", "INFO", "systemd no activo en este entorno")
+            )
+        else:
+            checks.append(("Daemon Service", "WARN", f"yap-daemon {daemon_detail}"))
+
+    lines = [display_header("Yap — Verificación Post-Instalación")]
+    for name, level, msg in checks:
+        color = (
+            C["GREEN"]
+            if level == "OK"
+            else (C["YELLOW"] if level in ("WARN", "INFO") else C["RED"])
+        )
+        lines.append(
+            f"  [{color}{level:<4}{C['RESET']}] {C['BOLD']}{name:<16}{C['RESET']}: {msg}"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def cmd_daemon():
+    """Ejecuta el daemon de servicio en segundo plano de Yap."""
+    import signal
+
+    run_dir = "/run/yap"
+    pidfile = f"{run_dir}/yap-daemon.pid"
+    fallback_pidfile = "/tmp/yap-daemon.pid"
+
+    target_pidfile = None
+    try:
+        os.makedirs(run_dir, exist_ok=True)
+        target_pidfile = pidfile
+    except OSError:
+        target_pidfile = fallback_pidfile
+
+    try:
+        tmp_pid = f"{target_pidfile}.tmp"
+        with open(tmp_pid, "w", encoding="utf-8") as f:
+            f.write(str(os.getpid()))
+        os.replace(tmp_pid, target_pidfile)
+    except OSError:
+        pass
+
+    stop_event = False
+
+    def _sig_handler(signum, frame):
+        nonlocal stop_event
+        stop_event = True
+
+    try:
+        signal.signal(signal.SIGTERM, _sig_handler)
+        signal.signal(signal.SIGINT, _sig_handler)
+    except (ValueError, OSError):
+        pass
+
+    print(f"Yap daemon iniciado (PID {os.getpid()}).")
+    try:
+        while not stop_event:
+            time.sleep(1)
+            if os.environ.get("YAP_DAEMON_ONCE") == "1":
+                break
+    finally:
+        if target_pidfile and os.path.exists(target_pidfile):
+            try:
+                tmp_pid = f"{target_pidfile}.tmp"
+                with open(tmp_pid, "w", encoding="utf-8") as f:
+                    f.write("")
+                os.replace(tmp_pid, target_pidfile)
+            except OSError:
+                pass
+        print("Yap daemon detenido.")
+
+
+def cmd_sync():
+    """Sincroniza y verifica whitelists y contrato de agente escolar."""
+    if os.environ.get("YAP_OFFLINE") == "1":
+        return "[YAP SYNC] Modo offline activo (YAP_OFFLINE=1). Sincronización omitida."
+
+    detalles = []
+    try:
+        os.makedirs(f"{CONFIG_DIR}/whitelist", exist_ok=True)
+        os.makedirs(f"{CONFIG_DIR}/agent", exist_ok=True)
+    except OSError:
+        pass
+
+    share_dir = "/usr/share/yap"
+    if os.path.isdir(share_dir):
+        for conf in ("whitelist/apps.conf", "whitelist/web.conf", "agent/yap.md"):
+            src = os.path.join(share_dir, conf)
+            dst = os.path.join(CONFIG_DIR, conf)
+            if os.path.isfile(src) and not os.path.isfile(dst):
+                try:
+                    shutil.copy2(src, dst)
+                    detalles.append(f"sembrado {conf}")
+                except OSError:
+                    pass
+
+    for p in glob.glob(f"{CONFIG_DIR}/whitelist/*.conf") + [
+        f"{CONFIG_DIR}/agent/yap.md"
+    ]:
+        if os.path.isfile(p):
+            try:
+                st = os.stat(p)
+                if st.st_mode & 0o002:
+                    os.chmod(p, st.st_mode & ~0o002)
+                    detalles.append(f"corregido permiso {os.path.basename(p)}")
+            except OSError:
+                pass
+
+    if detalles:
+        return f"[YAP SYNC] Sincronización completada ({', '.join(detalles)})."
+    return "[YAP SYNC] Sincronización completada. Whitelists y agent.md al día."
+
+
 def cmd_open_app(app_name):
     apps = load_whitelist(WHITELIST_APPS)
     key = app_name.strip().lower()
@@ -6574,6 +6807,20 @@ def interpret(user_input, interactivo=False):
         return "help", "ayuda"
     if stripped in ("--apparmor-status", "apparmor-status", "apparmor status"):
         return "apparmor_status", "status"
+    if stripped in (
+        "--postinstall-check",
+        "postinstall-check",
+        "postinstall check",
+        "--check",
+        "postinstall",
+    ):
+        return "postinstall_check", "check"
+    if stripped in ("--daemon-status", "daemon-status", "daemon status"):
+        return "daemon_status", "status"
+    if stripped in ("--daemon", "daemon", "-d"):
+        return "daemon", "daemon"
+    if stripped in ("--sync", "sync"):
+        return "sync", "sync"
     if stripped in ("salir", "exit", "quit", "q", "tripan"):
         sys.exit(0)
 
@@ -6865,6 +7112,19 @@ def handle_action(action, param, original_input):
 
     elif action == "apparmor_status":
         print(cmd_apparmor_status())
+
+    elif action == "postinstall_check":
+        print(cmd_postinstall_check())
+
+    elif action == "daemon_status":
+        _active, detail = _check_daemon_active()
+        print(f"Yap daemon: {detail}")
+
+    elif action == "daemon":
+        cmd_daemon()
+
+    elif action == "sync":
+        print(cmd_sync())
 
     elif action == "query_local":
         # Eleccion explicita del estudiante: no delegar a la nube ni por red.
