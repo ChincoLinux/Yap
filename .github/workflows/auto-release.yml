@@ -184,7 +184,7 @@ jobs:
             --title "chore: release v${RELEASE_VERSION} + bump to v${NEXT_VERSION}" \
             --body "Automated version bump and CHANGELOG update following release v${RELEASE_VERSION}.
 
-Complies with A-Dev Rules 2, 48, 49 and HD-YAP-BRANCH-001 (no direct push to main)." \
+            Complies with A-Dev Rules 2, 48, 49 and HD-YAP-BRANCH-001 (no direct push to main)." \
             --label "platform-maintenance" || echo "PR already exists or created"
           echo "Pushed to $BRANCH and opened PR for v${NEXT_VERSION}"
 
