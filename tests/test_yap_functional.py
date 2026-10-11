@@ -75,7 +75,11 @@ class TestOpenApp:
             yap.cmd_open_app("Firefox")
 
         mock_popen.assert_called_once_with(
-            ["/usr/bin/firefox"], stdout=ANY, stderr=ANY, stdin=ANY
+            ["/usr/bin/firefox"],
+            stdout=ANY,
+            stderr=ANY,
+            stdin=ANY,
+            start_new_session=ANY,
         )
 
     def test_app_no_encontrada_mensaje_graceful(self):

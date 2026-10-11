@@ -5236,11 +5236,13 @@ def cmd_open_app(app_name):
 
     # ponytail: stdin al vacio. La aplicacion vive mas que la llamada y, con
     # la terminal heredada, compite por ella con el REPL de Yap
+    # start_new_session=True desacopla el proceso de la sesion del terminal (#104).
     subprocess.Popen(
         [bin_path],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         stdin=subprocess.DEVNULL,
+        start_new_session=True,
     )
 
     try:
