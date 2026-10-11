@@ -105,7 +105,6 @@ Name: "{autodesktop}\Yap";                Filename: "{app}\yap-launcher.bat"; Ta
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; \
     ValueType: expandsz; ValueName: "Path"; \
     ValueData: "{olddata};{app}\bin;{app}\python"; \
-
     Check: NeedsAddPath(ExpandConstant('{app}\bin')); \
     Tasks: addtopath; Flags: preservestringtype uninsdeletekeyifempty
 
