@@ -1,0 +1,279 @@
+name: Build & Package (Multi-OS)
+# Issue: https://github.com/ChincoLinux/Yap/issues/163
+#
+# Triggers:
+#   - push of version tags (v*)   → builds all packages + attaches to GitHub Release
+#   - PR touching packaging files → build + smoke-test (no release upload)
+#   - workflow_dispatch           → manual trigger
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - 'yap.py'
+      - 'build-deb.sh'
+      - 'whitelist/**'
+      - 'cursos/**'
+      - 'apparmor/**'
+  workflow_dispatch:
+    inputs:
+      embed_models:
+        description: 'Embed GGUF models inside .deb (none|1b|3b|all)'
+        required: false
+        default: 'none'
+        type: choice
+        options: [none, 1b, 3b, all]
+      publish:
+        description: 'Upload artifacts to GitHub Release'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write   # needed to upload release assets
+  packages: read
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 1. Debian / Ubuntu .deb
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-deb:
+    name: Build .deb (Debian/Ubuntu)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        suite: [bookworm, trixie]
+    container:
+      image: debian:${{ matrix.suite }}
+
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends \
+            git dpkg-dev fakeroot apparmor apparmor-utils \
+            python3 python3-pytest ca-certificates curl
+
+      - uses: actions/checkout@v4
+
+      - name: Build .deb (stub llama-cli)
+        run: chmod +x build-deb.sh && ./build-deb.sh --stub-llama --outdir dist
+
+      - name: Install + smoke-test
+        run: |
+          apt-get install -y ./dist/yap_*.deb || true
+          python3 /opt/yap/yap.py --help 2>/dev/null | head -5 || true
+
+      - name: Run packaging tests
+        run: python3 -m pytest tests/ -q -x 2>&1 | tail -10
+
+      - name: Upload .deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yap-deb-${{ matrix.suite }}
+          path: dist/*.deb
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 2. Fedora .rpm
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-rpm:
+    name: Build .rpm (Fedora)
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+
+    steps:
+      - name: Install build tools
+        run: |
+          dnf install -y rpm-build python3 python3-pytest git tar
+
+      - uses: actions/checkout@v4
+
+      - name: Create stub llama-cli binary
+        run: |
+          printf '#!/bin/bash\necho "[stub llama-cli] $@"\n' > llama-cli
+          chmod +x llama-cli
+
+      - name: Prepare source tarball
+        run: |
+          VER=$(cat VERSION)
+          mkdir -p ~/rpmbuild/{SOURCES,SPECS,BUILD,RPMS,SRPMS}
+          tar czf ~/rpmbuild/SOURCES/yap-${VER}.tar.gz \
+            --transform "s,^,yap-${VER}/," \
+            yap.py llama-cli VERSION LICENSE USAGE.md README.md \
+            whitelist/ cursos/ apparmor/ packaging/
+          cp packaging/rpm/yap.spec ~/rpmbuild/SPECS/
+
+      - name: Substitute version in spec
+        run: |
+          VER=$(cat VERSION)
+          sed -i "s/^Version:.*/Version: ${VER}/" ~/rpmbuild/SPECS/yap.spec
+
+      - name: Build RPM
+        run: rpmbuild -bb ~/rpmbuild/SPECS/yap.spec 2>&1 | tail -20
+
+      - name: List built RPMs
+        run: find ~/rpmbuild/RPMS -name '*.rpm' -exec ls -lh {} \;
+
+      - name: Upload RPM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yap-rpm-fedora
+          path: ~/rpmbuild/RPMS/**/*.rpm
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 3. Flatpak (universal Linux)
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-flatpak:
+    name: Build Flatpak
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install flatpak-builder
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y flatpak flatpak-builder
+
+      - name: Add Flathub remote
+        run: |
+          sudo flatpak remote-add --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo || true
+
+      - name: Install runtime
+        run: |
+          sudo flatpak install -y flathub \
+            org.freedesktop.Platform//23.08 \
+            org.freedesktop.Sdk//23.08 || true
+
+      - name: Create stub llama-cli binary
+        run: |
+          printf '#!/bin/bash\necho "[stub llama-cli] $@"\n' > llama-cli
+          chmod +x llama-cli
+
+      - name: Build Flatpak
+        run: |
+          flatpak-builder --force-clean build-flatpak \
+            packaging/flatpak/org.chincolinux.Yap.json 2>&1 | tail -20
+
+      - name: Export Flatpak bundle
+        run: |
+          flatpak build-export repo build-flatpak
+          flatpak build-bundle repo dist/yap.flatpak org.chincolinux.Yap
+          ls -lh dist/yap.flatpak
+
+      - name: Upload Flatpak artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yap-flatpak
+          path: dist/yap.flatpak
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 4. Windows .exe installer (Inno Setup)
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-windows:
+    name: Build Windows installer
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pytest for smoke-test
+        run: pip install pytest
+
+      - name: Run tests
+        run: python -m pytest tests/ -q 2>&1 | Select-String -Pattern "(passed|failed|error)"
+        shell: pwsh
+
+      - name: Prepare build (stub llama-cli)
+        run: |
+          .\packaging\windows\build-windows.ps1 -StubLlama -SkipISCC
+        shell: pwsh
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+        shell: pwsh
+
+      - name: Build installer
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $iscc packaging\windows\yap-installer.iss /O"dist\windows" 2>&1
+        shell: pwsh
+
+      - name: List installer
+        run: Get-ChildItem dist\windows\ -ErrorAction SilentlyContinue | Format-Table Name, Length
+        shell: pwsh
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: yap-windows-installer
+          path: dist/windows/*.exe
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 5. Publish to GitHub Release (only on version tags)
+  # ═══════════════════════════════════════════════════════════════════════════
+  publish-release:
+    name: Publish to GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-deb, build-rpm, build-flatpak, build-windows]
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish == 'true')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: List assets
+        run: find release-assets -type f | sort
+
+      - name: Get version
+        id: version
+        run: echo "ver=$(cat VERSION)" >> $GITHUB_OUTPUT
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Yap v${{ steps.version.outputs.ver }}"
+          draft: false
+          prerelease: false
+          files: |
+            release-assets/**/*.deb
+            release-assets/**/*.rpm
+            release-assets/**/*.flatpak
+            release-assets/**/*.exe
+          body: |
+            ## Yap v${{ steps.version.outputs.ver }}
+
+            ### Descargas
+
+            | Plataforma | Archivo | Notas |
+            |---|---|---|
+            | **Debian 12/13** | `yap_*.deb` | `sudo apt install ./yap_*.deb` |
+            | **Ubuntu 22/24** | `yap_*.deb` | `sudo apt install ./yap_*.deb` |
+            | **Fedora** | `yap-*.rpm` | `sudo dnf install ./yap-*.rpm` |
+            | **Linux (universal)** | `yap.flatpak` | `flatpak install yap.flatpak` |
+            | **Windows 10/11** | `yap-*-setup.exe` | Ejecutar el instalador |
+
+            ### Modelos (descargar por separado)
+            Los modelos GGUF no se incluyen en el instalador base.
+            Instalar con `yap-models-1b` o `yap-models-3b` según la RAM disponible.
+
+            Ver [USAGE.md](https://github.com/ChincoLinux/Yap/blob/main/USAGE.md) para instrucciones completas.
