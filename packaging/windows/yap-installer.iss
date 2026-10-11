@@ -23,6 +23,7 @@
 AppId={{E5F1A2B3-C4D5-6E7F-8A9B-0C1D2E3F4A5B}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+SourceDir=..\..
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues

@@ -28,7 +28,6 @@
         "install -Dm644 whitelist/pseint/ejercicios.conf /app/share/yap/whitelist/pseint/ejercicios.conf",
         "for f in cursos/*.json; do install -Dm644 $f /app/share/yap/cursos/$(basename $f); done",
         "install -Dm644 packaging/flatpak/org.chincolinux.Yap.desktop /app/share/applications/org.chincolinux.Yap.desktop",
-        "install -Dm644 packaging/flatpak/org.chincolinux.Yap.metainfo.xml /app/share/metainfo/org.chincolinux.Yap.metainfo.xml",
         "install -Dm644 README.md /app/share/doc/yap/README.md",
         "install -Dm644 LICENSE /app/share/doc/yap/LICENSE",
         "install -Dm755 packaging/flatpak/yap-wrapper.sh /app/bin/yap"
