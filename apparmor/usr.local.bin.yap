@@ -29,6 +29,11 @@ profile yap /{usr/local/bin/yap,opt/yap/yap.py} {
   owner @{HOME}/.config/yap/** rw,
   owner @{HOME}/.config/yap/*.tmp rw,
 
+  # Daemon runtime directory and systemd status
+  /run/yap/ rw,
+  /run/yap/** rw,
+  /run/systemd/** r,
+
   # Read access to home (for readline history)
   owner @{HOME}/.config/yap/history.txt rw,
 

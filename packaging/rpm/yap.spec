@@ -106,6 +106,16 @@ install -m 644 packaging/desktop/yap.desktop \
 install -m 644 packaging/yap/user-tmpfiles.d/yap.conf \
     %{buildroot}/usr/share/user-tmpfiles.d/yap.conf
 
+# Systemd service
+mkdir -p %{buildroot}%{_unitdir}
+install -m 644 packaging/systemd/yap-daemon.service \
+    %{buildroot}%{_unitdir}/yap-daemon.service
+
+# Agent specification
+if [ -f yap-agent.md ]; then
+    install -m 644 yap-agent.md %{buildroot}/usr/share/yap/agent/yap.md
+fi
+
 # Documentation
 install -m 644 README.md  %{buildroot}/usr/share/doc/yap/README.md
 install -m 644 LICENSE    %{buildroot}/usr/share/doc/yap/LICENSE
@@ -213,6 +223,7 @@ fi
 %config(noreplace) /etc/apparmor.d/usr.local.bin.yap
 /usr/share/applications/yap.desktop
 /usr/share/user-tmpfiles.d/yap.conf
+%{_unitdir}/yap-daemon.service
 %doc /usr/share/doc/yap/README.md
 %doc /usr/share/doc/yap/LICENSE
 %doc /usr/share/doc/yap/USAGE.md
