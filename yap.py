@@ -187,7 +187,25 @@ LLAMA_TEMP_QUERY = float(os.environ.get("YAP_LLAMA_TEMP_QUERY", "0.7"))
 LLAMA_TEMP_PSEINT = float(os.environ.get("YAP_LLAMA_TEMP_PSEINT", "0.5"))
 LLAMA_TEMP_CLASSIFY = float(os.environ.get("YAP_LLAMA_TEMP_CLASSIFY", "0.1"))
 
-# ── Super Yap (#91) — Gradio Cloud Run ──────────────────────
+# ── Super Yap (#91) — Gradio Cloud Run ──────────────────────────────────────
+# ⚠️  SUSPENDIDO POR DECISIÓN ECONÓMICA — SIN FECHA DE RETORNO  ⚠️
+# ----------------------------------------------------------------------------
+# El backend cloud (Google Cloud Run + Gradio 5) de Super Yap está desactivado
+# indefinidamente por razones de costo operativo.
+#
+# ESTADO: CONGELADO — Este módulo NO se actualizará hasta nuevo aviso.
+#   - El código se conserva como referencia histórica y para facilitar
+#     una futura reactivación si el proyecto consigue financiamiento.
+#   - YAP_SUPER_ENABLED=0 es el valor efectivo en todos los entornos.
+#   - Toda la funcionalidad de IA opera en modo local (llama-cli / Llama.cpp).
+#
+# Para reactivar en el futuro:
+#   1. Aprovisionar Cloud Run en GCP (ver issues #106, #112, #113, #132).
+#   2. Establecer YAP_SUPER_ENABLED=1 y YAP_SUPER_ENDPOINT=<url>.
+#   3. Ejecutar tests/test_yap_super.py con el endpoint activo.
+#
+# Referencia: issue #168 — «Suspender Super Yap nube por decisión económica».
+# ----------------------------------------------------------------------------
 # El PC del alumno usa Llama 3.2 Instruct Q4_K_M (techo 3B, nunca 8B).
 # Si llama-cli tarda 3 min, o el usuario pide 'super'/'nube', Yap habla
 # Gradio 5 en Cloud Run (GET / → POST /gradio_api/queue/join → GET /queue/data SSE).
@@ -211,7 +229,7 @@ SUPER_PROMPT_MAX = 4000
 SUPER_RESPUESTA_MAX = 8000
 # Estimacion grosera (chars/4). El local usa ctx 2048 y -n 384.
 SUPER_TOKEN_LOCAL_MAX = 1200
-SUPER_LOCAL_TIMEOUT = 180  # 3 min; luego Gradio Cloud Run
+SUPER_LOCAL_TIMEOUT = 180  # 3 min; luego Gradio Cloud Run (SUSPENDIDO)
 SUPER_GRADIO_HTML_TIMEOUT = 30
 SUPER_GRADIO_JOIN_TIMEOUT = 30
 SUPER_GRADIO_SSE_TIMEOUT = 180
@@ -5299,12 +5317,20 @@ def cmd_webfetch(url, feed_to_llm=False):
 
 
 def _super_habilitado():
-    """Env on/off, or auto: Gradio Cloud Run."""
+    """Determina si Super Yap (nube) está habilitado.
+
+    ESTADO ACTUAL: SUSPENDIDO por decisión económica (issue #168).
+    El valor efectivo en producción es siempre False salvo que el operador
+    establezca explícitamente YAP_SUPER_ENABLED=1 con un endpoint activo.
+
+    Para reactivar: YAP_SUPER_ENABLED=1 + YAP_SUPER_ENDPOINT=<url Cloud Run>.
+    """
     raw = os.environ.get("YAP_SUPER_ENABLED", "").strip().lower()
     if raw in ("0", "false", "no", "off"):
         return False
-    if raw in ("1", "true", "si", "sí", "yes", "on"):
-        return True
+    # Por defecto (sin env set) → desactivado. El proyecto opera en modo local.
+    if raw not in ("1", "true", "si", "sí", "yes", "on"):
+        return False  # SUSPENDIDO: antes era auto-detección del endpoint
     return _host_es_super_gradio(_super_endpoint())
 
 
