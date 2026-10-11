@@ -827,6 +827,16 @@ class TestCursoCommand:
 
     @patch("shutil.get_terminal_size", return_value=Mock(columns=80, lines=24))
     @patch(
+        "yap.cargar_curso", side_effect=PermissionError("[Errno 13] Permission denied")
+    )
+    def test_cmd_curso_sin_permisos_no_traza(self, mock_cargar, mock_size):
+        """#170: PermissionError se informa como mensaje, sin excepcion en pantalla."""
+        result = yap.cmd_curso("TEST101")
+        assert "[ERROR]" in result
+        assert "Permission denied" in result
+
+    @patch("shutil.get_terminal_size", return_value=Mock(columns=80, lines=24))
+    @patch(
         "builtins.input", side_effect=["salir"] + ["salir"] * 10
     )  # overview prompt, then activities
     def test_iniciar_ea_muestra_actividades(self, mock_input, mock_size):
