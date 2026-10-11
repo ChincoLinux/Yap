@@ -9,6 +9,8 @@ Gracias por contribuir / Thank you for contributing.
 1. Lee el `README.md` y `USAGE.md` del repositorio.
 2. Revisa los issues abiertos (busca etiquetas `good first issue` / `help wanted`).
 3. Comunica tu intención: abre un issue o comenta en uno existente antes de trabajar.
+4. Consulta la [guía de labels](docs/LABELS.md) (tipo, prioridad, labels de PR)
+   y el [checklist de revisión](docs/REVIEW.md) antes de abrir tu PR.
 
 ## Flujo de trabajo / Workflow
 

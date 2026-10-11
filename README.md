@@ -551,19 +551,23 @@ Este proyecto se distribuye bajo **licencia MIT** (ver [LICENSE](LICENSE)). El m
 ### 12.1 Estructura de la suite
 
 ```
-tests/
-├── test_yap_security.py     # 25 pruebas — seguridad y configuracion
-├── test_yap_functional.py   # 56 pruebas — funcionalidad + TUI + cursos
+tests/                       # 25 archivos, 998 tests recolectados
+├── test_yap_security.py     # seguridad y configuracion
+├── test_yap_functional.py   # funcionalidad + TUI + cursos
+├── test_yap_postinstall.py  # verificacion post-install (#129)
 ├── run_tests.py             # Ejecutor integrado con reporte
 ├── report/                  # Reportes generados con --report
 └── README.md                # Documentacion de las pruebas
 ```
 
+El detalle por archivo vive en [tests/README.md](tests/README.md) y el checklist
+de revisión en [docs/REVIEW.md](docs/REVIEW.md).
+
 Las pruebas usan **`pytest`** con mocking de `subprocess`, `urllib` y `shutil` para evitar dependencia del LLM real. Se ejecutan sin modelo, sin GPU, sin Internet.
 
 ```bash
 pip install pytest             # Solo requiere pytest
-python3 -m pytest tests/ -v    # 218 pruebas
+python3 -m pytest tests/ -v    # 974 pruebas (974 passed, 24 skipped)
 python3 tests/run_tests.py --report   # Reporte TXT con mapeo de requisitos
 ```
 
@@ -573,13 +577,15 @@ Cada `push` y `pull request` a `main`, `lowmem` o `ultra-lowmem` ejecuta automat
 
 | Job | Que hace |
 |---|---|
-| **unit-tests** | 81 pruebas en Python 3.12 + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
+| **unit-tests** | 974 pruebas en Python 3.12 (seguridad, funcional, i18n, empaquetado, desktop, post-install) + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
 | **branch-check** | Verifica que `MODEL_PATH` en cada rama apunte al modelo correcto |
 | **results** | Resumen del pipeline |
 
-Pipeline definido en `.github/workflows/test.yml`.
+Pipeline definido en `.github/workflows/test.yml`. La revisión de calidad de cada
+PR (`ruff`, `pyflakes`) vive en `.github/workflows/pr-quality-suite.yml` y el
+checklist completo en [docs/REVIEW.md](docs/REVIEW.md).
 
-[![Yap CI](https://github.com/VECTORG99/Yap/actions/workflows/test.yml/badge.svg)](https://github.com/VECTORG99/Yap/actions/workflows/test.yml)
+[![Yap CI](https://github.com/ChincoLinux/Yap/actions/workflows/test.yml/badge.svg)](https://github.com/ChincoLinux/Yap/actions/workflows/test.yml)
 
 ### 12.3 Pruebas de seguridad (`test_yap_security.py`)
 
@@ -658,14 +664,16 @@ python3 tests/run_tests.py --vm --report
 
 ### 12.6 Resultados
 
-| Categoria | Pruebas | Resultado |
-|---|---|---|
-| Seguridad (whitelist, injection, dominios) | 25/25 | ✓ 100% |
-| Funcional (apps, webfetch, LLM, historial, PSeInt, tutorial, TUI, cursos, progreso) | 56/56 | ✓ 100% |
-| Infraestructura (symlink, binarios, whitelist en disco) | 5/5 | ✓ 100% (en VM) |
-| **Total** | **81/81** | **✓ 100%** |
+| Categoria | Resultado |
+|---|---|
+| Suite completa (`python3 -m pytest tests/ -q`) | **974 passed, 24 skipped** (0 failed, 2026-10-11) |
+| Formato y lint (`ruff format --check` + `ruff check`) | ✓ limpio |
+| Estático (`pyflakes yap.py tests/`) | ✓ sin hallazgos |
+| CI en `main` | ✓ verde (Yap CI + Quality Gates) |
+
+Los 24 tests omitidos son los de Super Yap (nube suspendida, `cloud-suspended`)
+y los de infraestructura que sólo corren en VM (`--vm`).
 
 ---
 
 > **Referencias**: [llama.cpp](https://github.com/ggerganov/llama.cpp) | [Llama 3.2](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-edge-mobile-devices/) | [GGUF format](https://github.com/ggerganov/ggml/blob/main/docs/gguf.md) | [Debian](https://www.debian.org/) | [VirtualBox](https://www.virtualbox.org/)
-<!-- test -->
