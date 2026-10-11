@@ -8,7 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [1.0.2] - 2026-10-11
+### Added
 - Escritorio (#164): módulo `yap_desktop` (bandeja, widget, atajos) con tests sin
+- feat: exportacion de progreso del docente con filtros y reporte HTML (#30) (#177)
   display; empaquetado Fedora (RPM), Flatpak, Windows (Inno Setup) y matriz de CI
   que construye `.deb`, `.rpm`, `.flatpak` y `.exe` en los releases `v*`
 - Post-install completo (#129, completa #33): unidades `yap-daemon.service`,
