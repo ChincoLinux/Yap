@@ -38,6 +38,11 @@
     "ea_not_found": "[ERROR] Experiencia '{ea}' no encontrada en {curso}",
     "timeout_cleanup": "[WARN] Error limpiando proceso llama-cli tras timeout: {error}"
   },
+  "consumo": {
+    "consulta": "[CONSUMO] prompt {prompt} tokens + {gen} generados · {tps} tok/s · {s} s",
+    "resumen": "[CONSUMO] {llamadas} llamadas al LLM local · {total} tokens ({prompt} de prompt + {gen} generados) · {tps} tok/s de generación · {s} s de inferencia",
+    "vacio": "[CONSUMO] Todavía no hubo consultas al LLM local en esta sesión."
+  },
   "app": {
     "opened": "[OK] {app} abierta.\nInformacion: {version}",
     "notify_title": "{app} abierta",

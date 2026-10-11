@@ -3461,6 +3461,7 @@ def _llamar_llm_evaluacion(prompt):
             stdout,
             stderr,
         )
+        _registrar_consumo(result.stderr)
         return _clean_output(result)
     except subprocess.TimeoutExpired:
         if proc is not None:
@@ -6272,6 +6273,80 @@ def _clean_output(result):
     return out if out else (result.stderr.strip() or t("query.no_response"))
 
 
+# ── Consumo de tokens del LLM local (#85) ─────────────────────────────
+_CONSUMO_SESION = {"prompt": 0, "generados": 0, "ms": 0.0, "llamadas": 0}
+_CONSUMO_ULTIMO = {}
+_RE_CONSUMO_PROMPT = re.compile(
+    r"prompt eval time\s*=\s*([0-9.]+)\s*ms\s*/\s*(\d+)\s*tokens", re.IGNORECASE
+)
+_RE_CONSUMO_EVAL = re.compile(
+    r"(?<!prompt )eval time\s*=\s*([0-9.]+)\s*ms\s*/\s*(\d+)\s*tokens",
+    re.IGNORECASE,
+)
+
+
+def _registrar_consumo(stderr):
+    """Acumula los tiempos y tokens que llama-cli reporta en stderr (#85)."""
+    global _CONSUMO_ULTIMO
+    if not stderr:
+        return
+    mp = _RE_CONSUMO_PROMPT.search(stderr)
+    me = _RE_CONSUMO_EVAL.search(stderr)
+    if not (mp or me):
+        return
+    consumido = {
+        "prompt": int(mp.group(2)) if mp else 0,
+        "generados": int(me.group(2)) if me else 0,
+        "ms": (float(mp.group(1)) if mp else 0.0) + (float(me.group(1)) if me else 0.0),
+        "ms_gen": float(me.group(1)) if me else 0.0,
+    }
+    _CONSUMO_ULTIMO = consumido
+    _CONSUMO_SESION["prompt"] += consumido["prompt"]
+    _CONSUMO_SESION["generados"] += consumido["generados"]
+    _CONSUMO_SESION["ms"] += consumido["ms"]
+    _CONSUMO_SESION["llamadas"] += 1
+
+
+def _velocidad_tokens(consumo):
+    """Tokens generados por segundo; usa el tiempo de generacion, no el total."""
+    segundos = consumo.get("ms_gen", consumo.get("ms", 0.0)) / 1000.0
+    if segundos <= 0:
+        return 0.0
+    return consumo.get("generados", 0) / segundos
+
+
+def linea_consumo():
+    """Linea compacta tras cada consulta; None si esta desactivada (#85)."""
+    if os.environ.get("YAP_CONSUMO", "1") == "0":
+        return None
+    if not _CONSUMO_ULTIMO:
+        return None
+    c = _CONSUMO_ULTIMO
+    return t(
+        "consumo.consulta",
+        prompt=c["prompt"],
+        gen=c["generados"],
+        tps=f"{_velocidad_tokens(c):.1f}",
+        s=f"{c['ms'] / 1000.0:.1f}",
+    )
+
+
+def cmd_consumo(sub="", param=""):
+    """Resumen del consumo del LLM local en la sesion actual (#85)."""
+    c = _CONSUMO_SESION
+    if c["prompt"] + c["generados"] == 0:
+        return t("consumo.vacio")
+    return t(
+        "consumo.resumen",
+        llamadas=c["llamadas"],
+        prompt=c["prompt"],
+        gen=c["generados"],
+        total=c["prompt"] + c["generados"],
+        tps=f"{_velocidad_tokens(c):.1f}",
+        s=f"{c['ms'] / 1000.0:.1f}",
+    )
+
+
 def _responder_super_por_fallback(prompt, context, store_history, motivo):
     """Local timeout / too many tokens → Super Yap. No reintenta el 1B/3B."""
     out = cmd_query_super(
@@ -6368,6 +6443,7 @@ def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=Tru
             timeout=timeout_s,
             stdin=subprocess.DEVNULL,
         )
+        _registrar_consumo(result.stderr)
         out = _clean_output(result)
         if store_history and out not in (t("query.no_response"), ""):
             HISTORY.append((prompt, out))
@@ -6428,6 +6504,7 @@ def cmd_pseint(query):
             timeout=120,
             stdin=subprocess.DEVNULL,
         )
+        _registrar_consumo(result.stderr)
         return _clean_output(result)
     except subprocess.TimeoutExpired:
         return t("error.timeout")
@@ -6628,6 +6705,7 @@ def classify_intent(user_input):
             timeout=30,
             stdin=subprocess.DEVNULL,
         )
+        _registrar_consumo(result.stderr)
         out = result.stdout.strip()
         for tok in [BOS, HEADER, FOOTER, EOT, "[end of text]"]:
             out = out.replace(tok, "")
@@ -6742,6 +6820,10 @@ def interpret(user_input, interactivo=False):
     ):
         partes = stripped.split(" ", 1)
         return "telemetria", partes[1].strip() if len(partes) > 1 else ""
+
+    # consumo | --consumo | tokens
+    if stripped in ("consumo", "--consumo", "tokens"):
+        return "consumo", ""
 
     # perfil [nombre|nivel|idioma <valor>] | profile language arn
     if stripped in ("perfil", "mi perfil", "profile") or stripped.startswith(
@@ -7127,6 +7209,9 @@ def handle_action(action, param, original_input):
     elif action == "postinstall_check":
         print(cmd_postinstall_check())
 
+    elif action == "consumo":
+        print(cmd_consumo())
+
     elif action == "daemon_status":
         _active, detail = _check_daemon_active()
         print(f"Yap daemon: {detail}")
@@ -7141,6 +7226,9 @@ def handle_action(action, param, original_input):
         # Eleccion explicita del estudiante: no delegar a la nube ni por red.
         print("Consultando LLM local...")
         print(cmd_query(original_input, allow_super_fallback=False))
+        _cons = linea_consumo()
+        if _cons:
+            print(_cons)
 
     elif action == "menu_opcion":
         print(param)
@@ -7156,6 +7244,9 @@ def handle_action(action, param, original_input):
     else:
         print(t("query.consulting"))
         print(cmd_query(original_input))
+        _cons = linea_consumo()
+        if _cons:
+            print(_cons)
 
 
 if __name__ == "__main__":

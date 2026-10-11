@@ -38,6 +38,11 @@
     "ea_not_found": "[ERROR] Learning experience '{ea}' not found in {curso}",
     "timeout_cleanup": "[WARN] Error cleaning up llama-cli after timeout: {error}"
   },
+  "consumo": {
+    "consulta": "[CONSUMO] {prompt} prompt tokens + {gen} generated · {tps} tok/s · {s} s",
+    "resumen": "[CONSUMO] {llamadas} local LLM calls · {total} tokens ({prompt} prompt + {gen} generated) · {tps} tok/s generation · {s} s inference",
+    "vacio": "[CONSUMO] No local LLM queries in this session yet."
+  },
   "app": {
     "opened": "[OK] {app} opened.\nInfo: {version}",
     "notify_title": "{app} opened",
