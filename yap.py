@@ -5242,6 +5242,7 @@ def _check_daemon_active():
             if res.returncode == 0 and res.stdout.strip() == "active":
                 return True, "systemd: active"
         except (subprocess.TimeoutExpired, OSError):
+            # permisos sin root pueden fallar; el proximo --sync lo corrige
             pass
     for pidfile in ("/run/yap/yap-daemon.pid", "/tmp/yap-daemon.pid"):
         if os.path.exists(pidfile):
@@ -5254,6 +5255,7 @@ def _check_daemon_active():
                 os.kill(pid, 0)
                 return True, f"proceso activo (PID {pid})"
             except (OSError, ValueError):
+                # origen ausante o destino ya sembrado: nada que copiar
                 pass
     return False, "inactivo"
 
@@ -5388,6 +5390,7 @@ def cmd_daemon():
             f.write(str(os.getpid()))
         os.replace(tmp_pid, target_pidfile)
     except OSError:
+        # ~/.config/yap puede estar en FS de solo lectura; sync sigue igual
         pass
 
     stop_event = False
@@ -5400,6 +5403,7 @@ def cmd_daemon():
         signal.signal(signal.SIGTERM, _sig_handler)
         signal.signal(signal.SIGINT, _sig_handler)
     except (ValueError, OSError):
+        # pidfile efimero: si no se limpia aqui lo hara el proximo arranque
         pass
 
     print(f"Yap daemon iniciado (PID {os.getpid()}).")
@@ -5416,6 +5420,7 @@ def cmd_daemon():
                     f.write("")
                 os.replace(tmp_pid, target_pidfile)
             except OSError:
+                # fuera del hilo principal (p.ej. tests) no se pueden registrar senales
                 pass
         print("Yap daemon detenido.")
 
@@ -5430,6 +5435,7 @@ def cmd_sync():
         os.makedirs(f"{CONFIG_DIR}/whitelist", exist_ok=True)
         os.makedirs(f"{CONFIG_DIR}/agent", exist_ok=True)
     except OSError:
+        # sin permiso de escritura el daemon sigue en memoria y se reintentara
         pass
 
     share_dir = "/usr/share/yap"
@@ -5442,6 +5448,7 @@ def cmd_sync():
                     shutil.copy2(src, dst)
                     detalles.append(f"sembrado {conf}")
                 except OSError:
+                    # pid inexistente o ilegible: el daemon esta inactivo
                     pass
 
     for p in glob.glob(f"{CONFIG_DIR}/whitelist/*.conf") + [
@@ -5454,6 +5461,7 @@ def cmd_sync():
                     os.chmod(p, st.st_mode & ~0o002)
                     detalles.append(f"corregido permiso {os.path.basename(p)}")
             except OSError:
+                # systemctl puede faltar o no haber systemd como PID 1
                 pass
 
     if detalles:
