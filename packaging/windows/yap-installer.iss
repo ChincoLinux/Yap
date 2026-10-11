@@ -38,16 +38,11 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; Output
 OutputDir=..\..\dist\windows
 OutputBaseFilename=yap-{#MyAppVersion}-setup
-; Appearance
-SetupIconFile=packaging\windows\yap.ico
 WizardStyle=modern
-WizardImageFile=packaging\windows\wizard-banner.bmp
-WizardSmallImageFile=packaging\windows\wizard-small.bmp
 ; Compression
 Compression=lzma2/ultra64
 SolidCompression=yes
 ; Uninstaller
-UninstallDisplayIcon={app}\yap.ico
 UninstallDisplayName={#MyAppName} {#MyAppVersion}
 ; License
 LicenseFile=LICENSE
@@ -88,7 +83,6 @@ Source: "cursos\*.json";                  DestDir: "{app}\cursos";         Flags
 
 ; Windows launcher scripts
 Source: "packaging\windows\yap-launcher.bat"; DestDir: "{app}";           Flags: ignoreversion
-Source: "packaging\windows\yap-launcher.ps1"; DestDir: "{app}";           Flags: ignoreversion
 
 ; Python embedded (pre-downloaded by build-windows.ps1)
 Source: "build\python-embed\*";           DestDir: "{app}\python";         Flags: ignoreversion recursesubdirs
@@ -97,22 +91,20 @@ Source: "build\python-embed\*";           DestDir: "{app}\python";         Flags
 Source: "build\llama-cli\llama-cli.exe";  DestDir: "{app}\bin";            Flags: ignoreversion
 Source: "build\llama-cli\*.dll";          DestDir: "{app}\bin";            Flags: ignoreversion skipifsourcedoesntexist
 
-; Icon
-Source: "packaging\windows\yap.ico";      DestDir: "{app}";                Flags: ignoreversion
-
 [Icons]
 ; Start Menu
-Name: "{group}\Yap — Asistente IA";       Filename: "{app}\yap-launcher.bat"; IconFilename: "{app}\yap.ico"; Comment: "Asistente IA local educativo"
+Name: "{group}\Yap — Asistente IA";       Filename: "{app}\yap-launcher.bat"; Comment: "Asistente IA local educativo"
 Name: "{group}\Desinstalar Yap";          Filename: "{uninstallexe}"
 
 ; Desktop (optional task)
-Name: "{autodesktop}\Yap";                Filename: "{app}\yap-launcher.bat"; IconFilename: "{app}\yap.ico"; Tasks: desktopicon
+Name: "{autodesktop}\Yap";                Filename: "{app}\yap-launcher.bat"; Tasks: desktopicon
 
 [Registry]
 ; Add to PATH (optional task)
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; \
     ValueType: expandsz; ValueName: "Path"; \
     ValueData: "{olddata};{app}\bin;{app}\python"; \
+
     Check: NeedsAddPath(ExpandConstant('{app}\bin')); \
     Tasks: addtopath; Flags: preservestringtype uninsdeletekeyifempty
 
