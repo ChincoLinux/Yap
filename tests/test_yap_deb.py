@@ -359,6 +359,10 @@ def maintainer_env(tmp_path):
     profile.parent.mkdir(parents=True)
     shutil.copyfile(Path(REPO_ROOT) / "apparmor/usr.local.bin.yap", profile)
 
+    # #192: el branch de systemd del script debe existir dentro del sandbox,
+    # para que esas ramas se ejerciten tambien en CI (que no trae systemd).
+    (root / "run/systemd/system").mkdir(parents=True)
+
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     parser = fake_bin / "apparmor_parser"
@@ -371,11 +375,20 @@ def maintainer_env(tmp_path):
         encoding="utf-8",
     )
     parser.chmod(0o755)
+    # #192: sin este stub, prerm/postrm/postinst invocan al systemctl REAL y
+    # polkit abre el dialogo de contraseña del escritorio en cada pytest.
+    systemctl = fake_bin / "systemctl"
+    systemctl.write_text(
+        '#!/bin/sh\nprintf "%s\\n" "$*" >> "$YAP_TEST_SYSTEMCTL_LOG"\nexit 0\n',
+        encoding="utf-8",
+    )
+    systemctl.chmod(0o755)
     log = tmp_path / "parser.log"
     env = dict(
         os.environ,
         PATH=f"{fake_bin}:{os.environ['PATH']}",
         YAP_TEST_PARSER_LOG=str(log),
+        YAP_TEST_SYSTEMCTL_LOG=str(tmp_path / "systemctl.log"),
     )
 
     def run(name="postinst", action="configure"):
@@ -387,6 +400,11 @@ def maintainer_env(tmp_path):
             "/usr/local/bin",
             "/etc/apparmor.d",
             "/sys/kernel/security/apparmor",
+            # #192: nada de estas rutas puede salir al host real
+            "/run/systemd/system",
+            "/lib/systemd/system",
+            "/run/yap",
+            "/usr/share/user-tmpfiles.d/yap.conf",
         ):
             script = script.replace(path, str(root) + path)
         target = tmp_path / name
@@ -503,6 +521,46 @@ class TestMaintainerScripts:
         assert run(action="abort-upgrade").returncode == 0
         assert not (root / "etc/yap").exists()
         assert not log.exists()
+
+    def test_systemctl_resuelve_al_stub_y_no_al_real(self, maintainer_env):
+        """#192: en el sandbox `systemctl` es el binario falso, no el del host."""
+        _, env, _, _ = maintainer_env
+        which = subprocess.run(
+            ["sh", "-c", "command -v systemctl"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        fake = Path(env["PATH"].split(":")[0]) / "systemctl"
+        assert Path(which.stdout.strip()) == fake, which.stdout
+
+    def test_scripts_registran_sus_ordenes_de_systemd(self, maintainer_env):
+        """#192: las ramas de systemd se ejercitan sin tocar el bus del sistema."""
+        root, env, _, run = maintainer_env
+        # postinst sólo habla de systemd si el paquete trae unidades instaladas
+        share = root / "usr/share/yap/systemd"
+        share.mkdir(parents=True)
+        (share / "yap-daemon.service").write_text("[Unit]", encoding="utf-8")
+        registro = Path(env["YAP_TEST_SYSTEMCTL_LOG"])
+        assert run().returncode == 0
+        assert run("prerm", "remove").returncode == 0
+        assert run("postrm", "remove").returncode == 0
+        llamadas = registro.read_text(encoding="utf-8").splitlines()
+        assert "daemon-reload" in llamadas
+        assert "enable yap-daemon.service" in llamadas
+        assert "start yap-daemon.service" in llamadas
+        assert "stop yap-daemon.service" in llamadas
+        assert "disable yap-daemon.service" in llamadas
+
+    def test_postrm_purge_no_borra_unidades_fuera_del_sandbox(self, maintainer_env):
+        """#192: purge borra unidades y /run/yap sólo dentro del sandbox."""
+        root, _, _, run = maintainer_env
+        unidades = root / "lib/systemd/system"
+        unidades.mkdir(parents=True)
+        (unidades / "yap-daemon.service").write_text("[Unit]", encoding="utf-8")
+        assert run("postrm", "purge").returncode == 0
+        assert not (unidades / "yap-daemon.service").exists()
 
 
 @pytest.mark.skipif(
