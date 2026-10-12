@@ -94,16 +94,6 @@ jobs:
               return policies;
             }
 
-            async function getDiff() {
-              const { data } = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: prNumber,
-                mediaType: { format: 'diff' }
-              });
-              return data;
-            }
-
             async function getFiles() {
               const { data } = await github.rest.pulls.listFiles({
                 owner: context.repo.owner,
@@ -138,7 +128,6 @@ jobs:
             const policies = readPolicies();
             console.log(`Políticas cargadas: ${Object.keys(policies).join(', ')}`);
 
-            const diff = await getDiff();
             const files = await getFiles();
             const checkRuns = await getCheckRuns();
 
@@ -159,28 +148,90 @@ jobs:
               return;
             }
 
+            // Escanea el código Python realmente añadido por el PR.
+            // Escanear el diff entero da falsos positivos: `shell=True` aparece
+            // citado en documentación, en líneas borradas y hasta en el propio
+            // código de este scanner. Y seguir el estado de docstrings dentro de
+            // un diff tampoco sirve: su apertura suele ser línea de contexto.
+            // Por eso se baja el fichero completo de la rama y se ignoran
+            // comentarios y docstrings con un recorrido por líneas.
+            async function codigoPythonAnadido() {
+              const { data: prActual } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+              const ref = prActual.head.sha;
+              const salidas = [];
+              for (const archivo of files.filter(f => f.endsWith('.py'))) {
+                let contenido;
+                try {
+                  const { data } = await github.rest.repos.getContent({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    path: archivo,
+                    ref
+                  });
+                  if (data.type !== 'file' || !data.content) continue;
+                  contenido = Buffer.from(data.content, 'base64').toString('utf8');
+                } catch (e) {
+                  core.warning(`No se pudo leer ${archivo}: ${e.message}`);
+                  continue;
+                }
+                let dentroDeDocstring = false;
+                let delimitador = null;
+                for (const linea of contenido.split('\n')) {
+                  const recortado = linea.trim();
+                  if (dentroDeDocstring) {
+                    if (recortado.includes(delimitador)) {
+                      dentroDeDocstring = false;
+                      delimitador = null;
+                    }
+                    continue;
+                  }
+                  if (recortado.startsWith('#')) continue;
+                  const apertura = recortado.match(/^[ru]*("""|''')/);
+                  if (apertura) {
+                    delimitador = apertura[1];
+                    const resto = recortado.slice(delimitador.length);
+                    if (!resto.includes(delimitador)) dentroDeDocstring = true;
+                    else delimitador = null;
+                    continue;
+                  }
+                  // Literales de cadena: 'shell=True' citado no es shell=True
+                  // ejecutándose. Es el caso del propio tests/run_tests.py.
+                  const sinLiterales = linea.replace(
+                    /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"/g, '""'
+                  );
+                  salidas.push({ archivo, codigo: sinLiterales });
+                }
+              }
+              return salidas;
+            }
+
             // ─── HD-YAP-SEC-001 (MUST) ─────────────────────────
             console.log('\n🔒 Evaluando HD-YAP-SEC-001 (MUST)...');
             const forbiddenPatterns = ['shell=True', 'eval(', 'os.system('];
             const forbiddenImports = ['import socket', 'import ctypes', 'import pickle', 'import base64'];
             let secFail = false;
+            const codigoAnadido = await codigoPythonAnadido();
+            console.log(`Escaneando ${codigoAnadido.length} líneas de Python en ${files.filter(f => f.endsWith('.py')).length} archivos .py`);
 
-            for (const pattern of forbiddenPatterns) {
-              if (diff.includes(pattern)) {
-                console.log(`✗ Encontrado '${pattern}' en diff`);
-                secFail = true;
-              } else {
-                console.log(`✓ Sin '${pattern}'`);
+            for (const { archivo, codigo } of codigoAnadido) {
+              for (const pattern of forbiddenPatterns) {
+                if (codigo.includes(pattern)) {
+                  console.log(`✗ ${archivo}: '${pattern}' en código añadido`);
+                  secFail = true;
+                }
+              }
+              for (const mod of forbiddenImports) {
+                if (codigo.includes(mod)) {
+                  console.log(`✗ ${archivo}: import peligroso '${mod}' en código añadido`);
+                  secFail = true;
+                }
               }
             }
-            for (const mod of forbiddenImports) {
-              if (diff.includes(mod)) {
-                console.log(`✗ Import peligroso '${mod}' en diff`);
-                secFail = true;
-              } else {
-                console.log(`✓ Sin '${mod}'`);
-              }
-            }
+            if (!secFail) console.log('✓ Sin patrones prohibidos en el código añadido');
 
             // ─── HD-YAP-BRANCH-001 (SHOULD) ────────────────────
             console.log('\n🌿 Evaluando HD-YAP-BRANCH-001 (SHOULD)...');
