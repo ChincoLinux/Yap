@@ -203,7 +203,11 @@ jobs:
                   const sinLiterales = linea.replace(
                     /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"/g, '""'
                   );
-                  salidas.push({ archivo, codigo: sinLiterales });
+                  // Comentario final: '# nunca shell=True' tampoco es código.
+                  const corte = sinLiterales.indexOf('#');
+                  const codigo =
+                    corte === -1 ? sinLiterales : sinLiterales.slice(0, corte);
+                  salidas.push({ archivo, codigo });
                 }
               }
               return salidas;
