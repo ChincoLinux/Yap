@@ -9,11 +9,16 @@ revisor verifica; la misma lista vive en la sección "Checklist previo" de
 - [ ] **Formato:** `ruff format --check yap.py tests/` → *already formatted*.
 - [ ] **Lint:** `ruff check yap.py tests/` → sin errores.
 - [ ] **Análisis estático:** `python3 -m pyflakes yap.py tests/` → sin salida.
-- [ ] **Tests:** `python3 -m pytest tests/ -q` → **974 passed, 24 skipped**, 0 failed.
+- [ ] **Tests:** `python3 -m pytest tests/ -q` → **1016 passed, 24 skipped**, 0 failed.
 - [ ] **Workflows:** `actionlint .github/workflows/*.yml` → sin errores de sintaxis
       (sólo si la PR toca `.github/workflows/`).
+- [ ] **Scripts de shell:** `python3 -m pytest tests/test_packaging_scripts.py -q`
+      → valida `sh -n`/`bash -n` con el intérprete del shebang de cada script
+      (obligatorio si tocas `*.sh`, `setup.sh` o `build-deb.sh`).
 - [ ] **Empaquetado:** `./build-deb.sh` genera el `.deb` sin errores
       (obligatorio si cambia `packaging/`, `setup.sh` o `yap.py`).
+      En un sistema real, añadir `sh packaging/test-integration-os.sh`
+      (ver [docs/INTEGRATION.md](INTEGRATION.md)).
 
 ## Criterios del repositorio
 
