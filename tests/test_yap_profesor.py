@@ -184,8 +184,19 @@ class TestPin(ProfesorTestBase):
 
     def test_el_pin_no_se_guarda_en_claro(self):
         yap.definir_pin("4821")
-        contenido = open(yap.PROFILE_FILE, encoding="utf-8").read()
-        assert "4821" not in contenido
+        with open(yap.PROFILE_FILE, encoding="utf-8") as f:
+            perfil = json.load(f)
+        datos = perfil.get("profesor") or {}
+        # pin_hash y pin_sal son opacos por diseño; lo que no debe ocurrir es
+        # que el PIN aparezca como valor en claro en otro campo. Se excluyen
+        # porque un hash aleatorio puede contener "4821" por pura coincidencia
+        # (flake observado en la PR #181, issue #182).
+        restante = json.dumps(perfil)
+        for opaco in (datos.get("pin_hash", ""), datos.get("pin_sal", "")):
+            restante = restante.replace(opaco, "")
+        assert datos.get("pin_hash"), "el PIN debe guardarse como hash"
+        assert datos.get("pin_hash") != "4821"
+        assert "4821" not in restante
 
     def test_dos_perfiles_con_el_mismo_pin_no_comparten_hash(self):
         """Sal distinta por perfil: un hash no delata al otro."""
