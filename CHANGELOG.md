@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [1.0.4] - 2026-10-12
+### Added
+
+### Changed
+- test: endurecer test del PIN contra coincidencias aleatorias (#182) (#185)
+
+### Fixed
+
 ## [1.0.2] - 2026-10-11
 ### Added
 - Escritorio (#164): módulo `yap_desktop` (bandeja, widget, atajos) con tests sin
