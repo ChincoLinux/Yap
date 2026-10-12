@@ -56,9 +56,9 @@ class TestWebfetchTecho:
     def test_no_descarga_mas_del_tope(self, web):
         """La regresión clave: read() sin argumento baja el cuerpo entero."""
         res, descargado = self._traer(web, b"x" * 200000, 4096)
-        assert descargado <= 4096 + 1, (
-            f"se descargaron {descargado} bytes con un tope de 4096"
-        )
+        assert (
+            descargado <= 4096 + 1
+        ), f"se descargaron {descargado} bytes con un tope de 4096"
         assert "[ERROR]" in res
 
     def test_read_recibe_el_tope_como_argumento(self, web):
@@ -94,6 +94,7 @@ class TestWebfetchTecho:
 
     def test_cuerpo_enorme_no_se_construye(self, web):
         """Un cuerpo de 50 MB explota si se pide entero."""
+
         class _Enorme:
             def __enter__(self):
                 return self
@@ -194,7 +195,9 @@ class TestImportarProgresoTecho:
         """Sin cambio visible: un progress real de decenas de KB pasa."""
         path = str(tmp_path / "progress.json")
         real = {
-            "cursos": {f"curso{i}": {"ea": {"a1": {"aprobado": True}}} for i in range(20)}
+            "cursos": {
+                f"curso{i}": {"ea": {"a1": {"aprobado": True}}} for i in range(20)
+            }
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(real, f)
