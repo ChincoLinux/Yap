@@ -338,12 +338,6 @@ class TestSecurityLimits:
         arbol = _ast.parse(open(yap.__file__, encoding="utf-8").read())
         metodos = {"run", "Popen", "check_output", "check_call", "call"}
 
-        # Llamadas permitidas sin timeout, con el motivo a la vista.
-        excepciones = {
-            (6413, "Popen"): "lanza una app de GUI y vive mas que la llamada",
-            (7444, "Popen"): "xdg-open, proceso desprendido",
-        }
-
         # linea del Call -> nombre de la variable que recibe el Popen
         asignaciones = {}
         for asign in _ast.walk(arbol):
@@ -381,7 +375,10 @@ class TestSecurityLimits:
             if self._popen_limitado_despues(arbol, nodo, asignaciones):
                 continue
 
-            if (nodo.lineno, f.attr) in excepciones:
+            # La excepcion se declara en el propio codigo, junto al sitio
+            # que la justifica. Clavearla por numero de linea hacía que el
+            # test fallara en cualquier PR que quitara lineas por encima.
+            if self._marcado_como_permitido(nodo):
                 continue
 
             linea = self._fuente()[nodo.lineno - 1].strip()
@@ -425,6 +422,12 @@ class TestSecurityLimits:
                 open(yap.__file__, encoding="utf-8").read().splitlines()
             )
         return self._cache_fuente
+
+    def _marcado_como_permitido(self, nodo):
+        """El codigo declara su propia excepcion con un comentario."""
+        lineas = self._fuente()
+        inicio = max(0, nodo.lineno - 5)
+        return any("yap-sin-timeout" in lineas[i] for i in range(inicio, nodo.lineno))
 
 
 # ============================================================
