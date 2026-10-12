@@ -274,27 +274,157 @@ class TestSecurityLimits:
     """Requisito: Limites de contenido y notificaciones seguras."""
 
     def test_contenido_limitado_3000_chars(self):
-        """El contenido webfetch debe limitarse a 3000 caracteres."""
-        # Verificar que la funcion cmd_webfetch limita la salida
-        source = open(yap.__file__, encoding="utf-8").read()
+        """El contenido webfetch debe limitarse a 3000 caracteres.
+
+        Antes se comprobaba que existiera el literal "text[:3000]" en el
+        fuente. Con eso basta para estar en verde mientras la vulnerabilidad
+        esta abierta: el literal esta, y la descarga sigue sin techo
+        (ver #234, y el mismo defecto documentado en #241). Ahora se
+        invoca la funcion y se mide lo que devuelve.
+        """
+        import tempfile
+
+        with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as f:
+            f.write("wikipedia.org\n")
+            whitelist = f.name
+
+        # Medir cuantos bytes salen del socket, no lo que devuelve la
+        # funcion: cmd_webfetch trunca la salida a 1000 caracteres sea
+        # cual sea el techo, asi que comprobar la longitud daba verde
+        # con la descarga abierta. Ver #234.
+        descarga = {"n": 0}
+
+        def _read(n=-1):
+            cuerpo = b"<p>" + (b"palabra " * 200000) + b"</p>"
+            if n is None or n < 0:
+                descarga["n"] += len(cuerpo)
+                return cuerpo
+            descarga["n"] += min(n, len(cuerpo))
+            return cuerpo[:n]
+
+        resp = mock.MagicMock()
+        resp.read.side_effect = _read
+        resp.__enter__ = mock.MagicMock(return_value=resp)
+        resp.__exit__ = mock.MagicMock(return_value=False)
+
+        with mock.patch.object(yap, "WHITELIST_WEB", whitelist):
+            with mock.patch.object(yap, "TECHO_DESCARGA_BYTES", 8192):
+                with mock.patch(
+                    "urllib.request.urlopen", mock.MagicMock(return_value=resp)
+                ):
+                    resultado = yap.cmd_webfetch("https://wikipedia.org/articulo")
+
         assert (
-            "text[:3000]" in source or "text[:2000]" in source
-        ), "No se encontro limite de caracteres en cmd_webfetch"
+            descarga["n"] <= 8192 + 1
+        ), f"cmd_webfetch descargo {descarga['n']} bytes con un techo de 8192"
+        assert "[ERROR]" in resultado or len(resultado) < 4000
 
     def test_timeout_en_subprocess(self):
-        """Todas las llamadas a subprocess deben tener timeout."""
-        source = open(yap.__file__, encoding="utf-8").read()
-        # Buscar subprocess.run sin timeout
-        import re
+        r"""Toda llamada a subprocess debe estar limitada en el tiempo.
 
-        # Encontrar todas las llamadas a subprocess.run
-        calls = re.findall(r"subprocess\.run\([^)]+\)", source)
-        for call in calls:
-            if "timeout=" not in call and "check=False" not in call.replace(" ", ""):
-                # Algunas llamadas usan check=False sin timeout (notify)
-                if "DEVNULL" in call:
-                    continue  # notify-send es seguro
-                pytest.fail(f"Llamada subprocess sin timeout: {call[:80]}")
+        Se recorre el arbol AST, no el texto. La version anterior usaba
+        la regex `subprocess\.run\([^)]+\]`, que no puede casar un argumento
+        con parentesis anidados y se perdia 3 de las 11 llamadas reales.
+        Ademas saltaba cualquier llamada que contuviera la cadena DEVNULL,
+        de modo que any subprocess.run sin timeout se hacia invisible
+        solo por redirigir la salida. Ver #241.
+
+        El orden de comprobacion importa: primero se mira si hay timeout,
+        y solo entonces se consulta la lista de excepciones. Si fuera al
+        reves, any llamada que escribiera la palabra la evadiria.
+        """
+        import ast as _ast
+
+        arbol = _ast.parse(open(yap.__file__, encoding="utf-8").read())
+        metodos = {"run", "Popen", "check_output", "check_call", "call"}
+
+        # Llamadas permitidas sin timeout, con el motivo a la vista.
+        excepciones = {
+            (6413, "Popen"): "lanza una app de GUI y vive mas que la llamada",
+            (7444, "Popen"): "xdg-open, proceso desprendido",
+        }
+
+        # linea del Call -> nombre de la variable que recibe el Popen
+        asignaciones = {}
+        for asign in _ast.walk(arbol):
+            if isinstance(asign, _ast.Assign) and isinstance(asign.value, _ast.Call):
+                f = asign.value.func
+                if (
+                    isinstance(f, _ast.Attribute)
+                    and isinstance(f.value, _ast.Name)
+                    and f.value.id == "subprocess"
+                    and f.attr == "Popen"
+                    and asign.targets
+                    and isinstance(asign.targets[0], _ast.Name)
+                ):
+                    asignaciones[asign.value.lineno] = asign.targets[0].id
+
+        encontradas = 0
+        for nodo in _ast.walk(arbol):
+            if not isinstance(nodo, _ast.Call):
+                continue
+            f = nodo.func
+            if not (
+                isinstance(f, _ast.Attribute)
+                and isinstance(f.value, _ast.Name)
+                and f.value.id == "subprocess"
+                and f.attr in metodos
+            ):
+                continue
+            encontradas += 1
+
+            tiene_timeout = any(k.arg == "timeout" for k in nodo.keywords)
+            if tiene_timeout:
+                continue
+
+            # Popen puede delegar el limite en communicate()/wait().
+            if self._popen_limitado_despues(arbol, nodo, asignaciones):
+                continue
+
+            if (nodo.lineno, f.attr) in excepciones:
+                continue
+
+            linea = self._fuente()[nodo.lineno - 1].strip()
+            pytest.fail(
+                f"subprocess.{f.attr} sin timeout en yap.py:{nodo.lineno}: {linea[:70]}"
+            )
+
+        # Si el analisis no ve ninguna llamada, algo se rompio en el propio test.
+        assert encontradas > 0, "no se encontro ninguna llamada a subprocess"
+
+    def _popen_limitado_despues(self, arbol, nodo, asignaciones):
+        """True si el Popen se limita con communicate(timeout=) o wait(timeout=).
+
+        `nodo` es el Call, no el Assign, por eso el nombre de la variable
+        se resuelve antes contra `asignaciones` (linea -> variable).
+        """
+        import ast as _ast
+
+        variable = asignaciones.get(nodo.lineno)
+        if not variable:
+            return False
+
+        for otro in _ast.walk(arbol):
+            if not isinstance(otro, _ast.Call):
+                continue
+            if not isinstance(otro.func, _ast.Attribute):
+                continue
+            if otro.func.attr not in ("communicate", "wait"):
+                continue
+            base = otro.func.value
+            coincide = (isinstance(base, _ast.Attribute) and base.attr == variable) or (
+                isinstance(base, _ast.Name) and base.id == variable
+            )
+            if coincide and any(k.arg == "timeout" for k in otro.keywords):
+                return True
+        return False
+
+    def _fuente(self):
+        if not hasattr(self, "_cache_fuente"):
+            self._cache_fuente = (
+                open(yap.__file__, encoding="utf-8").read().splitlines()
+            )
+        return self._cache_fuente
 
 
 # ============================================================
