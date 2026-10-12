@@ -20,7 +20,10 @@ jobs:
   # JOB 1: Pruebas unitarias (seguridad + funcional)
   # ──────────────────────────────────────────────────────────────────
   unit-tests:
-    name: "Unit tests (49) - Python 3.12"
+    # El nombre NO debe llevar el conteo de pruebas: la proteccion de rama
+    # exige este check por nombre, y un "(49)" hardcodeado se desincroniza
+    # cada vez que crece la suite (hoy 1040) y deja la rama main bloqueada.
+    name: "Unit tests - Python 3.12"
     runs-on: ubuntu-latest
     strategy:
       matrix:
