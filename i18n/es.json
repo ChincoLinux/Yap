@@ -30,6 +30,7 @@
     "scheme": "[ERROR] Scheme '{scheme}' no permitido. Solo http/https.",
     "domain_blocked": "[ERROR] Dominio '{domain}' bloqueado.\nDominios permitidos: {allowed}",
     "fetch": "[ERROR] Error al obtener {url}: {error}",
+    "too_large": "[ERROR] {url} excede el maximo de {max_kb} KB. Recurso no descargado.",
     "timeout": "[WARN] Tiempo de espera agotado (120s)",
     "llama_missing": "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap.",
     "no_exercises": "[ERROR] No hay ejercicios configurados en {path}",
