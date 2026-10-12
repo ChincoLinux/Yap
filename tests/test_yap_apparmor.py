@@ -279,8 +279,36 @@ class TestCiWorkflows:
         )
         with open(path, encoding="utf-8") as f:
             content = f.read()
-        assert "import os" in content
-        assert content.index("import os") < content.index("os.environ")
+        # El script embebido lee os.environ: si vuelve a usarlo, debe importar
+        # os antes. Hoy no lo usa, porque el release ya no depende del evento.
+        if "os.environ" in content:
+            assert "import os" in content
+            assert content.index("import os") < content.index("os.environ")
+
+    def test_auto_release_no_se_dispara_por_merge(self):
+        """A-Dev regla 14: cadencia manual, no un release por cada merge.
+
+        #188: auto-release.yml corria en pull_request: closed, cortaba tag y
+        abria una bump-PR. Mergear esa PR volvia a dispararlo, asi que la
+        cadena no se cerraba nunca y contradecia ADEV.md y GOVERNANCE.md.
+        """
+        path = os.path.join(
+            os.path.dirname(yap.__file__),
+            ".github",
+            "workflows",
+            "auto-release.yml",
+        )
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+
+        assert "pull_request" not in content, (
+            "auto-release.yml no debe dispararse al mergear (A-Dev regla 14, #188); "
+            "el trigger correcto es workflow_dispatch o push de tag v*"
+        )
+        assert "chore/bump" not in content, (
+            "auto-release.yml no debe abrir bump-PRs: encadenan la siguiente "
+            "corrida del propio workflow (#188)"
+        )
 
 
 if __name__ == "__main__":
