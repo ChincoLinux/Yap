@@ -2,9 +2,15 @@
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
+# La version NO se escribe aqui: VERSION es la fuente de verdad y la leen
+# build-deb.sh, build-packages.yml y auto-release.yml. Un valor duplicado en
+# este fichero se desincroniza en el proximo release.
+[tool.setuptools.dynamic]
+version = { file = "VERSION" }
+
 [project]
 name = "yap"
-version = "1.0.6"
+dynamic = ["version"]
 description = "Asistente de IA local para aulas, sin conexión a Internet"
 readme = "README.md"
 license = { text = "MIT" }

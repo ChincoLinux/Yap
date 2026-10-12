@@ -14,7 +14,25 @@ Uso:
     python3 -m yap_desktop --help
 """
 
-__version__ = "1.0.1"
+from pathlib import Path
+
+
+# La version vive en VERSION, que es la fuente de verdad del repo. La leen
+# build-deb.sh y los workflows; un valor aqui se desincroniza en cada release.
+def _leer_version() -> str:
+    # Al instalar, yap_desktop/ y VERSION viven en el mismo site-packages.
+    # En el repo, VERSION esta un nivel arriba.
+    for base in (
+        Path(__file__).resolve().parent,
+        Path(__file__).resolve().parent.parent,
+    ):
+        candidato = base / "VERSION"
+        if candidato.is_file():
+            return candidato.read_text(encoding="utf-8").strip()
+    return "0.0.0"
+
+
+__version__ = _leer_version()
 __author__ = "ChincoLinux"
 __url__ = "https://github.com/ChincoLinux/Yap"
 

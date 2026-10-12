@@ -19,6 +19,8 @@ import logging
 import sys
 from pathlib import Path
 
+from yap_desktop import __version__
+
 logger = logging.getLogger(__name__)
 
 
@@ -97,7 +99,7 @@ def main() -> int:
     # ── Verificar soporte de bandeja ──────────────────────────────────────
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("Yap")
-    app.setApplicationVersion("1.0.1")
+    app.setApplicationVersion(__version__)
     app.setOrganizationName("ChincoLinux")
     # No salir cuando se cierra la última ventana (quedamos en la bandeja)
     app.setQuitOnLastWindowClosed(False)
