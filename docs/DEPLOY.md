@@ -170,6 +170,20 @@ El script:
 4. Opcionalmente empuja whitelists centralizadas.
 5. Genera un reporte final con el estado de cada host.
 
+El reporte se guarda en `/tmp/yap-deploy-<fecha>.log` y **no se borra al
+terminar**: si algún equipo falla, el script imprime el comando exacto para
+repetir solo esos hosts.
+
+```bash
+grep '|FAIL|' /tmp/yap-deploy-20261012-153045.log | cut -d'|' -f1 > hosts-retry.txt
+./deploy-yap.sh --hosts hosts-retry.txt --branch main
+```
+
+> Las whitelists se escriben en su directorio de destino, no en `/tmp`.
+> `/tmp` es escribible por cualquier usuario del host, así que antes de
+> este arreglo un alumno podía sustituir la whitelist en la ventana entre
+> el `scp` y el `sudo mv`.
+
 > **Requisitos SSH:** el usuario remoto (`alumno`) debe tener `sudo` sin contraseña
 > en cada equipo, o configurar `NOPASSWD` en `/etc/sudoers.d/yap-deploy` para los
 > comandos de instalación. Ver [ejemplo de sudoers](#apéndice-a-sudoers-para-despliegue).
