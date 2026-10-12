@@ -182,26 +182,34 @@ jobs:
           # Yap is stdlib-only by design (CLAUDE.md §3). Flag any new import
           # that is not in the stdlib or the existing whitelist.
           python3 -c "
-          import ast, sys
+          import ast, sys, os
           STDLIB = set(sys.stdlib_module_names)
+          # Modulos de primer nivel del propio repo: no son dependencias.
+          # Se comprueba que el fichero exista, para que no sirva de
+          # atajo a nadie que quiera colar algo con ese nombre.
+          FIRST_PARTY = {'yap_core'}
+          for nombre in FIRST_PARTY:
+              if not os.path.exists(nombre + '.py'):
+                  print(f'::error::Modulo de primer nivel declarado sin fichero: {nombre}.py')
+                  sys.exit(1)
           tree = ast.parse(open('yap.py').read())
           non_stdlib = set()
           for node in ast.walk(tree):
               if isinstance(node, ast.Import):
                   for alias in node.names:
                       root = alias.name.split('.')[0]
-                      if root not in STDLIB:
+                      if root not in STDLIB and root not in FIRST_PARTY:
                           non_stdlib.add(root)
               elif isinstance(node, ast.ImportFrom):
                   if node.module:
                       root = node.module.split('.')[0]
-                      if root not in STDLIB:
+                      if root not in STDLIB and root not in FIRST_PARTY:
                           non_stdlib.add(root)
           if non_stdlib:
               print(f'::error::Non-stdlib imports detected in yap.py: {non_stdlib}')
               print('Yap must be stdlib-only per CLAUDE.md §3')
               sys.exit(1)
-          print('PASS: yap.py uses only stdlib imports')
+          print('PASS: yap.py uses only stdlib imports and first-party modules')
           "
 
   quality-summary:
