@@ -104,12 +104,21 @@ Los issues de seguridad se tratan fuera de las fases porque bloquean cualquier r
 | # | Issue | Prioridad | Estado |
 |---|-------|-----------|--------|
 | 213 | Clave de invocación de Cloud Run hardcodeada — rotar en GCP | P0 | Abierto — requiere acción del usuario |
-| 234 | `cmd_webfetch` descarga sin techo de tamaño | P1 | Abierto — PR #244 |
 | 235 | Modelos GGUF sin checksum | P1 | Abierto |
-| 236 | Whitelists empujadas por `/tmp` antes de `sudo mv` | P1 | Abierto — PR #246 |
-| 238 | JSON de USB sin límite de tamaño | P1 | Abierto — PR #244 |
-| 240 | Ninguna action pineada por SHA | P1 | Abierto |
-| 241 | Tres tests de seguridad no prueban lo que afirman | P1 | Abierto |
+| 239 | La auditoría de seguridad cubre 932 líneas de un fichero de más de 8000 | P1 | Abierto |
+| 234 | `cmd_webfetch` descarga sin techo de tamaño | P1 | Cerrado (PR #244) |
+| 236 | Whitelists empujadas por `/tmp` antes de `sudo mv` | P1 | Cerrado (PR #246) |
+| 238 | JSON de USB sin límite de tamaño | P1 | Cerrado (PR #244) |
+| 240 | Ninguna action pineada por SHA | P1 | Cerrado (PR #249) |
+| 241 | Tres tests de seguridad no prueban lo que afirman | P1 | Cerrado (PR #248) |
+
+Quedan tres. #213 requiere rotar la clave en GCP y está en el historial de git
+desde el commit `51202e7`: borrarla del código no la invalida. #235 necesita
+publicar los checksums junto a los modelos. #239 es la auditoría nueva.
+
+`sha_pinning_required` sigue a `false`: el `PATCH` devuelve 404 porque el PAT
+no tiene permiso de administración. Hay que activarlo a mano; mientras tanto el
+pineado lo sostienen los tests de `test_actions_pineadas.py`.
 
 ## Bugs detectados pendientes de revisión
 
