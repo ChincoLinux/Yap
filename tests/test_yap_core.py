@@ -15,7 +15,6 @@ import sys
 import os
 import time
 import threading
-import queue
 import unittest.mock as mock
 import pytest
 import urllib.request
@@ -135,8 +134,9 @@ class TestYapCoreAsyncExecution:
         with mock.patch(
             "yap.interpret", side_effect=lambda p: ("query", p)
         ), mock.patch("yap_core.execute_action_headless", side_effect=record_action):
-            t1 = engine.execute_async("primero")
-            t2 = engine.execute_async("segundo")
+            # Se encolan tres; solo se espera por la ultima.
+            engine.execute_async("primero")
+            engine.execute_async("segundo")
             t3 = engine.execute_async("tercero")
 
             assert t3.wait(timeout=3.0)
@@ -234,7 +234,9 @@ class TestYapCoreEvents:
     def test_unsubscribe(self):
         engine = yap_core.YapCore()
         recibidos = []
-        cb = lambda ev: recibidos.append(ev)
+
+        def cb(ev):
+            recibidos.append(ev)
 
         engine.subscribe(cb)
         engine.unsubscribe(cb)
@@ -252,7 +254,6 @@ class TestYapCoreEvents:
 
 class TestYapCoreCancellation:
     def test_cancel_tarea_pendiente(self):
-        engine = yap_core.YapCore()
         # No iniciamos engine para que quede encolada
         task = yap_core.YapTask(prompt="tarea pendiente")
         task.cancel()
@@ -343,19 +344,79 @@ class TestYapCoreAutoInstall:
             assert res is False
             mock_instalar.assert_not_called()
 
+    def _aislar_de_pytest(self):
+        """Quita 'pytest' de sys.modules y los marcadores del entorno.
+
+        Sin esto el guard triunfa por esa rama y no se puede probar nada
+        de lo que depende de estar fuera de la suite.
+        """
+        previo = sys.modules.pop("pytest", None)
+        entorno = {
+            k: os.environ.get(k) for k in ("PYTEST_CURRENT_TEST", "YAP_NO_AUTO_INSTALL")
+        }
+        for k in entorno:
+            os.environ.pop(k, None)
+        return previo, entorno
+
+    def _restaurar_entorno(self, previo, entorno):
+        if previo is not None:
+            sys.modules["pytest"] = previo
+        for k, v in entorno.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
     def test_asegurar_llama_instalado_ejecuta_instalacion_fuera_de_pytest(self):
-        """Fuera de pytest, si auto_instalar es True, llama a instalar_llama_automaticamente."""
+        """Fuera de pytest, si auto_instalar es True, llama al instalador.
+
+        La version anterior mockeaba el instalador y luego no lo comprobaba:
+        afirmaba `assert callable(...)`, que es verdadero siempre. Ademas
+        ponia sys.modules["pytest"] = None, que deja "pytest" presente y
+        hace que el guard lo frene antes de llegar a nada.
+        """
+        previo, entorno = self._aislar_de_pytest()
+        try:
+            with mock.patch(
+                "yap_core.esta_llama_instalado", return_value=False
+            ), mock.patch(
+                "yap_core.instalar_llama_automaticamente", return_value=True
+            ) as mock_instalar:
+                res = yap_core.asegurar_llama_instalado(auto_instalar=True)
+            mock_instalar.assert_called_once()
+            assert res is True
+        finally:
+            self._restaurar_entorno(previo, entorno)
+
+    def test_bajo_pytest_no_instala(self):
+        """El guard existe para no descargar gigabytes en la suite."""
         with mock.patch(
             "yap_core.esta_llama_instalado", return_value=False
-        ), mock.patch.dict("sys.modules", {"pytest": None}, clear=False), mock.patch(
+        ), mock.patch(
             "yap_core.instalar_llama_automaticamente", return_value=True
         ) as mock_instalar:
-            with mock.patch.dict("os.environ", {}, clear=True):
-                # Desactivar marcador pytest temporalmente para simular runtime de usuario
-                res = yap_core.asegurar_llama_instalado(auto_instalar=True)
-                # Si pytest se detecta por sys.modules o llamada directa
-                # verificamos que la función instalar_llama_automaticamente es invocable
-                assert callable(yap_core.instalar_llama_automaticamente)
+            res = yap_core.asegurar_llama_instalado(auto_instalar=True)
+        mock_instalar.assert_not_called()
+        assert res is False
+
+    def test_variable_de_entorno_lo_desactiva(self):
+        """YAP_NO_AUTO_INSTALL es la via para apagarlo en el aula.
+
+        Hay que sacar "pytest" de sys.modules: si no, el guard triunfa por
+        esa rama y el test daria verde aunque la variable se ignorara.
+        """
+        previo, entorno = self._aislar_de_pytest()
+        try:
+            os.environ["YAP_NO_AUTO_INSTALL"] = "1"
+            with mock.patch(
+                "yap_core.esta_llama_instalado", return_value=False
+            ), mock.patch(
+                "yap_core.instalar_llama_automaticamente", return_value=True
+            ) as mock_instalar:
+                assert yap_core.asegurar_llama_instalado(auto_instalar=True) is False
+            mock_instalar.assert_not_called()
+        finally:
+            self._restaurar_entorno(previo, entorno)
 
 
 class TestChecksumsEnYapCore:
