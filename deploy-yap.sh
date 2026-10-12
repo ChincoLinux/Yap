@@ -21,7 +21,7 @@ set -euo pipefail
 #   -h, --help          Mostrar esta ayuda.
 #
 # Requisitos:
-#   - ssh, scp, rsync instalados en el administrador.
+#   - ssh, rsync instalados en el administrador.
 #   - Usuario remoto con sudo NOPASSWD para setup.sh (ver docs/DEPLOY.md §Apéndice A).
 #   - Mirror accesible por los hosts (si se usa --mirror).
 # ============================================================
@@ -64,7 +64,7 @@ Opciones:
   -h, --help          Mostrar esta ayuda.
 
 Requisitos:
-  - ssh, scp, rsync instalados en el administrador.
+  - ssh, rsync instalados en el administrador.
   - Usuario remoto con sudo NOPASSWD para setup.sh (ver docs/DEPLOY.md §Apéndice A).
   - Mirror accesible por los hosts (si se usa --mirror).
 EOF
@@ -192,12 +192,20 @@ deploy_one() {
   # 4. Ejecutar setup.sh en el remoto
   if ssh -o BatchMode=yes -o ConnectTimeout=30 "$ssh_target" "sudo ${remote_dir}/setup.sh" >/dev/null 2>&1; then
     # 5. Empujar whitelists centralizadas si se solicitó
+    #
+    # El fichero temporal vive en el directorio de destino, no en /tmp:
+    # /tmp es escribible por cualquier usuario del host y entre el scp y el
+    # sudo mv habia una ventana para sustituir la whitelist (#236). Asi el
+    # .new solo lo puede tocar root, y el mv sigue siendo atomico.
     if [ -n "$WHITELIST_DIR" ]; then
-      if scp -q "${WHITELIST_DIR}/apps.conf" "${WHITELIST_DIR}/web.conf" \
-          "${ssh_target}:/tmp/" 2>/dev/null && \
-        ssh -o BatchMode=yes -o ConnectTimeout=30 "$ssh_target" \
-            "sudo mv /tmp/apps.conf /etc/yap/whitelist/apps.conf && sudo mv /tmp/web.conf /etc/yap/whitelist/web.conf" \
-            >/dev/null 2>&1; then
+      if ssh -o BatchMode=yes -o ConnectTimeout=30 "$ssh_target" \
+            "sudo sh -c 'cat > /etc/yap/whitelist/apps.conf.new && \
+                         mv /etc/yap/whitelist/apps.conf.new /etc/yap/whitelist/apps.conf'" \
+            < "${WHITELIST_DIR}/apps.conf" 2>/dev/null && \
+         ssh -o BatchMode=yes -o ConnectTimeout=30 "$ssh_target" \
+            "sudo sh -c 'cat > /etc/yap/whitelist/web.conf.new && \
+                         mv /etc/yap/whitelist/web.conf.new /etc/yap/whitelist/web.conf'" \
+            < "${WHITELIST_DIR}/web.conf" 2>/dev/null; then
         : # whitelists empujadas OK
       else
         echo "${host}|WARN|setup OK pero empuje de whitelists falló"
@@ -215,8 +223,10 @@ export -f deploy_one
 export REMOTE_USER BRANCH MIRROR WHITELIST_DIR DRY_RUN
 export C_GREEN C_YELLOW C_RED C_CYAN C_GRAY C_RESET
 
-RESULTS_FILE=$(mktemp)
-trap 'rm -f "$RESULTS_FILE"' EXIT
+# El informe no se borra: era lo que hacia inservible el consejo de retry,
+# porque el trap EXIT lo borraba antes de que el usuario pudiera copiarlo.
+# Con nombre propio el comando que imprimimos abajo funciona tal cual.
+RESULTS_FILE="${TMPDIR:-/tmp}/yap-deploy-$(date +%Y%m%d-%H%M%S).log"
 
 # xargs controla el paralelismo; deploy_one es seguro para concurrencia
 printf '%s\n' "${HOSTS[@]}" | xargs -I{} -P "$PARALLEL" bash -c 'deploy_one "$@"' _ {} \
@@ -245,7 +255,8 @@ echo "  ${C_GREEN}OK:${C_RESET} $OK   ${C_RED}FALLARON:${C_RESET} $FAIL   Total:
 if [ "$FAIL" -gt 0 ]; then
   echo ""
   echo "${C_YELLOW}Revisa los hosts fallidos y vuelve a ejecutar solo para ellos${C_RESET}"
-  echo "${C_GRAY}  grep '|FAIL|' \"$RESULTS_FILE\" | cut -d'|' -f1 > hosts-retry.txt${C_RESET}"
+  echo "${C_GRAY}  grep '|FAIL|' ${RESULTS_FILE} | cut -d'|' -f1 > hosts-retry.txt${C_RESET}"
+  echo "${C_GRAY}Informe guardado en: ${RESULTS_FILE}${C_RESET}"
   exit 1
 fi
 
