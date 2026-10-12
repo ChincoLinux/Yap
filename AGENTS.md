@@ -15,7 +15,7 @@ This guide helps AI agents (like Claude Code, Devin, etc.) understand how to col
 |---|---|
 | Repositorio | `ChincoLinux/Yap` (organización) |
 | Fork de trabajo | `VECTORG99/Yap` |
-| Archivo principal | `yap.py` (~6200 líneas, stdlib-only) |
+| Archivo principal | `yap.py` (8196 líneas, stdlib-only) |
 | CI | `.github/workflows/test.yml` — 11 workflows; `pytest tests/` = 1079 tests, sin LLM/GPU/Internet |
 | Modelo | Llama 3.2 1B/3B Instruct (Q4_K_M, CPU-only) |
 
@@ -147,6 +147,28 @@ Always verify manually if a flagged pattern is in executable code or in text/doc
 
 ## File Locations
 
+### Repositorios separados — no es un monorepo
+
+Yap es **Python con una única dependencia del runtime del agente**. Tres
+componentes viven en repositorios **propios**, creados y mantenidos por
+@VECTORG99. No añadas su código aquí.
+
+| Componente | Lenguaje | Issue |
+|---|---|---|
+| Web de descarga y su backend | TypeScript | #208 |
+| Nube del LLM (Super Yap) | Python / Cloud Run | #212 |
+| App de escritorio | PyQt6/PySide6 | #199 |
+
+Razones: versionado independiente, costes visibles por separado, CI propia,
+y no obligar a quien parchea el agente a leer código de un servicio
+suspendido.
+
+**Lo que SÍ vive aquí**: el agente, su empaquetado (`.deb`, `.rpm`,
+Flatpak, `.exe`) y los artefactos de cada release con sus checksums.
+
+**Restricción**: este repo no debe contener credenciales de proveedor. Hay
+una clave de Cloud Run hardcodeada que se revierte en #213 — no la copies.
+
 ```
 Yap/
 ├── AGENTS.md              # ESTE ARCHIVO — guía para agentes IA
@@ -154,7 +176,7 @@ Yap/
 ├── CLAUDE.md              # Arquitectura técnica detallada
 ├── CONTRIBUTING.md        # Guía de contribución
 ├── GOVERNANCE.md          # Gobernanza de la organización
-├── yap.py                 # Agente principal + cliente Gradio Cloud Run (#91)
+├── yap.py                 # Agente principal + cliente Gradio Cloud Run (#91, suspendido, a migrar #212)
 ├── setup.sh               # Instalador de desarrollo (compila llama.cpp, descarga modelo)
 ├── build-deb.sh           # Genera paquetes .deb (issue #31)
 ├── packaging/             # Plantillas DEBIAN (yap, yap-models-1b/3b)

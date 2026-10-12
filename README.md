@@ -56,7 +56,7 @@ lector de pantalla. Todas esas capacidades viven en un unico archivo,
 
 ```
 Yap/
-├── yap.py                 # El agente completo (~6200 lineas, stdlib-only)
+├── yap.py                 # El agente completo (8196 lineas, stdlib-only)
 ├── setup.sh               # Instalador de desarrollo: compila llama.cpp, baja el modelo
 ├── build-deb.sh           # Genera yap_*.deb y yap-models-*.deb (#31)
 ├── deploy-yap.sh          # Despliegue masivo por SSH en un lab (#31)
@@ -73,10 +73,10 @@ Yap/
 ├── tests/                 # 30 archivos de pruebas, 1079 tests + run_tests.py
 ├── docs/                  # DEPLOY, PACKAGING, RAG, ROADMAP, SECURITY-AUDIT, SUPER-YAP, TRUNK-BASED
 ├── scripts/ci/            # Utilidades de CI: trazabilidad PR, labels, preflight
-├── agent-platform/        # Plantillas de despliegue de Super Yap
+├── agent-platform/        # Plantillas de despliegue de Super Yap (a trasladar, #212)
 ├── .githooks/post-checkout# Aviso de cambio de modelo al cambiar de rama
 ├── .github/
-│   ├── workflows/         # 11 workflows (CI, revision A-Dev, releases, quality gates)
+│   ├── workflows/         # 12 workflows (CI, revision A-Dev, releases, quality gates)
 │   ├── adev/              # Politicas Hardness, agente reviewer, RAG, skills
 │   └── ISSUE_TEMPLATE/
 ├── AGENTS.md  CLAUDE.md  ADEV.md  GOVERNANCE.md  CONTRIBUTING.md
@@ -86,8 +86,50 @@ Yap/
 
 ---
 
+## Frontend y backend en repositorios separados
+
+Yap vive en un repo **Python**, con una única dependencia del runtime del
+agente. Dos componentes que ya no son Python **viven en repositorios
+propios**, creados y mantenidos por @VECTORG99. No es un monorepo bilingüe.
+
+| Componente | Repositorio | Estado |
+|---|---|---|
+| Agente de escritorio | este repo | en desarrollo (#199) |
+| Web de descarga y su backend | propio, TypeScript | decidido (#208) |
+| Nube del LLM (Super Yap) | propio | decidido (#212) |
+
+### Por qué
+
+1. **Versionado independiente.** El agente se publica por aula; la web y el
+   servicio nube tienen su propio ciclo. En un monorepo habría que
+   sincronizarlos.
+2. **Costes visibles por separado.** La nube tiene su propia facturación;
+   dentro de este repo se diluye. La suspensión de #168 fue una decisión
+   económica que tomó fuerza justo por esa falta de separación.
+3. **CI propia.** TypeScript necesita typecheck, formateo y auditoría de
+   dependencias; este repo no tiene por qué arrastrarlos.
+4. **Contribuir sin leer código muerto.** Un parche al agente no obliga a
+   recorrer el cliente de un servicio suspendido.
+
+### Qué queda aquí
+
+- El **agente** y su empaquetado (`.deb`, `.rpm`, Flatpak, `.exe`).
+- Los **artefactos** de cada release, con sus checksums, que la web sirve.
+- Un **cliente** de nube que habla una API pública, sin constantes de
+  proveedor ni credenciales (#213).
+
+### Qué NO cambia
+
+Este criterio no afecta al **empaquetado**: `.deb`, `.rpm`, Flatpak e
+instalador de Windows se construyen y publican desde este repo. Tampoco
+reabre la nube suspendida: los 38 issues `cloud-suspended` siguen
+etiquetados y sin tocar.
+
+---
+
 ## Tabla de contenidos
 
+- [Frontend y backend en repositorios separados](#frontend-y-backend-en-repositorios-separados)
 - [1. Objetivos](#1-objetivos)
 - [2. Especificaciones tecnicas](#2-especificaciones-tecnicas)
 - [3. Arquitectura del sistema](#3-arquitectura-del-sistema)
@@ -258,7 +300,7 @@ El instalador automatiza la configuracion del entorno. Conceptos clave:
 
 ### 4.2 Python — Agente principal (`yap.py`)
 
-Un solo archivo, ~6200 lineas, **stdlib-only**. Los imports son a proposito
+Un solo archivo, 8196 lineas, **stdlib-only**. Los imports son a proposito
 pocos: `subprocess`, `sys`, `os`, `time`, `shutil`, `textwrap`, `json`, `glob`,
 `urllib.*`, `http.cookiejar`, `re`, `atexit`, `unicodedata`, `math`, `hashlib`.
 Prohibidos por politica: `socket`, `ctypes`, `pickle`, `base64`, `requests`.
@@ -934,6 +976,14 @@ Detalle de diseno y tuneles: [docs/RAG.md](docs/RAG.md).
 
 ### 8.14 Super Yap — Gradio en Cloud Run (#91)
 
+> **Estado: suspendido (#168).** El backend nube está deshabilitado por decisión
+> económica y opera local-only: `_super_habilitado()` devuelve `False` por
+> defecto. Ninguna distribución lo trae activo.
+>
+> **Destino: repositorio propio (#212).** Toda esta sección, el código de
+> cliente y las plantillas de despliegue se trasladan a un repo aparte que
+> @VECTORG99 crea y mantiene. Aquí queda la referencia mientras se traslada.
+
 Cliente Gradio 5 en Cloud Run escrito con `urllib` y `http.cookiejar` (sin
 `requests`, sin `socket`). Opt-in: el estudiante sigue trabajando con el modelo
 local de 1B/3B, y la nube entra solo cuando el local no da la talla.
@@ -951,7 +1001,10 @@ yap super <pregunta> # forzar una consulta puntual
 - **Fallback**: si la nube no responde, se vuelve al LLM local.
 - **Whitelist de hosts**: solo loopback, LAN privada o el host pin de Cloud Run.
   Se rechaza cualquier otro destino.
-- Plantillas de despliegue en [`agent-platform/`](agent-platform/).
+- Plantillas de despliegue en [`agent-platform/`](agent-platform/) — se
+  trasladan al repositorio de nube (#212).
+- **Credenciales**: el agente no debe contener claves de proveedor. Ver
+  #213 para la clave que hoy está hardcodeada y hay que revocar.
 
 Ver [docs/SUPER-YAP.md](docs/SUPER-YAP.md).
 
