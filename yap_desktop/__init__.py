@@ -36,6 +36,10 @@ __version__ = _leer_version()
 __author__ = "ChincoLinux"
 __url__ = "https://github.com/ChincoLinux/Yap"
 
-from yap_desktop.app import main
+# No subir este import: yap_desktop.app hace `from yap_desktop import
+# __version__`, asi que el paquete debe definirlo antes de importar al
+# modulo. Es un corte deliberado del circulo, no una importacion mal
+# colocada, y por eso el noqa.
+from yap_desktop.app import main  # noqa: E402
 
 __all__ = ["main"]
