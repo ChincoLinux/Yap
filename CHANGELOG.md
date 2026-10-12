@@ -14,27 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 ## [1.0.5] - 2026-10-12
-### Added
 
-### Changed
-- chore: release v1.0.3 + bump to v1.0.4 (#178)
-
-### Fixed
+Automatización de release. Sin cambios de usuario: las versiones `v1.0.4`,
+`v1.0.5`, `v1.0.6` y `v1.0.7` las generó `auto-release.yml` al ritmo de cada
+merge, en contra de A-Dev regla 14 (#188). Los tags existen; el detalle de
+cambios reales está en `1.0.2` y en `[Unreleased]`.
 
 ## [1.0.3] - 2026-10-11
-### Added
 
-### Changed
-- chore: release v1.0.2 + bump to v1.0.3 (#174)
-
-### Fixed
+Automatización de release. Sin cambios de usuario.
 
 ## [1.0.2] - 2026-10-11
 ### Added
 - Escritorio (#164): módulo `yap_desktop` (bandeja, widget, atajos) con tests sin
-- feat: exportacion de progreso del docente con filtros y reporte HTML (#30) (#177)
   display; empaquetado Fedora (RPM), Flatpak, Windows (Inno Setup) y matriz de CI
   que construye `.deb`, `.rpm`, `.flatpak` y `.exe` en los releases `v*`
+- Exportación de progreso del docente (#30, #177): filtros por curso y por EA,
+  ficha individual y reporte HTML
 - Post-install completo (#129, completa #33): unidades `yap-daemon.service`,
   `yap-sync.service` y `yap-sync.timer`; comandos `yap --postinstall-check`,
   `yap --daemon` y `yap --sync`; AppArmor con `/run/yap/` y `/run/systemd/`;
