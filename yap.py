@@ -26,6 +26,14 @@ import math
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
 WHITELIST_WEB = f"{CONFIG_DIR}/whitelist/web.conf"
+
+# Techo de lectura por recurso. Sin esto una URL de dominio permitido puede
+# agotar la RAM del aula (Celeron 4GB) antes de que el techo de text[:3000]
+# llegue a aplicarse: el limite estaba en el texto ya descargado, no en la
+# descarga. Ver #234.
+TECHO_DESCARGA_BYTES = 10 * 1024 * 1024
+# Techo de los progress.json importados desde USB. Ver #238.
+TECHO_PROGRESO_BYTES = 4 * 1024 * 1024
 PSEINT_DIR = f"{CONFIG_DIR}/pseint"
 PSEINT_EXERCISES = f"{PSEINT_DIR}/ejercicios.conf"
 PSEINT_GUIA_PDF = f"{PSEINT_DIR}/guia_ejercicios.pdf"
@@ -5499,6 +5507,15 @@ def importar_progreso(origen):
         if os.path.basename(path) == "profile.json":
             continue
         try:
+            # Comprobar el tamano antes de parsear: json.load() lee el fichero
+            # entero en memoria, y el origen es un USB que controla el alumno.
+            # _parece_progreso() se ejecuta despues, cuando ya es tarde.
+            if os.path.getsize(path) > TECHO_PROGRESO_BYTES:
+                errores.append(
+                    f"{os.path.basename(path)}: supera el maximo de "
+                    f"{TECHO_PROGRESO_BYTES // (1024 * 1024)} MB"
+                )
+                continue
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
@@ -6440,9 +6457,16 @@ def cmd_webfetch(url, feed_to_llm=False):
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Yap-ChincoLinux/1.0"})
         with urllib.request.urlopen(req, timeout=15) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
+            data = resp.read(TECHO_DESCARGA_BYTES + 1)
     except Exception as e:
         return t("error.fetch", url=url, error=e)
+
+    # Leer un byte mas de lo permitido para saber si el recurso excede el techo
+    # sin llegar a descargarlo entero.
+    if len(data) > TECHO_DESCARGA_BYTES:
+        return t("error.too_large", url=url, max_kb=TECHO_DESCARGA_BYTES // 1024)
+
+    raw = data.decode("utf-8", errors="replace")
 
     text = re.sub(r"<[^>]+>", " ", raw)
     text = re.sub(r"\s+", " ", text).strip()
