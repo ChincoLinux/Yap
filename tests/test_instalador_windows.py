@@ -8,7 +8,6 @@ inyectaba la version con /DMyAppVersion=.
 import re
 from pathlib import Path
 
-import pytest
 
 RAIZ = Path(__file__).resolve().parent.parent
 ISS = RAIZ / "packaging" / "windows" / "yap-installer.iss"
@@ -35,9 +34,9 @@ class TestIss:
                 f"MyAppVersion hardcodeado a '{valor}' en el .iss: "
                 "debe inyectarse desde VERSION con /DMyAppVersion="
             )
-        assert "#ifndef MyAppVersion" in texto, (
-            "el #define sin #ifndef se usaria aunque el build inyecte la version"
-        )
+        assert (
+            "#ifndef MyAppVersion" in texto
+        ), "el #define sin #ifndef se usaria aunque el build inyecte la version"
 
     def test_iss_declara_version_por_defecto_invalida(self):
         """Sin /D debe salir 0.0.0, a proposito: nada que parezca real."""
