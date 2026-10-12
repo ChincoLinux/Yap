@@ -39,6 +39,7 @@ def escribir_perfil(path, data):
 # 1. RUTA Y XDG_CONFIG_HOME
 # ============================================================
 
+
 class TestConfigDir:
     """Requisito: profile.json vive en ~/.config/yap respetando $XDG_CONFIG_HOME."""
 
@@ -72,12 +73,19 @@ class TestConfigDir:
 # 2. AUTORGENERACIÓN Y VALORES POR DEFECTO
 # ============================================================
 
+
 class TestAutogeneracion:
     """Requisito: si no existe o está corrupto, se autogenera uno válido."""
 
     CLAVES_SCHEMA = {
-        "nombre", "fecha_primer_uso", "nivel", "cursos_inscritos",
-        "curso_activo", "preferencias", "onboarding_completed", "estadisticas",
+        "nombre",
+        "fecha_primer_uso",
+        "nivel",
+        "cursos_inscritos",
+        "curso_activo",
+        "preferencias",
+        "onboarding_completed",
+        "estadisticas",
     }
 
     def test_archivo_inexistente_genera_defaults(self):
@@ -125,10 +133,13 @@ class TestAutogeneracion:
 
     def test_fecha_primer_uso_formato_iso(self):
         import re
+
         pf = perfil_tmp()
         with mock.patch.object(yap, "PROFILE_FILE", pf):
             perfil = yap.cargar_perfil()
-            assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", perfil["fecha_primer_uso"])
+            assert re.match(
+                r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", perfil["fecha_primer_uso"]
+            )
 
 
 class TestNormalizacion:
@@ -168,8 +179,10 @@ class TestNormalizacion:
     def test_datos_existentes_se_preservan(self):
         pf = perfil_tmp()
         data = {
-            "nombre": "María", "nivel": "avanzado",
-            "cursos_inscritos": ["FPY1101"], "curso_activo": "FPY1101",
+            "nombre": "María",
+            "nivel": "avanzado",
+            "cursos_inscritos": ["FPY1101"],
+            "curso_activo": "FPY1101",
             "onboarding_completed": True,
             "preferencias": {"tema": "oscuro"},
             "estadisticas": {"sesiones_totales": 7},
@@ -187,6 +200,7 @@ class TestNormalizacion:
 # ============================================================
 # 3. ESCRITURA ATÓMICA
 # ============================================================
+
 
 class TestEscrituraAtomica:
     """Requisito: escribir en .profile.json.tmp y reemplazar el original."""
@@ -229,6 +243,7 @@ class TestEscrituraAtomica:
 # ============================================================
 # 4. VALIDACIONES Y ACTUALIZADORES
 # ============================================================
+
 
 class TestValidaciones:
     """Requisito: nivel solo acepta basico/intermedio/avanzado; idioma solo es/en."""
@@ -300,6 +315,7 @@ class TestValidaciones:
 # ============================================================
 # 5. COMANDOS CLI
 # ============================================================
+
 
 class TestCmdPerfil:
     """Requisito: yap perfil [subcomando] muestra y actualiza el perfil."""
@@ -419,21 +435,27 @@ class TestRoutingPerfil:
 # 6. INYECCIÓN EN EL SYSTEM PROMPT DEL LLM
 # ============================================================
 
+
 class TestSystemPromptInjection:
     """Requisito: inyectar nombre, nivel y curso_activo; NUNCA estadísticas."""
 
     def _perfil_lleno(self):
         perfil = yap._perfil_por_defecto()
-        perfil.update({
-            "nombre": "María", "nivel": "avanzado", "curso_activo": "FPY1101",
-        })
+        perfil.update(
+            {
+                "nombre": "María",
+                "nivel": "avanzado",
+                "curso_activo": "FPY1101",
+            }
+        )
         perfil["estadisticas"]["sesiones_totales"] = 42
         return perfil
 
     def test_inyecta_nombre_nivel_curso(self):
         pf = perfil_tmp()
-        with mock.patch.object(yap, "PROFILE_FILE", pf), \
-             mock.patch.object(yap, "SYSTEM_PROMPT", "BASE."):
+        with mock.patch.object(yap, "PROFILE_FILE", pf), mock.patch.object(
+            yap, "SYSTEM_PROMPT", "BASE."
+        ):
             yap.guardar_perfil(self._perfil_lleno())
             sp = yap._system_prompt()
             assert "BASE." in sp
@@ -444,8 +466,9 @@ class TestSystemPromptInjection:
     def test_no_inyecta_estadisticas(self):
         """Las estadísticas se excluyen para no desperdiciar KV cache/tokens."""
         pf = perfil_tmp()
-        with mock.patch.object(yap, "PROFILE_FILE", pf), \
-             mock.patch.object(yap, "SYSTEM_PROMPT", "BASE."):
+        with mock.patch.object(yap, "PROFILE_FILE", pf), mock.patch.object(
+            yap, "SYSTEM_PROMPT", "BASE."
+        ):
             yap.guardar_perfil(self._perfil_lleno())
             sp = yap._system_prompt()
             assert "sesiones_totales" not in sp
@@ -454,8 +477,9 @@ class TestSystemPromptInjection:
     def test_perfil_sin_datos_inyecta_solo_nivel(self):
         """Sin nombre ni curso activo solo se inyecta el nivel (siempre existe)."""
         pf = perfil_tmp()
-        with mock.patch.object(yap, "PROFILE_FILE", pf), \
-             mock.patch.object(yap, "SYSTEM_PROMPT", "BASE."):
+        with mock.patch.object(yap, "PROFILE_FILE", pf), mock.patch.object(
+            yap, "SYSTEM_PROMPT", "BASE."
+        ):
             yap.guardar_perfil(yap._perfil_por_defecto())  # nombre vacío
             sp = yap._system_prompt()
             assert sp == "BASE. Contexto: su nivel es basico."
@@ -464,12 +488,13 @@ class TestSystemPromptInjection:
     def test_cmd_query_construye_prompt_con_perfil(self):
         """cmd_query usa el prompt dinámico al llamar a llama-cli."""
         pf = perfil_tmp()
-        with mock.patch.object(yap, "PROFILE_FILE", pf), \
-             mock.patch.object(yap, "SYSTEM_PROMPT", "BASE."), \
-             mock.patch("subprocess.run") as mock_run:
+        with mock.patch.object(yap, "PROFILE_FILE", pf), mock.patch.object(
+            yap, "SYSTEM_PROMPT", "BASE."
+        ), mock.patch("subprocess.run") as mock_run:
             yap.guardar_perfil(self._perfil_lleno())
             mock_run.return_value = mock.Mock(
-                stdout="respuesta", stderr="", returncode=0)
+                stdout="respuesta", stderr="", returncode=0
+            )
             yap.cmd_query("¿Qué es una variable?", store_history=False)
         cmd = mock_run.call_args[0][0]
         full_prompt = cmd[cmd.index("-p") + 1]

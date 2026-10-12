@@ -52,6 +52,7 @@ class _EjerciciosBase:
         self._p_pr.stop()
         self._p_cu.stop()
         import shutil
+
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _write(self, content):
@@ -63,12 +64,16 @@ class _EjerciciosBase:
 # Parser v1 + v2
 # ============================================================
 
+
 class TestParserEjercicios(_EjerciciosBase):
     def test_v2_bloque_completo(self):
-        self._write(_v2_block(
-            "hola_mundo", "codigo_pseint",
-            "solucion=Algoritmo X\ncriterio=Usa Algoritmo\nvalidacion=llm\n",
-        ))
+        self._write(
+            _v2_block(
+                "hola_mundo",
+                "codigo_pseint",
+                "solucion=Algoritmo X\ncriterio=Usa Algoritmo\nvalidacion=llm\n",
+            )
+        )
         ej = yap.cargar_ejercicios()
         assert len(ej) == 1
         assert ej[0]["id"] == "hola_mundo"
@@ -100,15 +105,20 @@ class TestParserEjercicios(_EjerciciosBase):
         assert ej[1]["formato"] == "v2"
 
     def test_ignora_comentarios(self):
-        self._write("# comentario\n" + _v2_block(
-            "x", "completar", "solucion=a|b\nvalidacion=exacta\n"
-        ))
+        self._write(
+            "# comentario\n"
+            + _v2_block("x", "completar", "solucion=a|b\nvalidacion=exacta\n")
+        )
         assert len(yap.cargar_ejercicios()) == 1
 
     def test_id_duplicado_gana_el_primero(self):
         self._write(
-            _v2_block("dup", "completar", "solucion=uno\nvalidacion=exacta\ntitulo=Primero\n")
-            + _v2_block("dup", "completar", "solucion=dos\nvalidacion=exacta\ntitulo=Segundo\n")
+            _v2_block(
+                "dup", "completar", "solucion=uno\nvalidacion=exacta\ntitulo=Primero\n"
+            )
+            + _v2_block(
+                "dup", "completar", "solucion=dos\nvalidacion=exacta\ntitulo=Segundo\n"
+            )
         )
         # titulo= after the block start overwrites within the same block;
         # two [dup] blocks: first wins
@@ -136,18 +146,21 @@ class TestParserEjercicios(_EjerciciosBase):
         assert yap.cargar_ejercicios() == []
 
     def test_ejercicio_por_id_rechaza_path_traversal(self):
-        self._write(_v2_block(
-            "hola_mundo", "completar", "solucion=a\nvalidacion=exacta\n"
-        ))
+        self._write(
+            _v2_block("hola_mundo", "completar", "solucion=a\nvalidacion=exacta\n")
+        )
         assert yap.ejercicio_por_id("../etc") is None
         assert yap.ejercicio_por_id("hola_mundo/../../passwd") is None
         assert yap.ejercicio_por_id("hola_mundo") is not None
 
     def test_alias_respuesta_texto(self):
-        self._write(_v2_block(
-            "libre", "respuesta_texto",
-            "criterio=Define algo\nvalidacion=llm\n",
-        ))
+        self._write(
+            _v2_block(
+                "libre",
+                "respuesta_texto",
+                "criterio=Define algo\nvalidacion=llm\n",
+            )
+        )
         ej = yap.cargar_ejercicios()
         assert ej[0]["tipo"] == "respuesta_libre"
 
@@ -162,6 +175,7 @@ class TestParserEjercicios(_EjerciciosBase):
 # ============================================================
 # Validacion exacta y LLM (mock)
 # ============================================================
+
 
 class TestEvaluarEjercicio(_EjerciciosBase):
     def test_opcion_multiple_correcta_sin_llm(self):
@@ -236,7 +250,9 @@ class TestEvaluarEjercicio(_EjerciciosBase):
             ' "criterios_cumplidos": ["Define algoritmo"],'
             ' "criterios_fallidos": [], "sugerencia": ""}'
         )
-        with patch.object(yap, "_llamar_llm_evaluacion", return_value=payload) as mock_llm:
+        with patch.object(
+            yap, "_llamar_llm_evaluacion", return_value=payload
+        ) as mock_llm:
             r = yap.evaluar_ejercicio(ej, "Un algoritmo es una secuencia de pasos")
             mock_llm.assert_called_once()
         assert r["aprobado"] is True
@@ -270,6 +286,7 @@ class TestEvaluarEjercicio(_EjerciciosBase):
 # Pistas
 # ============================================================
 
+
 class TestPistas(_EjerciciosBase):
     def test_tres_niveles(self):
         ej = {"pistas": ["concepto", "parcial", "casi solucion"]}
@@ -279,10 +296,14 @@ class TestPistas(_EjerciciosBase):
         assert yap.pista_siguiente(ej, 3) is None
 
     def test_pista_no_evalua_ni_gasta_intento(self):
-        self._write(_v2_block(
-            "x", "completar", "solucion=entrada|proceso|salida\nvalidacion=exacta\n"
-        ))
-        with patch("builtins.input", side_effect=["pista", "pista", "pista", "pista", "salir"]):
+        self._write(
+            _v2_block(
+                "x", "completar", "solucion=entrada|proceso|salida\nvalidacion=exacta\n"
+            )
+        )
+        with patch(
+            "builtins.input", side_effect=["pista", "pista", "pista", "pista", "salir"]
+        ):
             yap.cmd_ejercicios("x")
         prog = yap.cargar_progreso()
         rec = prog["ejercicios"]["x"]
@@ -295,11 +316,14 @@ class TestPistas(_EjerciciosBase):
 # Flujo interactivo
 # ============================================================
 
+
 class TestFlujoEjercicio(_EjerciciosBase):
     def test_correcto_felicita_y_completa(self):
-        self._write(_v2_block(
-            "x", "completar", "solucion=entrada|proceso|salida\nvalidacion=exacta\n"
-        ))
+        self._write(
+            _v2_block(
+                "x", "completar", "solucion=entrada|proceso|salida\nvalidacion=exacta\n"
+            )
+        )
         with patch("builtins.input", side_effect=["entrada proceso salida"]):
             yap.cmd_ejercicios("x")
         rec = yap.cargar_progreso()["ejercicios"]["x"]
@@ -308,9 +332,7 @@ class TestFlujoEjercicio(_EjerciciosBase):
         assert rec["intentos"] == 1
 
     def test_incorrecto_permite_reintento(self):
-        self._write(_v2_block(
-            "x", "completar", "solucion=ok\nvalidacion=exacta\n"
-        ))
+        self._write(_v2_block("x", "completar", "solucion=ok\nvalidacion=exacta\n"))
         with patch("builtins.input", side_effect=["malo", "ok"]):
             yap.cmd_ejercicios("x")
         rec = yap.cargar_progreso()["ejercicios"]["x"]
@@ -318,9 +340,11 @@ class TestFlujoEjercicio(_EjerciciosBase):
         assert rec["intentos"] == 2
 
     def test_tres_fallos_solo_saltar(self):
-        self._write(_v2_block(
-            "x", "completar", "solucion=ok\nvalidacion=exacta\nmax_intentos=3\n"
-        ))
+        self._write(
+            _v2_block(
+                "x", "completar", "solucion=ok\nvalidacion=exacta\nmax_intentos=3\n"
+            )
+        )
         with patch("builtins.input", side_effect=["a", "b", "c", "ok", "saltar"]):
             yap.cmd_ejercicios("x")
         rec = yap.cargar_progreso()["ejercicios"]["x"]
@@ -329,11 +353,16 @@ class TestFlujoEjercicio(_EjerciciosBase):
         assert rec["intentos"] == 3
 
     def test_error_llm_no_incrementa_intentos(self):
-        self._write(_v2_block(
-            "lib", "respuesta_libre",
-            "criterio=Define\nvalidacion=llm\n",
-        ))
-        with patch.object(yap, "_llamar_llm_evaluacion", return_value="[ERROR] llama-cli"):
+        self._write(
+            _v2_block(
+                "lib",
+                "respuesta_libre",
+                "criterio=Define\nvalidacion=llm\n",
+            )
+        )
+        with patch.object(
+            yap, "_llamar_llm_evaluacion", return_value="[ERROR] llama-cli"
+        ):
             with patch("builtins.input", side_effect=["una respuesta", "salir"]):
                 yap.cmd_ejercicios("lib")
         rec = yap.cargar_progreso()["ejercicios"]["lib"]
@@ -341,9 +370,7 @@ class TestFlujoEjercicio(_EjerciciosBase):
         assert rec.get("aprobado") is False
 
     def test_saltar_puntaje_cero(self):
-        self._write(_v2_block(
-            "x", "completar", "solucion=ok\nvalidacion=exacta\n"
-        ))
+        self._write(_v2_block("x", "completar", "solucion=ok\nvalidacion=exacta\n"))
         with patch("builtins.input", side_effect=["saltar"]):
             yap.cmd_ejercicios("x")
         rec = yap.cargar_progreso()["ejercicios"]["x"]
@@ -356,13 +383,18 @@ class TestFlujoEjercicio(_EjerciciosBase):
 # Progreso
 # ============================================================
 
+
 class TestProgresoEjercicios(_EjerciciosBase):
     def test_persiste_campos(self):
         progress = {"cursos": {}}
         yap.registrar_intento_ejercicio(
-            progress, "hola",
+            progress,
+            "hola",
             {"aprobado": True, "puntaje": 90, "error": False},
-            pistas_usadas=1, origen="standalone", curso="FPY1101", ea="EA1",
+            pistas_usadas=1,
+            origen="standalone",
+            curso="FPY1101",
+            ea="EA1",
         )
         yap.guardar_progreso(progress)
         loaded = yap.cargar_progreso()
@@ -386,9 +418,7 @@ class TestProgresoEjercicios(_EjerciciosBase):
         assert not os.path.exists(self.progress_path + ".tmp")
 
     def test_cmd_progreso_incluye_ejercicios(self, monkeypatch=None):
-        self._write(_v2_block(
-            "x", "completar", "solucion=ok\nvalidacion=exacta\n"
-        ))
+        self._write(_v2_block("x", "completar", "solucion=ok\nvalidacion=exacta\n"))
         progress = {"cursos": {}, "ejercicios": {}}
         yap.registrar_intento_ejercicio(
             progress, "x", {"aprobado": True, "puntaje": 80, "error": False}
@@ -406,13 +436,15 @@ class TestProgresoEjercicios(_EjerciciosBase):
 # CLI
 # ============================================================
 
+
 class TestCliEjercicios(_EjerciciosBase):
     def test_lista_incluye_cuatro_tipos(self):
         self._write(
             _v2_block("a", "codigo_pseint", "criterio=x\nvalidacion=llm\n")
             + _v2_block("b", "respuesta_libre", "criterio=x\nvalidacion=llm\n")
             + _v2_block(
-                "c", "opcion_multiple",
+                "c",
+                "opcion_multiple",
                 "opcion=A\nopcion=B\nrespuesta_correcta=A\nvalidacion=exacta\n",
             )
             + _v2_block("d", "completar", "solucion=z\nvalidacion=exacta\n")
@@ -443,30 +475,46 @@ class TestCliEjercicios(_EjerciciosBase):
 # Hook EA
 # ============================================================
 
+
 class TestHookEA(_EjerciciosBase):
     def test_actividad_con_ejercicio_id(self):
-        self._write(_v2_block(
-            "partes_algoritmo", "completar",
-            "solucion=entrada|proceso|salida\nvalidacion=exacta\n",
-        ))
+        self._write(
+            _v2_block(
+                "partes_algoritmo",
+                "completar",
+                "solucion=entrada|proceso|salida\nvalidacion=exacta\n",
+            )
+        )
         curso = {
             "codigo": "TEST101",
             "nombre": "Curso de Prueba",
-            "horas": 10, "semanas": 1,
+            "horas": 10,
+            "semanas": 1,
             "ras": [{"id": "RA1", "descripcion": "RA", "indicadores": ["IL1"]}],
-            "eas": [{
-                "id": "EA1", "nombre": "EA", "descripcion": "desc",
-                "horas": 5, "ponderacion": 100,
-                "herramientas": ["PSeInt"],
-                "actividades": [{
-                    "orden": 1, "nombre": "Act1", "descripcion": "desc",
-                    "ejercicio_id": "partes_algoritmo",
-                }],
-                "evaluaciones": [],
-            }],
+            "eas": [
+                {
+                    "id": "EA1",
+                    "nombre": "EA",
+                    "descripcion": "desc",
+                    "horas": 5,
+                    "ponderacion": 100,
+                    "herramientas": ["PSeInt"],
+                    "actividades": [
+                        {
+                            "orden": 1,
+                            "nombre": "Act1",
+                            "descripcion": "desc",
+                            "ejercicio_id": "partes_algoritmo",
+                        }
+                    ],
+                    "evaluaciones": [],
+                }
+            ],
             "evaluaciones": [],
         }
-        with open(os.path.join(self.cursos_dir, "TEST101.json"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(self.cursos_dir, "TEST101.json"), "w", encoding="utf-8"
+        ) as f:
             json.dump(curso, f)
         with patch("shutil.get_terminal_size") as mock_size:
             mock_size.return_value.columns = 80
@@ -483,11 +531,17 @@ class TestHookEA(_EjerciciosBase):
 # Arquitectura
 # ============================================================
 
+
 class TestArquitecturaEjercicios:
     def test_api_publica(self):
         for name in (
-            "cargar_ejercicios", "ejercicio_por_id", "listar_ejercicios",
-            "evaluar_ejercicio", "pista_siguiente", "cmd_ejercicios",
-            "registrar_intento_ejercicio", "resumen_ejercicios",
+            "cargar_ejercicios",
+            "ejercicio_por_id",
+            "listar_ejercicios",
+            "evaluar_ejercicio",
+            "pista_siguiente",
+            "cmd_ejercicios",
+            "registrar_intento_ejercicio",
+            "resumen_ejercicios",
         ):
             assert hasattr(yap, name) and callable(getattr(yap, name))

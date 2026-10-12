@@ -38,6 +38,7 @@ def _resultado(aprobado=True, puntaje=80, cumplidos=None, fallidos=None, error=F
 # 1. TIPO DE FEEDBACK
 # ============================================================
 
+
 class TestTipoFeedback:
     """Requisito: distinguir feedback formativo de sumativo."""
 
@@ -62,14 +63,20 @@ class TestTipoFeedback:
     def test_el_sello_alcanza_a_la_ruta_de_opcion_multiple(self):
         """Todas las rutas de evaluación deben sellar el tipo, no solo la del LLM."""
         act = {"opciones": ["a", "b"], "respuesta_correcta": "a"}
-        r = yap.evaluar_actividad("a", [], tipo="opcion_multiple", actividad=act,
-                                  tipo_feedback=yap.FEEDBACK_SUMATIVO)
+        r = yap.evaluar_actividad(
+            "a",
+            [],
+            tipo="opcion_multiple",
+            actividad=act,
+            tipo_feedback=yap.FEEDBACK_SUMATIVO,
+        )
         assert r["tipo_feedback"] == yap.FEEDBACK_SUMATIVO
 
 
 # ============================================================
 # 2. PAUTAS EN EL PROMPT
 # ============================================================
+
 
 class TestPautasDelPrompt:
     """Requisito: system prompt diferenciado por tipo de feedback."""
@@ -84,28 +91,42 @@ class TestPautasDelPrompt:
         assert "sin invitar a reintentar" in yap.PAUTA_SUMATIVA
 
     def test_el_prompt_formativo_lleva_su_pauta(self):
-        p = yap._prompt_evaluacion("resp", ["c1"], "respuesta_libre", {}, "",
-                                   tipo_feedback=yap.FEEDBACK_FORMATIVO)
+        p = yap._prompt_evaluacion(
+            "resp",
+            ["c1"],
+            "respuesta_libre",
+            {},
+            "",
+            tipo_feedback=yap.FEEDBACK_FORMATIVO,
+        )
         assert "FORMATIVO" in p
         assert "SUMATIVO" not in p
 
     def test_el_prompt_sumativo_lleva_su_pauta(self):
-        p = yap._prompt_evaluacion("resp", ["c1"], "respuesta_libre", {}, "",
-                                   tipo_feedback=yap.FEEDBACK_SUMATIVO)
+        p = yap._prompt_evaluacion(
+            "resp",
+            ["c1"],
+            "respuesta_libre",
+            {},
+            "",
+            tipo_feedback=yap.FEEDBACK_SUMATIVO,
+        )
         assert "SUMATIVO" in p
         assert "FORMATIVO" not in p
 
     def test_el_tipo_llega_hasta_el_prompt(self):
         """El parámetro debe propagarse por toda la cadena, no perderse."""
         with mock.patch.object(yap, "_llamar_llm_evaluacion", return_value="{}") as llm:
-            yap.evaluar_actividad("resp", ["c1"], contexto="",
-                                  tipo_feedback=yap.FEEDBACK_SUMATIVO)
+            yap.evaluar_actividad(
+                "resp", ["c1"], contexto="", tipo_feedback=yap.FEEDBACK_SUMATIVO
+            )
         assert "SUMATIVO" in llm.call_args[0][0]
 
 
 # ============================================================
 # 3. PERSISTENCIA DE CRITERIOS
 # ============================================================
+
 
 class TestPersistenciaDeCriterios:
     """Requisito: guardar los criterios para poder componer el sumativo."""
@@ -118,7 +139,10 @@ class TestPersistenciaDeCriterios:
     def test_se_guardan_los_criterios_del_intento(self):
         prog = {}
         yap.registrar_intento_actividad(
-            prog, "C1", "EA1", 1,
+            prog,
+            "C1",
+            "EA1",
+            1,
             _resultado(cumplidos=["ciclos"], fallidos=["arreglos"]),
         )
         rec = prog["cursos"]["C1"]["EA1"]["actividades"]["1"]
@@ -137,9 +161,11 @@ class TestPersistenciaDeCriterios:
         """Un fallo de red no debe borrar lo que ya se había evaluado."""
         prog = {}
         yap.registrar_intento_actividad(
-            prog, "C1", "EA1", 1, _resultado(cumplidos=["ciclos"]))
+            prog, "C1", "EA1", 1, _resultado(cumplidos=["ciclos"])
+        )
         yap.registrar_intento_actividad(
-            prog, "C1", "EA1", 1, _resultado(error=True, cumplidos=[]))
+            prog, "C1", "EA1", 1, _resultado(error=True, cumplidos=[])
+        )
         rec = prog["cursos"]["C1"]["EA1"]["actividades"]["1"]
         assert rec["criterios_cumplidos"] == ["ciclos"]
 
@@ -148,17 +174,26 @@ class TestPersistenciaDeCriterios:
 # 4. FEEDBACK SUMATIVO
 # ============================================================
 
+
 class TestFeedbackSumativo:
     """Requisito: nota final con fortalezas y áreas por mejorar."""
 
     def _progreso(self):
         prog = {}
         yap.registrar_intento_actividad(
-            prog, "C1", "EA1", 1,
-            _resultado(True, 90, cumplidos=["ciclos", "variables"]))
+            prog,
+            "C1",
+            "EA1",
+            1,
+            _resultado(True, 90, cumplidos=["ciclos", "variables"]),
+        )
         yap.registrar_intento_actividad(
-            prog, "C1", "EA1", 2,
-            _resultado(False, 40, cumplidos=["variables"], fallidos=["arreglos"]))
+            prog,
+            "C1",
+            "EA1",
+            2,
+            _resultado(False, 40, cumplidos=["variables"], fallidos=["arreglos"]),
+        )
         return prog
 
     def test_sin_actividades_evaluadas(self):
@@ -184,9 +219,11 @@ class TestFeedbackSumativo:
         """Aprobar 'variables' una vez no borra haberlo fallado en otra actividad."""
         prog = {}
         yap.registrar_intento_actividad(
-            prog, "C1", "EA1", 1, _resultado(True, 80, cumplidos=["variables"]))
+            prog, "C1", "EA1", 1, _resultado(True, 80, cumplidos=["variables"])
+        )
         yap.registrar_intento_actividad(
-            prog, "C1", "EA1", 2, _resultado(False, 30, fallidos=["variables"]))
+            prog, "C1", "EA1", 2, _resultado(False, 30, fallidos=["variables"])
+        )
         r = yap.feedback_sumativo_ea(prog, "C1", "EA1")
         assert "variables" not in r["fortalezas"]
         assert "variables" in r["por_mejorar"]
@@ -219,6 +256,7 @@ class TestFeedbackSumativo:
 # 5. AVANCE ENTRE INTENTOS
 # ============================================================
 
+
 class TestLineaDeAvance:
     """Requisito: feedback de progreso comparado con intentos anteriores."""
 
@@ -234,7 +272,9 @@ class TestLineaDeAvance:
         assert "Retroceso" in linea
 
     def test_sin_cambio(self):
-        assert "Sin cambio" in yap._linea_avance({"puntaje": 60, "puntaje_anterior": 60})
+        assert "Sin cambio" in yap._linea_avance(
+            {"puntaje": 60, "puntaje_anterior": 60}
+        )
 
     def test_registro_invalido_no_revienta(self):
         assert yap._linea_avance(None) == ""
@@ -245,12 +285,15 @@ class TestLineaDeAvance:
 # 6. PRESENTACIÓN
 # ============================================================
 
+
 class TestPresentacion:
     """Requisito: plantillas pedagógicas legibles para el estudiante."""
 
     def test_el_resultado_formativo_muestra_el_avance(self):
         salida = yap._mostrar_resultado_evaluacion(
-            _resultado(False, 60), 2, 3,
+            _resultado(False, 60),
+            2,
+            3,
             registro={"puntaje": 60, "puntaje_anterior": 30},
         )
         assert "Avance" in salida
@@ -262,15 +305,21 @@ class TestPresentacion:
     def test_el_sumativo_muestra_nota_y_balance(self):
         prog = {}
         yap.registrar_intento_actividad(
-            prog, "C1", "EA1", 1,
-            _resultado(True, 90, cumplidos=["ciclos"], fallidos=["arreglos"]))
+            prog,
+            "C1",
+            "EA1",
+            1,
+            _resultado(True, 90, cumplidos=["ciclos"], fallidos=["arreglos"]),
+        )
         salida = yap._mostrar_feedback_sumativo(
-            yap.feedback_sumativo_ea(prog, "C1", "EA1"), "EA1: Algoritmos")
+            yap.feedback_sumativo_ea(prog, "C1", "EA1"), "EA1: Algoritmos"
+        )
         assert "Nota final" in salida
         assert "ciclos" in salida
         assert "arreglos" in salida
 
     def test_el_sumativo_sin_datos_no_revienta(self):
         salida = yap._mostrar_feedback_sumativo(
-            yap.feedback_sumativo_ea({}, "C1", "EA1"))
+            yap.feedback_sumativo_ea({}, "C1", "EA1")
+        )
         assert "No hay actividades" in salida

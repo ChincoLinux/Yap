@@ -8,6 +8,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [1.0.5] - 2026-10-12
+### Added
+
+### Changed
+- chore: release v1.0.3 + bump to v1.0.4 (#178)
+
+### Fixed
+
+## [1.0.3] - 2026-10-11
+### Added
+
+### Changed
+- chore: release v1.0.2 + bump to v1.0.3 (#174)
+
+### Fixed
+
+## [1.0.2] - 2026-10-11
+### Added
+- Escritorio (#164): módulo `yap_desktop` (bandeja, widget, atajos) con tests sin
+- feat: exportacion de progreso del docente con filtros y reporte HTML (#30) (#177)
+  display; empaquetado Fedora (RPM), Flatpak, Windows (Inno Setup) y matriz de CI
+  que construye `.deb`, `.rpm`, `.flatpak` y `.exe` en los releases `v*`
+- Post-install completo (#129, completa #33): unidades `yap-daemon.service`,
+  `yap-sync.service` y `yap-sync.timer`; comandos `yap --postinstall-check`,
+  `yap --daemon` y `yap --sync`; AppArmor con `/run/yap/` y `/run/systemd/`;
+  siembra de `agent/yap.md` y whitelists `0644` en Debian y RPM; cobertura en
+  `tests/test_yap_postinstall.py`
+- Guía de labels (`docs/LABELS.md`) y checklist de revisión renovado
+  (`docs/REVIEW.md`) con los gates reales del repositorio (#75)
+- i18n multi-idioma (#36): catálogos JSON `es`/`en`/`arn`, `yap perfil idioma`,
+  LLM responde en el idioma del perfil; mapudungun con traducción comunitaria parcial
 - Modo profesor (#25): `yap profesor` abre un panel con el progreso de la
   clase. El docente importa los `progress.json` de sus estudiantes desde una
   carpeta o una llave USB (`yap profesor importar`), y el panel muestra avance,
@@ -33,6 +69,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   o se pasa de ~1200 tokens, se consulta Gradio.
 
 ### Changed
+- **Nube suspendida (#168)**: el backend cloud de Super Yap (Cloud Run + Gradio 5)
+  queda deshabilitado por decisión económica; `_super_habilitado()` retorna `False`
+  y los issues de nube llevan el label `cloud-suspended`. Yap opera local-only
+- Gates de calidad promovidos a required checks (#167): `ruff format --check`,
+  `ruff check` y `pyflakes` corren en `pr-quality-suite.yml`, con la deuda
+  preexistente de `yap.py` y `tests/` limpia
+- Labeler de PR corregido (#165): evalúa `pr.merged` y no etiqueta en masa
+- Alineación de documentación (#75): estados reales del `ROADMAP`, contadores de
+  tests de `README.md`, badge apuntando a `ChincoLinux/Yap`, `docs/REVIEW.md`
+  renovado y `docs/LABELS.md`
 - Yap local usa como techo **Llama 3.2 3B Instruct Q4_K_M**. Un `YAP_MODEL_PATH`
   con 8B se ignora y cae al 3B; el 1B sigue permitido.
 - Super Yap (#91)(`super_yap.py`, GGUF,
@@ -42,6 +88,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `super on` / `super <pregunta>` siguen forzando la nube.
 
 ### Fixed
+- `cmd_curso()` no traza `PermissionError` (#170): devuelve
+  `error.course_permission` (ES + EN) en lugar de mostrar la excepción
+- `auto-release.yml` volvía a fallar en cada push (#172): la continuación del
+  `--body` rompía el bloque `run: |` y GitHub no podía parsear el workflow
+- Aplicaciones lanzadas quedaban huérfanas (#104, PR #166): `start_new_session=True`
+  en `cmd_open_app`
 - Consultas invisibles a partir de la segunda pregunta (#99): los procesos
   hijos heredaban la terminal del estudiante. `llama-cli` hace `tcsetattr`
   sobre el stdin que recibe y apaga el eco; al no restaurarlo siempre, lo

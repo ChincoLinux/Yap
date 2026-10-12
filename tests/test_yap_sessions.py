@@ -55,6 +55,7 @@ class SessionTestBase:
 # 1. ALMACENAMIENTO
 # ============================================================
 
+
 class TestSessionStore(SessionTestBase):
     """Requisito: sessions.json con estructura válida y escritura atómica."""
 
@@ -98,6 +99,7 @@ class TestSessionStore(SessionTestBase):
 # ============================================================
 # 2. CRUD DE SESIONES
 # ============================================================
+
 
 class TestSessionCRUD(SessionTestBase):
     """Requisito: comandos nueva/pausar/retomar/cerrar funcionales."""
@@ -181,6 +183,7 @@ class TestSessionCRUD(SessionTestBase):
 # 3. LÍMITE DE SESIONES ABIERTAS
 # ============================================================
 
+
 class TestSessionLimit(SessionTestBase):
     """Requisito: límite de sesiones abiertas simultáneas, configurable."""
 
@@ -214,6 +217,7 @@ class TestSessionLimit(SessionTestBase):
 # ============================================================
 # 4. CONTEXTO DE CONVERSACIÓN
 # ============================================================
+
 
 class TestSessionContext(SessionTestBase):
     """Requisito: pausar guarda el contexto; retomar lo carga en HISTORY."""
@@ -264,6 +268,7 @@ class TestSessionContext(SessionTestBase):
 # 5. INTEGRACIÓN CON EL HISTORIAL (#13)
 # ============================================================
 
+
 class TestSessionHistoryIntegration(SessionTestBase):
     """Requisito: al cerrar, la sesión se archiva en history.json."""
 
@@ -312,14 +317,24 @@ class TestSessionHistoryIntegration(SessionTestBase):
 CURSO_PRUEBA = {
     "codigo": "TEST101",
     "nombre": "Curso de Prueba",
-    "horas": 50, "semanas": 10,
+    "horas": 50,
+    "semanas": 10,
     "ambiente": "Lab",
     "herramientas": ["Python"],
     "ras": [{"id": "RA1", "descripcion": "Test RA", "indicadores": ["IL1.1"]}],
-    "eas": [{"id": "EA1", "nombre": "Test EA", "descripcion": "Desc EA",
-             "horas": 20, "ponderacion": 100,
-             "actividades": [{"orden": 1, "nombre": "Act1", "descripcion": "Hacer algo"}],
-             "evaluaciones": []}],
+    "eas": [
+        {
+            "id": "EA1",
+            "nombre": "Test EA",
+            "descripcion": "Desc EA",
+            "horas": 20,
+            "ponderacion": 100,
+            "actividades": [
+                {"orden": 1, "nombre": "Act1", "descripcion": "Hacer algo"}
+            ],
+            "evaluaciones": [],
+        }
+    ],
     "evaluaciones": [],
 }
 
@@ -332,12 +347,15 @@ class TestSessionCourseIntegration(SessionTestBase):
         self.cursos_dir = tempfile.mkdtemp()
         self.extra = [
             mock.patch.object(yap, "CURSOS_DIR", self.cursos_dir),
-            mock.patch.object(yap, "PROGRESS_FILE",
-                              os.path.join(self.tmpdir, "progress.json")),
+            mock.patch.object(
+                yap, "PROGRESS_FILE", os.path.join(self.tmpdir, "progress.json")
+            ),
         ]
         for p in self.extra:
             p.start()
-        with open(os.path.join(self.cursos_dir, "TEST101.json"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(self.cursos_dir, "TEST101.json"), "w", encoding="utf-8"
+        ) as f:
             json.dump(CURSO_PRUEBA, f)
 
     def teardown_method(self):
@@ -373,6 +391,7 @@ class TestSessionCourseIntegration(SessionTestBase):
     @mock.patch("builtins.input", side_effect=["salir"])
     def test_iniciar_ea_asocia_la_ea(self, mock_input):
         import io as _io
+
         with mock.patch("sys.stdout.write", _io.StringIO().write):
             yap.iniciar_ea("TEST101", "EA1")
         activa = yap._sesion_activa(yap._load_sessions())
@@ -393,6 +412,7 @@ class TestSessionCourseIntegration(SessionTestBase):
 # ============================================================
 # 7. BANNER Y PROMPT
 # ============================================================
+
 
 class TestSessionPrompt(SessionTestBase):
     """Requisito: el prompt muestra el ID de la sesión activa."""
@@ -424,6 +444,7 @@ class TestSessionPrompt(SessionTestBase):
 # ============================================================
 # 8. COMANDO sesion
 # ============================================================
+
 
 class TestCmdSesion(SessionTestBase):
     """Requisito: subcomandos de 'sesion' devuelven salida usable."""
@@ -489,6 +510,7 @@ class TestCmdSesion(SessionTestBase):
 # 9. ENRUTADO Y DESPACHO
 # ============================================================
 
+
 class TestSessionRouting(SessionTestBase):
     """Requisito: 'sesion ...' se enruta sin pasar por el LLM."""
 
@@ -530,6 +552,7 @@ class TestSessionRouting(SessionTestBase):
 # 10. FLUJO DE SALIDA
 # ============================================================
 
+
 class TestSessionExit(SessionTestBase):
     """Requisito: al salir con sesión activa, preguntar pausar o cerrar."""
 
@@ -548,23 +571,26 @@ class TestSessionExit(SessionTestBase):
 
     def test_respuesta_p_pausa(self):
         yap.sesion_nueva()
-        with mock.patch("sys.stdin.isatty", return_value=True), \
-             mock.patch("builtins.input", return_value="p"):
+        with mock.patch("sys.stdin.isatty", return_value=True), mock.patch(
+            "builtins.input", return_value="p"
+        ):
             yap._sesion_al_salir()
         assert yap._load_sessions()[0]["estado"] == yap.ESTADO_PAUSADA
 
     def test_enter_cierra_por_defecto(self):
         """La opción por defecto es cerrar (p/C, la C va en mayúscula)."""
         yap.sesion_nueva()
-        with mock.patch("sys.stdin.isatty", return_value=True), \
-             mock.patch("builtins.input", return_value=""):
+        with mock.patch("sys.stdin.isatty", return_value=True), mock.patch(
+            "builtins.input", return_value=""
+        ):
             yap._sesion_al_salir()
         assert yap._load_sessions()[0]["estado"] == yap.ESTADO_CERRADA
 
     def test_eof_cierra_por_defecto(self):
         yap.sesion_nueva()
-        with mock.patch("sys.stdin.isatty", return_value=True), \
-             mock.patch("builtins.input", side_effect=EOFError):
+        with mock.patch("sys.stdin.isatty", return_value=True), mock.patch(
+            "builtins.input", side_effect=EOFError
+        ):
             yap._sesion_al_salir()
         assert yap._load_sessions()[0]["estado"] == yap.ESTADO_CERRADA
 
@@ -572,8 +598,9 @@ class TestSessionExit(SessionTestBase):
         """Cerrar limpia HISTORY, asi el atexit de #13 no vuelve a archivar."""
         yap.sesion_nueva()
         yap.HISTORY.append(("unica", "vez"))
-        with mock.patch("sys.stdin.isatty", return_value=True), \
-             mock.patch("builtins.input", return_value=""):
+        with mock.patch("sys.stdin.isatty", return_value=True), mock.patch(
+            "builtins.input", return_value=""
+        ):
             yap._sesion_al_salir()
         yap._save_history_session()  # lo que corre atexit al terminar el proceso
         assert len(yap._load_history_sessions()) == 1
@@ -588,7 +615,8 @@ class TestSessionExit(SessionTestBase):
     def test_cerrar_al_salir_archiva_el_contexto(self):
         yap.sesion_nueva()
         yap.HISTORY.append(("ultima", "respuesta"))
-        with mock.patch("sys.stdin.isatty", return_value=True), \
-             mock.patch("builtins.input", return_value=""):
+        with mock.patch("sys.stdin.isatty", return_value=True), mock.patch(
+            "builtins.input", return_value=""
+        ):
             yap._sesion_al_salir()
         assert yap._load_history_sessions()[0]["turns"][0]["user"] == "ultima"

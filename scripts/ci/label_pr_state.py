@@ -24,8 +24,8 @@ import sys
 try:
     from github import Github, Auth
 except ImportError:
-    print("ERROR: PyGithub not installed. Run: pip install PyGithub", file=sys.stderr)
-    sys.exit(1)
+    Github = None
+    Auth = None
 
 # ─── pr:* state labels ─────────────────────────────────────────────────
 LABEL_DRAFT = "pr:draft"
@@ -121,7 +121,7 @@ def get_ci_status(pr) -> str:
 
 def determine_label(pr) -> str:
     """Determine the correct state label for a PR."""
-    if pr.is_merged:
+    if pr.merged:
         return LABEL_MERGED
 
     if pr.draft:
@@ -189,6 +189,10 @@ def main():
 
     if not all([github_token, repository]):
         print("ERROR: Missing required environment variables (GITHUB_TOKEN, REPOSITORY)", file=sys.stderr)
+        sys.exit(1)
+
+    if Github is None:
+        print("ERROR: PyGithub not installed. Run: pip install PyGithub", file=sys.stderr)
         sys.exit(1)
 
     github = Github(auth=Auth.Token(github_token))

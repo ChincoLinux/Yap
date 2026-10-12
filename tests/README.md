@@ -1,11 +1,11 @@
 # Yap — Suite de Pruebas
 
-Suite completa: **21 archivos, 825 pruebas**, sin LLM, sin GPU y sin Internet.
+Suite completa: **30 archivos, 1075 pruebas**, sin LLM, sin GPU y sin Internet.
 La unica dependencia externa es `pytest`.
 
 ```bash
 python3 -m pip install pytest    # unica dependencia
-python3 -m pytest tests/ -v      # 825 pruebas
+python3 -m pytest tests/ -v      # 1075 pruebas
 ```
 
 ---
@@ -19,10 +19,10 @@ tests/
 ├── report/                      # Reportes generados con --report
 ├── test_yap_security.py        #  25  Whitelist, inyeccion, limites
 ├── test_yap_security_audit.py  #  27  Fuzzing: traversal, esquemas, unicode, JSON
-├── test_yap_functional.py      #  59  Apps, webfetch, intents, PSeInt, TUI, cursos
+├── test_yap_functional.py      #  60  Apps, webfetch, intents, PSeInt, TUI, cursos
 ├── test_yap_evaluacion.py      #  63  Evaluacion automatica de actividades (#23)
-├── test_yap_super.py           #  58  Super Yap Gradio Cloud Run (#91)
-├── test_yap_deb.py             #  34  Empaquetado .deb (#31)
+├── test_yap_super.py           #  69  Super Yap Gradio Cloud Run (#91)
+├── test_yap_deb.py             #  44  Empaquetado .deb (#31)
 ├── test_yap_ejercicios.py      #  35  Catalogo de ejercicios PSeInt (#27)
 ├── test_yap_accesibilidad.py   #  90  Alto contraste, Orca, teclado (#37)
 ├── test_yap_sessions.py        #  75  Sesiones pausables y CRUD (#21)
@@ -33,18 +33,28 @@ tests/
 ├── test_yap_feedback.py        #  32  Feedback pedagogico (#29)
 ├── test_yap_rutas_teclado.py   #  32  Rutas rapidas sin pasar por el LLM
 ├── test_yap_config_escolar.py  #  21  WhitelistsApps.conf / web.conf de aula
-├── test_yap_confirmation.py    #  20  Confirmacion humana (#12)
+├── test_yap_confirmation.py    #  31  Confirmacion humana (#12)
 ├── test_yap_history.py         #  17  Historial persistente entre sesiones (#13)
-├── test_yap_apparmor.py        #  17  Perfil AppArmor (#14)
+├── test_yap_apparmor.py        #  24  Perfil AppArmor (#14)
 ├── test_yap_terminal.py        #   9  Ningun proceso hereda la terminal
 ├── test_yap_onboarding.py      #   3  Tutorial de bienvenida
+├── test_benchmark.py           #   9  Harness de benchmark (#40)
+├── test_label_pr_state.py      #   4  Etiquetado de estado del PR (#102)
+├── test_packaging_scripts.py   #   5  Scripts de empaquetado (#34)
+├── test_yap_consumo.py         #  11  Consumo de tokens del LLM local (#85)
+├── test_yap_desktop.py         #  27  Modulo yap_desktop: daemon, widget, tray
+├── test_yap_exportar.py        #  17  Exportacion de progreso para el docente (#30)
+├── test_yap_i18n.py            #  46  Multi-idioma es/en/arn (#36)
+├── test_yap_postinstall.py     #  22  Post-instalacion: comandos y servicios (#129)
+├── test_yap_profesor.py        #  69  Modo profesor: panel del docente (#25)
 └── README.md                   # Este archivo
 ```
 
-Agrupadas por area, las 825 pruebas quedan asi: seguridad e inyeccion 52 ·
-funcional, PSeInt y evaluacion 157 · empaquetado, aula y AppArmor 75 ·
-perfil, RAG, sesiones y Super Yap 255 · accesibilidad, adaptacion y telemetria
-176 · interaccion, feedback e historial 110.
+Agrupadas por area, las 1075 pruebas quedan asi: seguridad e inyeccion 52 ·
+funcional, PSeInt y evaluacion 158 · empaquetado, aula y AppArmor 92 ·
+perfil, RAG, sesiones, profesor y Super Yap 335 · accesibilidad, adaptacion y
+telemetria 187 · interaccion, feedback, historial e i18n 167 · CI, desktop y
+utilidades 84.
 
 ---
 
@@ -54,22 +64,22 @@ Hay dos caminos y no son equivalentes:
 
 | | `pytest tests/` | `python3 tests/run_tests.py` |
 |---|---|---|
-| Archivos | los 21 | los 5 de `ARCHIVOS_PYTEST` |
-| Pruebas | 825 | 237 |
+| Archivos | los 30 | los 6 de `ARCHIVOS_PYTEST` |
+| Pruebas | 1075 | 307 |
 | Chequeos de infraestructura | no | si (5) |
 | Chequeo estatico de `yap.py` | no | si (5) |
 | Mapeo de 26 requisitos | no | si |
 | Reporte TXT | no | con `--report` |
 | Sirve para | desarrollo y CI | auditoria de entrega |
 
-`run_tests.py` solo conoce los 5 archivos que estan en la constante
-`ARCHIVOS_PYTEST` (los que cubren requisitos con ID propio). Los otros 16
+`run_tests.py` solo conoce los 6 archivos que estan en la constante
+`ARCHIVOS_PYTEST` (los que cubren requisitos con ID propio). Los otros 24
 cubren modulos sin requisito catalogado, asi que se ejecutan solo con pytest.
 
 Las cifras no coinciden exactamente: `parse_pytest_output()` cuenta lineas con
-`PASSED` y `FAILED`, asi que un test `SKIPPED` no suma. En los 5 archivos del
-runner hay 2 skips (237 contados, 239 recogidos) y en la suite completa hay 2
-tambien (825 recogidos).
+`PASSED` y `FAILED`, asi que un test `SKIPPED` no suma. En los 6 archivos del
+runner hay 24 skips (283 contados, 307 recogidos) y en la suite completa hay
+24 tambien (1051 contados, 1075 recogidos).
 
 ---
 

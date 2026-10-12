@@ -1,0 +1,10 @@
+[Unit]
+Description=Yap — Sincronización de configuraciones y whitelists
+Documentation=https://github.com/ChincoLinux/Yap
+ConditionEnvironment=!YAP_OFFLINE=1
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/yap --sync
+StandardOutput=journal
+StandardError=journal

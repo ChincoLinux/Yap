@@ -31,8 +31,11 @@ PROGRESO_MEDIO = {
                 "completada": False,
                 "total_actividades": 4,
                 "actividades": {
-                    "1": {"puntaje": 80, "aprobado": True,
-                          "fecha_aprobacion": "2026-09-10T10:00:00"},
+                    "1": {
+                        "puntaje": 80,
+                        "aprobado": True,
+                        "fecha_aprobacion": "2026-09-10T10:00:00",
+                    },
                     "2": {"puntaje": 40, "aprobado": False},
                 },
             }
@@ -62,15 +65,17 @@ class ProfesorTestBase:
         self.tmpdir = tempfile.mkdtemp()
         self.aula = os.path.join(self.tmpdir, "aula")
         self.patchers = [
-            mock.patch.object(yap, "PROFILE_FILE",
-                              os.path.join(self.tmpdir, "profile.json")),
-            mock.patch.object(yap, "PROGRESS_FILE",
-                              os.path.join(self.tmpdir, "progress.json")),
+            mock.patch.object(
+                yap, "PROFILE_FILE", os.path.join(self.tmpdir, "profile.json")
+            ),
+            mock.patch.object(
+                yap, "PROGRESS_FILE", os.path.join(self.tmpdir, "progress.json")
+            ),
             mock.patch.object(yap, "AULA_DIR", self.aula),
-            mock.patch.object(yap, "TELEMETRY_FILE",
-                              os.path.join(self.tmpdir, "telemetry.json")),
-            mock.patch.object(yap, "CURSOS_DIR",
-                              os.path.join(self.tmpdir, "cursos")),
+            mock.patch.object(
+                yap, "TELEMETRY_FILE", os.path.join(self.tmpdir, "telemetry.json")
+            ),
+            mock.patch.object(yap, "CURSOS_DIR", os.path.join(self.tmpdir, "cursos")),
         ]
         for p in self.patchers:
             p.start()
@@ -86,7 +91,9 @@ class ProfesorTestBase:
 
     def escribir_progreso(self, nombre, datos, subcarpeta=None, perfil=None):
         """Write a progress.json the way a USB copy would carry it."""
-        base = self.tmpdir if subcarpeta is None else os.path.join(self.tmpdir, subcarpeta)
+        base = (
+            self.tmpdir if subcarpeta is None else os.path.join(self.tmpdir, subcarpeta)
+        )
         os.makedirs(base, exist_ok=True)
         path = os.path.join(base, nombre)
         with open(path, "w", encoding="utf-8") as f:
@@ -99,10 +106,15 @@ class ProfesorTestBase:
     def importar(self, nombre, datos):
         """Shortcut: leave one student already imported into the aula."""
         os.makedirs(self.aula, exist_ok=True)
-        registro = {"nombre": nombre, "origen": "/tmp/x.json",
-                    "importado": "2026-09-15T08:00:00", "progreso": datos}
-        with open(os.path.join(self.aula, yap._slug(nombre) + ".json"),
-                  "w", encoding="utf-8") as f:
+        registro = {
+            "nombre": nombre,
+            "origen": "/tmp/x.json",
+            "importado": "2026-09-15T08:00:00",
+            "progreso": datos,
+        }
+        with open(
+            os.path.join(self.aula, yap._slug(nombre) + ".json"), "w", encoding="utf-8"
+        ) as f:
             json.dump(registro, f)
         return registro
 
@@ -110,6 +122,7 @@ class ProfesorTestBase:
 # ============================================================
 # 1. EL ROL EN EL PERFIL
 # ============================================================
+
 
 class TestRol(ProfesorTestBase):
     """Requisito: el panel exige un perfil con rol de profesor."""
@@ -153,6 +166,7 @@ class TestRol(ProfesorTestBase):
 # 2. EL PIN
 # ============================================================
 
+
 class TestPin(ProfesorTestBase):
     """Requisito: autenticacion simple con PIN."""
 
@@ -170,8 +184,19 @@ class TestPin(ProfesorTestBase):
 
     def test_el_pin_no_se_guarda_en_claro(self):
         yap.definir_pin("4821")
-        contenido = open(yap.PROFILE_FILE, encoding="utf-8").read()
-        assert "4821" not in contenido
+        with open(yap.PROFILE_FILE, encoding="utf-8") as f:
+            perfil = json.load(f)
+        datos = perfil.get("profesor") or {}
+        # pin_hash y pin_sal son opacos por diseño; lo que no debe ocurrir es
+        # que el PIN aparezca como valor en claro en otro campo. Se excluyen
+        # porque un hash aleatorio puede contener "4821" por pura coincidencia
+        # (flake observado en la PR #181, issue #182).
+        restante = json.dumps(perfil)
+        for opaco in (datos.get("pin_hash", ""), datos.get("pin_sal", "")):
+            restante = restante.replace(opaco, "")
+        assert datos.get("pin_hash"), "el PIN debe guardarse como hash"
+        assert datos.get("pin_hash") != "4821"
+        assert "4821" not in restante
 
     def test_dos_perfiles_con_el_mismo_pin_no_comparten_hash(self):
         """Sal distinta por perfil: un hash no delata al otro."""
@@ -201,6 +226,7 @@ class TestPin(ProfesorTestBase):
 # ============================================================
 # 3. AUTORIZACION
 # ============================================================
+
 
 class TestAutorizacion(ProfesorTestBase):
     """Requisito: el panel no se abre sin rol y sin PIN correcto."""
@@ -245,6 +271,7 @@ class TestAutorizacion(ProfesorTestBase):
 # 4. IMPORTACION
 # ============================================================
 
+
 class TestImportacion(ProfesorTestBase):
     """Requisito: importar progress.json desde un directorio o USB."""
 
@@ -267,14 +294,19 @@ class TestImportacion(ProfesorTestBase):
         assert importados == ["ana"]
 
     def test_el_nombre_sale_del_profile_vecino(self):
-        self.escribir_progreso("progress.json", PROGRESO_MEDIO, subcarpeta="usb/eq1",
-                               perfil={"nombre": "María González"})
+        self.escribir_progreso(
+            "progress.json",
+            PROGRESO_MEDIO,
+            subcarpeta="usb/eq1",
+            perfil={"nombre": "María González"},
+        )
         importados, _ = yap.importar_progreso(os.path.join(self.tmpdir, "usb"))
         assert importados == ["María González"]
 
     def test_el_profile_vecino_no_se_importa_como_progreso(self):
-        self.escribir_progreso("progress.json", PROGRESO_MEDIO, subcarpeta="usb",
-                               perfil={"nombre": "Ana"})
+        self.escribir_progreso(
+            "progress.json", PROGRESO_MEDIO, subcarpeta="usb", perfil={"nombre": "Ana"}
+        )
         importados, _ = yap.importar_progreso(os.path.join(self.tmpdir, "usb"))
         assert importados == ["Ana"]
         assert len(yap.cargar_alumnos()) == 1
@@ -322,6 +354,7 @@ class TestImportacion(ProfesorTestBase):
 # 5. METRICAS
 # ============================================================
 
+
 class TestMetricas(ProfesorTestBase):
     """Requisito: % completado, nota promedio y ultima sesion."""
 
@@ -353,7 +386,9 @@ class TestMetricas(ProfesorTestBase):
         assert m["ultima"].startswith("2026-09-10")
 
     def test_sin_fechas_la_ultima_es_none(self):
-        assert yap.metricas_alumno(self.importar("Pedro", PROGRESO_BAJO))["ultima"] is None
+        assert (
+            yap.metricas_alumno(self.importar("Pedro", PROGRESO_BAJO))["ultima"] is None
+        )
 
     def test_filtro_por_curso(self):
         registro = self.importar("Maria", PROGRESO_MEDIO)
@@ -373,6 +408,7 @@ class TestMetricas(ProfesorTestBase):
 # ============================================================
 # 6. PANEL, FICHA Y CSV
 # ============================================================
+
 
 class TestPanel(ProfesorTestBase):
     """Requisito: panel TUI con la lista de estudiantes."""
@@ -454,6 +490,7 @@ class TestExportacionCSV(ProfesorTestBase):
         self.importar("González, María", PROGRESO_MEDIO)
         destino = yap.exportar_csv(os.path.join(self.tmpdir, "reporte.csv"))
         import csv as _csv
+
         with open(destino, encoding="utf-8", newline="") as f:
             filas = list(_csv.reader(f))
         assert filas[1][0] == "González, María"
@@ -462,6 +499,7 @@ class TestExportacionCSV(ProfesorTestBase):
 # ============================================================
 # 7. ENRUTADO Y DESPACHO
 # ============================================================
+
 
 class TestEnrutado(ProfesorTestBase):
     """Requisito: 'profesor' no depende del clasificador."""
@@ -475,7 +513,9 @@ class TestEnrutado(ProfesorTestBase):
     def test_conserva_mayusculas_del_nombre(self):
         """El nombre del estudiante es un parametro, no una orden."""
         assert yap.interpret("profesor estudiante María González") == (
-            "profesor", "estudiante María González")
+            "profesor",
+            "estudiante María González",
+        )
 
     def test_no_llama_al_clasificador(self):
         with mock.patch.object(yap, "classify_intent") as clasificador:
@@ -484,8 +524,9 @@ class TestEnrutado(ProfesorTestBase):
         clasificador.assert_not_called()
 
     def test_una_pregunta_sobre_profesores_sigue_al_llm(self):
-        with mock.patch.object(yap, "classify_intent",
-                               return_value=("query", "x")) as clasificador:
+        with mock.patch.object(
+            yap, "classify_intent", return_value=("query", "x")
+        ) as clasificador:
             yap.interpret("que hace un profesor de matematicas")
         clasificador.assert_called_once()
 
@@ -495,7 +536,9 @@ class TestDespacho(ProfesorTestBase):
 
     def test_despacha_el_subcomando(self):
         with mock.patch.object(yap, "cmd_profesor", return_value="ok") as cmd:
-            yap.handle_action("profesor", "estudiante María", "profesor estudiante María")
+            yap.handle_action(
+                "profesor", "estudiante María", "profesor estudiante María"
+            )
         cmd.assert_called_once_with("estudiante", "María")
 
     def test_despacha_sin_subcomando(self):
@@ -531,7 +574,7 @@ class TestMenu(ProfesorTestBase):
         base = [c for _, c, *_ in yap._menu_principal()]
         yap.actualizar_rol("profesor")
         con_rol = [c for _, c, *_ in yap._menu_principal()]
-        assert con_rol[:len(base) - 3] == base[:len(base) - 3]
+        assert con_rol[: len(base) - 4] == base[: len(base) - 4]
 
     def test_el_numero_del_profesor_enruta(self):
         yap.actualizar_rol("profesor")

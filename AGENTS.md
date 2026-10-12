@@ -159,6 +159,7 @@ Yap/
 ├── build-deb.sh           # Genera paquetes .deb (issue #31)
 ├── packaging/             # Plantillas DEBIAN (yap, yap-models-1b/3b)
 ├── deploy-yap.sh          # Despliegue masivo por SSH
+├── i18n/                  # Traducciones JSON (es, en, arn)
 ├── whitelist/             # Apps y dominios permitidos
 │   ├── apps.conf
 │   └── web.conf

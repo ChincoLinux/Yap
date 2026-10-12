@@ -335,6 +335,13 @@ sudo cp "$SCRIPT_DIR/whitelist/pseint/guia_ejercicios.pdf" "$PSEINT_DIR/"
 sudo mkdir -p "$CONFIG_DIR/cursos"
 sudo cp "$SCRIPT_DIR/cursos/"*.json "$CONFIG_DIR/cursos/" 2>/dev/null || true
 echo "  OK: cursos instalados en $CONFIG_DIR/cursos/"
+# ── i18n (#36) ─────────────────────────────────────────────
+sudo mkdir -p "$CONFIG_DIR/i18n" "$YAP_DIR/i18n"
+if [ -d "$SCRIPT_DIR/i18n" ]; then
+  sudo cp "$SCRIPT_DIR/i18n/"*.json "$CONFIG_DIR/i18n/" 2>/dev/null || true
+  sudo cp "$SCRIPT_DIR/i18n/"*.json "$YAP_DIR/i18n/" 2>/dev/null || true
+  echo "  OK: traducciones instaladas en $CONFIG_DIR/i18n/"
+fi
 # ── Agente opencode ──────────────────────────────────────────
 sudo mkdir -p "$CONFIG_DIR/agent"
 if [ -f "$SCRIPT_DIR/yap-agent.md" ]; then
@@ -346,6 +353,17 @@ fi
 sudo cp "$SCRIPT_DIR/yap.py" "$YAP_DIR/yap.py"
 sudo chmod +x "$YAP_DIR/yap.py"
 sudo ln -sf "$SCRIPT_DIR/yap.py" "$BIN_DIR/yap"
+# ── Unidades systemd (#129) ──────────────────────────────────
+if [ -d "$SCRIPT_DIR/packaging/systemd" ]; then
+  sudo mkdir -p /lib/systemd/system
+  sudo cp "$SCRIPT_DIR/packaging/systemd/"* /lib/systemd/system/ 2>/dev/null || true
+  if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+    sudo systemctl daemon-reload >/dev/null 2>&1 || true
+    sudo systemctl enable yap-daemon.service >/dev/null 2>&1 || true
+    sudo systemctl start yap-daemon.service >/dev/null 2>&1 || true
+    echo "  OK: servicio yap-daemon habilitado e iniciado"
+  fi
+fi
 
 # Configurar git hooks para mostrar información al cambiar de rama
 chmod +x "$SCRIPT_DIR/.githooks/post-checkout" 2>/dev/null || true
@@ -488,6 +506,11 @@ APPARMOR_OK=$(aa-status 2>/dev/null | grep -q "yap" && echo "ACTIVO" || echo "NO
 printf "  | %-20s | %-30s |\n" "AppArmor"       "$APPARMOR_OK"
 echo "  +----------------------+--------------------------------+"
 echo ""
+
+if command -v yap >/dev/null 2>&1; then
+  echo "  Verificación de salud post-instalación:"
+  yap --postinstall-check 2>/dev/null || true
+fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  ✓ YAP v$YAP_VERSION — Instalación completada"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -52,6 +52,7 @@ class TelemetryTestBase:
 # 1. ALMACENAMIENTO
 # ============================================================
 
+
 class TestTelemetryStore(TelemetryTestBase):
     """Requisito: telemetry.json con escritura atómica."""
 
@@ -83,13 +84,16 @@ class TestTelemetryStore(TelemetryTestBase):
 
     def test_error_de_escritura_no_rompe_el_flujo(self):
         """La telemetría nunca debe interrumpir lo que el usuario está haciendo."""
-        with mock.patch.object(yap, "_write_telemetry_file", side_effect=OSError("disco lleno")):
+        with mock.patch.object(
+            yap, "_write_telemetry_file", side_effect=OSError("disco lleno")
+        ):
             yap.registrar_uso("query")  # no debe lanzar
 
 
 # ============================================================
 # 2. REGISTRO DE USO
 # ============================================================
+
 
 class TestRegistrarUso(TelemetryTestBase):
     """Requisito: contadores por acción."""
@@ -132,6 +136,7 @@ class TestRegistrarUso(TelemetryTestBase):
 # 3. FUNCIONES SIN USAR
 # ============================================================
 
+
 class TestAccionesSinUsar(TelemetryTestBase):
     """Requisito: detectar funciones que nunca se han usado."""
 
@@ -150,6 +155,7 @@ class TestAccionesSinUsar(TelemetryTestBase):
 # ============================================================
 # 4. COMANDO telemetria
 # ============================================================
+
 
 class TestCmdTelemetria(TelemetryTestBase):
     """Requisito: `yap telemetria` muestra el resumen."""
@@ -196,6 +202,7 @@ class TestCmdTelemetria(TelemetryTestBase):
 # 5. EXPORTACIÓN ANÓNIMA
 # ============================================================
 
+
 class TestExportacion(TelemetryTestBase):
     """Requisito: exportación anónima y opt-in."""
 
@@ -225,7 +232,6 @@ class TestExportacion(TelemetryTestBase):
         yap.registrar_uso("query")
         yap.cmd_telemetria("exportar")
         with open(self.efile, encoding="utf-8") as _f:
-
             contenido = _f.read()
         assert "creado" not in contenido
         assert "actualizado" not in contenido
@@ -234,7 +240,6 @@ class TestExportacion(TelemetryTestBase):
         yap.registrar_uso("query")
         yap.cmd_telemetria("exportar")
         with open(self.efile, encoding="utf-8") as _f:
-
             contenido = _f.read()
         assert os.path.expanduser("~") not in contenido
         assert "/home/" not in contenido
@@ -252,16 +257,17 @@ class TestExportacion(TelemetryTestBase):
 # 6. PRIVACIDAD
 # ============================================================
 
+
 class TestPrivacidad(TelemetryTestBase):
     """Requisito: no se registra contenido y no se transmite nada."""
 
     def test_no_se_guarda_el_parametro_de_la_accion(self):
         """El texto que escribe el estudiante no debe quedar registrado."""
         with mock.patch.object(yap, "cmd_query", return_value="respuesta"):
-            yap.handle_action("query", "mi nombre es Juan Perez", "mi nombre es Juan Perez")
-        with open(self.tfile, encoding="utf-8") as _f:
-
-            contenido = _f.read()
+            yap.handle_action(
+                "query", "mi nombre es Juan Perez", "mi nombre es Juan Perez"
+            )
+        contenido = open(self.tfile, encoding="utf-8").read()
         assert "Juan" not in contenido
         assert "nombre" not in contenido
 
@@ -296,6 +302,7 @@ class TestPrivacidad(TelemetryTestBase):
 # ============================================================
 # 7. ENRUTADO Y DESPACHO
 # ============================================================
+
 
 class TestTelemetryRouting(TelemetryTestBase):
     """Requisito: 'telemetria' se enruta sin pasar por el LLM."""

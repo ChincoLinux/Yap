@@ -45,7 +45,7 @@ lector de pantalla. Todas esas capacidades viven en un unico archivo,
 | [docs/RAG.md](docs/RAG.md) | RAG local con BM25, sin dependencias |
 | [docs/SECURITY-AUDIT.md](docs/SECURITY-AUDIT.md) | Auditoria de seguridad post-talleres |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Roadmap y prioridades |
-| [tests/README.md](tests/README.md) | Suite de pruebas: 21 archivos, 825 tests |
+| [tests/README.md](tests/README.md) | Suite de pruebas: 30 archivos, 1075 tests |
 | [AGENTS.md](AGENTS.md) | Guia para agentes IA que colaboran en el repo |
 | [CLAUDE.md](CLAUDE.md) | Arquitectura tecnica resumida |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Como contribuir |
@@ -70,7 +70,7 @@ Yap/
 ├── cursos/                # Cursos en JSON (FPY1101.json)
 ├── packaging/             # Plantillas DEBIAN: yap, yap-models-1b, yap-models-3b
 ├── apparmor/              # Perfiles AppArmor del agente (#14)
-├── tests/                 # 21 archivos de pruebas, 825 tests + run_tests.py
+├── tests/                 # 30 archivos de pruebas, 1075 tests + run_tests.py
 ├── docs/                  # DEPLOY, PACKAGING, RAG, ROADMAP, SECURITY-AUDIT, SUPER-YAP, TRUNK-BASED
 ├── scripts/ci/            # Utilidades de CI: trazabilidad PR, labels, preflight
 ├── agent-platform/        # Plantillas de despliegue de Super Yap
@@ -127,10 +127,10 @@ Construir un sistema Debian estable ultraligero con un agente IA local (**CPU-on
 | **Modelo** | Llama 3.2 3B Instruct (GGUF Q4_K_M) / 1B Instruct |
 | **Runtime** | llama.cpp (CPU-only, enlace estatico) |
 | **RAM minima** | ~3.5 GB (main), ~3.1 GB (lowmem), ~1.8 GB (ultra-lowmem) |
-| **Contexto** | `MAX_CTX = 2048` tokens (constante en `yap.py`; cada rama ajusta su `llama-cli`) |
+| **Contexto** | 4096 tokens (main) / 2048 tokens (lowmem, ultra-lowmem) |
 | **Historial** | `MAX_HISTORY = 6` turnos en memoria; `MAX_HISTORY_SESSIONS = 20` sesiones en disco |
-| **Latencia estimada** | 5-10 s primeros tokens en CPU (2 nucleos), ~40 tok/s |
-| **Idioma** | Espanol |
+| **Latencia estimada** | 5-10 s primeras tokens en CPU (2 nucleos), ~40 tok/s |
+| **Idioma** | Español (default), English, Mapudungun (`yap perfil idioma`) |
 | **SO destino** | Debian 13 (64-bit) |
 | **Dependencias Python** | ninguna — `yap.py` es stdlib-only por politica del proyecto |
 
@@ -983,7 +983,7 @@ en `tests/test_yap_adaptive.py` (45 pruebas).
   LLM no responde.
 - **Clasificador debil en 1B**: con el modelo de `ultra-lowmem` el clasificador de
   intenciones acierta poco. De ahi las rutas por teclado de la seccion 8.4.
-- **Idioma**: optimizado para espanol; el perfil admite `en` pero el resultado
+- **Idioma**: interfaz y LLM siguen el perfil (`yap perfil idioma es|en|arn`); el clasificador interno sigue en español.
   es inconsistente.
 - **Sin GPU ni aceleracion hardware**: CPU-only por diseno, para que quepa en
   el hardware del aula.
@@ -1061,7 +1061,7 @@ Este proyecto se distribuye bajo **licencia MIT** (ver [LICENSE](LICENSE)). El m
 
 ## 12. Pruebas y verificacion
 
-La suite tiene **21 archivos y 825 pruebas**. La unica dependencia externa es
+La suite tiene **30 archivos y 1075 pruebas**. La unica dependencia externa es
 `pytest`: ni el modelo, ni la GPU, ni Internet. Detalle por archivo y por
 requisito en [tests/README.md](tests/README.md).
 
@@ -1070,7 +1070,7 @@ requisito en [tests/README.md](tests/README.md).
 ```bash
 python3 -m pip install pytest          # unica dependencia
 
-python3 -m pytest tests/ -v            # 825 pruebas (desarrollo y CI)
+python3 -m pytest tests/ -v            # 1075 pruebas (desarrollo y CI)
 python3 -m pytest tests/test_yap_rag.py -v   # un area
 python3 -m pytest tests/ -v -k whitelist    # por palabra clave
 
@@ -1082,8 +1082,8 @@ python3 tests/run_tests.py --report    # runner + tests/report/report_<fecha>.tx
 
 | | `pytest tests/` | `python3 tests/run_tests.py` |
 |---|---|---|
-| Archivos | los 21 | los 5 de `ARCHIVOS_PYTEST` |
-| Pruebas | 825 | 237 |
+| Archivos | los 30 | los 6 de `ARCHIVOS_PYTEST` |
+| Pruebas | 1075 | 307 |
 | Chequeos de infraestructura | no | si (5) |
 | Chequeo estatico de `yap.py` | no | si (5) |
 | Mapeo de 26 requisitos | no | si |
@@ -1091,8 +1091,9 @@ python3 tests/run_tests.py --report    # runner + tests/report/report_<fecha>.tx
 | Para que | desarrollo, CI | auditoria de entrega |
 
 Los numeros no cuadran al decimal porque el parser del runner cuenta lineas con
-`PASSED` y `FAILED`: un test `SKIPPED` no suma. Hay 2 skips en los cinco
-archivos del runner (237 contados, 239 recogidos) y 2 en la suite completa.
+`PASSED` y `FAILED`: un test `SKIPPED` no suma. Hay 24 skips en los seis
+archivos del runner (283 contados, 307 recogidos) y 24 en la suite completa
+(1051 contados, 1075 recogidos).
 
 `run_tests.py` ejecuta 5 etapas en orden: pytest sobre los archivos de
 `ARCHIVOS_PYTEST`, verificaciones de infraestructura, verificacion estatica del
@@ -1145,7 +1146,7 @@ Once workflows en `.github/workflows/`. El principal, `test.yml`, corre en cada
 
 | Job | Que hace |
 |---|---|
-| **unit-tests** | Python 3.12: seguridad, funcional, evaluacion y Super Yap, mas verificacion estatica (`shell=True`, `eval()`, `os.system()`) y validacion de las whitelists del repo |
+| **unit-tests** | 1075 pruebas en Python 3.12 (seguridad, funcional, i18n, empaquetado, desktop, post-install) + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
 | **branch-check** | Verifica que `MODEL_PATH` en cada rama apunte al modelo correcto |
 | **results** | Resumen del pipeline |
 
@@ -1173,7 +1174,11 @@ Reglas de rama que el CI y la doctrina A-Dev hacen cumplir:
 - Todo PR referencia su issue con `Closes #NNN` (una linea por issue).
 - La suite debe estar verde antes de pedir revision.
 
-[![Yap CI](https://github.com/VECTORG99/Yap/actions/workflows/test.yml/badge.svg)](https://github.com/VECTORG99/Yap/actions/workflows/test.yml)
+Pipeline definido en `.github/workflows/test.yml`. La revisión de calidad de cada
+PR (`ruff`, `pyflakes`) vive en `.github/workflows/pr-quality-suite.yml` y el
+checklist completo en [docs/REVIEW.md](docs/REVIEW.md).
+
+[![Yap CI](https://github.com/ChincoLinux/Yap/actions/workflows/test.yml/badge.svg)](https://github.com/ChincoLinux/Yap/actions/workflows/test.yml)
 
 ### 12.4 Pruebas de seguridad (`test_yap_security.py`, 25)
 
@@ -1280,6 +1285,18 @@ esperado, y el codigo de salida sigue siendo el de las pruebas.
 | | `test_web_conf_tiene_contenido` | web.conf tiene dominios validos |
 | **TestCodeQuality** | `test_no_shebang_incorrecto` | `#!/usr/bin/env python3` correcto |
 | | `test_imports_minimos` | Sin imports peligrosos (`socket`, `ctypes`, `pickle`, `base64`) |
+
+### 12.6 Resultados
+
+| Categoria | Resultado |
+|---|---|
+| Suite completa (`python3 -m pytest tests/ -q`) | **1051 passed, 24 skipped** (0 failed, 2026-10-11) |
+| Formato y lint (`ruff format --check` + `ruff check`) | ✓ limpio |
+| Estático (`pyflakes yap.py tests/`) | ✓ sin hallazgos |
+| CI en `main` | ✓ verde (Yap CI + Quality Gates) |
+
+Los 24 tests omitidos son los de Super Yap (nube suspendida, `cloud-suspended`)
+y los de infraestructura que sólo corren en VM (`--vm`).
 
 ---
 

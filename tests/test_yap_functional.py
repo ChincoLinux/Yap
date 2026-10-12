@@ -27,6 +27,7 @@ import yap
 # 1. APERTURA DE APLICACIONES
 # ============================================================
 
+
 class TestOpenApp:
     """Requisito: El agente puede abrir aplicaciones de la whitelist."""
 
@@ -39,6 +40,7 @@ class TestOpenApp:
 
     def teardown_method(self):
         import shutil
+
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     @patch("shutil.which")
@@ -60,17 +62,24 @@ class TestOpenApp:
     @patch("shutil.which")
     @patch("subprocess.Popen")
     @patch.object(yap, "notify")
-    def test_abrir_app_con_binario_alternativo(self, mock_notify, mock_popen, mock_which, mock_run):
+    def test_abrir_app_con_binario_alternativo(
+        self, mock_notify, mock_popen, mock_which, mock_run
+    ):
         """Si firefox-esr no existe, debe usar firefox."""
         mock_run.return_value = Mock(stdout="", stderr="")
-        mock_which.side_effect = lambda x: "/usr/bin/firefox" if x == "firefox" else None
+        mock_which.side_effect = (
+            lambda x: "/usr/bin/firefox" if x == "firefox" else None
+        )
 
         with patch.object(yap, "WHITELIST_APPS", self.apps_path):
             yap.cmd_open_app("Firefox")
 
         mock_popen.assert_called_once_with(
             ["/usr/bin/firefox"],
-            stdout=ANY, stderr=ANY, stdin=ANY
+            stdout=ANY,
+            stderr=ANY,
+            stdin=ANY,
+            start_new_session=ANY,
         )
 
     def test_app_no_encontrada_mensaje_graceful(self):
@@ -88,6 +97,7 @@ class TestOpenApp:
 # 2. WEBFETCH
 # ============================================================
 
+
 class TestWebfetch:
     """Requisito: El agente puede obtener y resumir contenido web."""
 
@@ -100,6 +110,7 @@ class TestWebfetch:
 
     def teardown_method(self):
         import shutil
+
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_dominio_bloqueado_mensaje_graceful(self):
@@ -141,6 +152,7 @@ class TestWebfetch:
 # 3. CLASIFICACION DE INTENCIONES
 # ============================================================
 
+
 class TestIntentClassification:
     """Requisito: El LLM clasifica intenciones (open_app, search, webfetch, query)."""
 
@@ -162,8 +174,7 @@ class TestIntentClassification:
     @patch("subprocess.run")
     def test_classify_webfetch(self, mock_run):
         mock_run.return_value = Mock(
-            stdout="webfetch|https://es.wikipedia.org/wiki/Linux",
-            stderr=""
+            stdout="webfetch|https://es.wikipedia.org/wiki/Linux", stderr=""
         )
         action, param = yap.classify_intent("Busca https://es.wikipedia.org/wiki/Linux")
         assert action == "webfetch"
@@ -177,6 +188,7 @@ class TestIntentClassification:
     def test_fallback_a_query(self):
         """Si el LLM falla, debe clasificar como query por defecto."""
         from subprocess import TimeoutExpired
+
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = TimeoutExpired("llama-cli", 30)
             action, param = yap.classify_intent("Hola")
@@ -185,7 +197,9 @@ class TestIntentClassification:
     @patch("subprocess.run")
     def test_classify_pseint(self, mock_run):
         """Entrada PSeInt debe clasificar como pseint."""
-        mock_run.return_value = Mock(stdout="pseint|como hago un ciclo mientras", stderr="")
+        mock_run.return_value = Mock(
+            stdout="pseint|como hago un ciclo mientras", stderr=""
+        )
         action, param = yap.classify_intent("como hago un ciclo mientras en pseint")
         assert action == "pseint"
         assert "ciclo mientras" in param
@@ -195,6 +209,7 @@ class TestIntentClassification:
 # 4. CONSULTA AL LLM
 # ============================================================
 
+
 class TestQuery:
     """Requisito: El agente consulta al LLM local."""
 
@@ -202,8 +217,7 @@ class TestQuery:
     def test_cmd_query_respuesta_exitosa(self, mock_run):
         """cmd_query debe devolver la respuesta del LLM."""
         mock_run.return_value = Mock(
-            stdout="Linux es un sistema operativo de codigo abierto.",
-            stderr=""
+            stdout="Linux es un sistema operativo de codigo abierto.", stderr=""
         )
         result = yap.cmd_query("Que es Linux?", store_history=False)
         assert "Linux" in result
@@ -215,6 +229,7 @@ class TestQuery:
     def test_cmd_query_timeout(self, mock_run, _red, _gradio):
         """Timeout debe devolver mensaje de advertencia (Super Yap no disponible)."""
         from subprocess import TimeoutExpired
+
         mock_run.side_effect = TimeoutExpired("llama-cli", 180)
         result = yap.cmd_query("test", store_history=False)
         assert "[WARN]" in result
@@ -231,6 +246,7 @@ class TestQuery:
 # ============================================================
 # 5. HISTORIAL DE CONVERSACION
 # ============================================================
+
 
 class TestHistory:
     """Requisito: El historial de conversacion funciona correctamente."""
@@ -264,6 +280,7 @@ class TestHistory:
 # 6. SISTEMA DE NOTIFICACIONES
 # ============================================================
 
+
 class TestNotifications:
     """Requisito: El agente emite notificaciones graficas."""
 
@@ -290,6 +307,7 @@ class TestNotifications:
 # 7. CARGA DE EJERCICIOS PSEINT
 # ============================================================
 
+
 class TestPSeIntConfig:
     """Pruebas para carga de ejercicios PSeInt."""
 
@@ -299,6 +317,7 @@ class TestPSeIntConfig:
 
     def teardown_method(self):
         import shutil
+
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_cargar_ejercicios_devuelve_lista(self):
@@ -340,6 +359,7 @@ class TestPSeIntConfig:
 # 9. TUTORIAL INTERACTIVO PSEINT
 # ============================================================
 
+
 class TestIntroduccionPSeInt:
     """Pruebas para el tutorial interactivo PSeInt."""
 
@@ -352,6 +372,7 @@ class TestIntroduccionPSeInt:
 
     def teardown_method(self):
         import shutil
+
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     @patch("yap.cmd_pseint")
@@ -440,6 +461,7 @@ class TestIntroduccionPSeInt:
 # 10. TUTOR PSEINT
 # ============================================================
 
+
 class TestPSeIntTutor:
     """Requisito: El agente asiste con PSeInt paso a paso."""
 
@@ -448,21 +470,21 @@ class TestPSeIntTutor:
         """cmd_pseint debe devolver respuesta del tutor."""
         mock_run.return_value = Mock(
             stdout="Para sumar dos numeros en PSeInt:\n\n"
-                   "1. Definir las variables\n"
-                   "2. Leer los valores\n"
-                   "3. Calcular la suma\n"
-                   "4. Mostrar el resultado\n\n"
-                   "Pseudocodigo:\n"
-                   "Algoritmo SumarNumeros\n"
-                   "  Definir a, b, suma Como Entero\n"
-                   "  Escribir \"Ingrese primer numero:\"\n"
-                   "  Leer a\n"
-                   "  Escribir \"Ingrese segundo numero:\"\n"
-                   "  Leer b\n"
-                   "  suma <- a + b\n"
-                   "  Escribir \"La suma es: \", suma\n"
-                   "FinAlgoritmo",
-            stderr=""
+            "1. Definir las variables\n"
+            "2. Leer los valores\n"
+            "3. Calcular la suma\n"
+            "4. Mostrar el resultado\n\n"
+            "Pseudocodigo:\n"
+            "Algoritmo SumarNumeros\n"
+            "  Definir a, b, suma Como Entero\n"
+            '  Escribir "Ingrese primer numero:"\n'
+            "  Leer a\n"
+            '  Escribir "Ingrese segundo numero:"\n'
+            "  Leer b\n"
+            "  suma <- a + b\n"
+            '  Escribir "La suma es: ", suma\n'
+            "FinAlgoritmo",
+            stderr="",
         )
         result = yap.cmd_pseint("como sumo dos numeros")
         assert result
@@ -472,6 +494,7 @@ class TestPSeIntTutor:
 # ============================================================
 # 8. ARQUITECTURA Y COMPONENTES
 # ============================================================
+
 
 class TestArchitecture:
     """Verificar que el codigo sigue la arquitectura definida."""
@@ -507,6 +530,7 @@ class TestArchitecture:
 
     def test_interpret_salir_por_numero_del_menu(self):
         import pytest
+
         n = str(len(yap._menu_principal()))
         with pytest.raises(SystemExit):
             yap.interpret(n)
@@ -515,7 +539,9 @@ class TestArchitecture:
         assert hasattr(yap, "load_whitelist") and callable(yap.load_whitelist)
 
     def test_load_domain_whitelist_existe(self):
-        assert hasattr(yap, "load_domain_whitelist") and callable(yap.load_domain_whitelist)
+        assert hasattr(yap, "load_domain_whitelist") and callable(
+            yap.load_domain_whitelist
+        )
 
     def test_cmd_pseint_existe(self):
         assert hasattr(yap, "cmd_pseint") and callable(yap.cmd_pseint)
@@ -530,6 +556,7 @@ class TestArchitecture:
 # ============================================================
 # 9. CHINCOLINUX TUI
 # ============================================================
+
 
 class TestChincoTUI:
     """Tests for ChincoLinux TUI display functions."""
@@ -546,6 +573,7 @@ class TestChincoTUI:
     def test_display_header_centers_title(self, mock_size):
         mock_size.return_value = self._mock_term_size(80, 24)
         from yap import display_header
+
         result = display_header("Test Title")
         assert "Test Title" in result
         assert "\033[" in result  # has ANSI color codes
@@ -554,6 +582,7 @@ class TestChincoTUI:
     def test_display_menu_returns_string(self, mock_size):
         mock_size.return_value = self._mock_term_size(80, 24)
         from yap import display_menu
+
         result = display_menu("MENU", ["Op1", "Op2"])
         assert "[1]" in result
         assert "[2]" in result
@@ -564,6 +593,7 @@ class TestChincoTUI:
     def test_display_menu_no_options(self, mock_size):
         mock_size.return_value = self._mock_term_size(80, 24)
         from yap import display_menu
+
         result = display_menu("Empty", [])
         assert "Empty" in result
         assert "[1]" not in result
@@ -572,6 +602,7 @@ class TestChincoTUI:
     def test_display_box_wraps_long_text(self, mock_size):
         mock_size.return_value = self._mock_term_size(50, 24)
         from yap import display_box
+
         long_text = "A" * 100
         result = display_box(long_text)
         assert "┌" in result
@@ -583,6 +614,7 @@ class TestChincoTUI:
     def test_display_box_empty_text(self, mock_size):
         mock_size.return_value = self._mock_term_size(80, 24)
         from yap import display_box
+
         result = display_box("")
         assert "┌" in result
         assert "┘" in result
@@ -592,6 +624,7 @@ class TestChincoTUI:
     def test_display_box_narrow_terminal(self, mock_size):
         mock_size.return_value = self._mock_term_size(5, 24)
         from yap import display_box
+
         result = display_box("Hi")
         # ponytail: on 5-col terminal (1 char internal width), chars split
         # per line. Main assertion: no crash.
@@ -602,6 +635,7 @@ class TestChincoTUI:
 # 10. SISTEMA DE CURSOS
 # ============================================================
 
+
 class TestCourseSystem:
     """Tests for course loading and listing."""
 
@@ -611,11 +645,19 @@ class TestCourseSystem:
         "horas": 50,
         "semanas": 10,
         "ras": [{"id": "RA1", "descripcion": "Test RA", "indicadores": ["IL1.1"]}],
-        "eas": [{"id": "EA1", "nombre": "Test EA", "descripcion": "Desc",
-                 "horas": 20,
-                 "actividades": [{"nombre": "Act1"}],
-                 "evaluaciones": []}],
-        "evaluaciones": [{"nombre": "Eval Final", "tipo": "transversal", "ponderacion": 40}],
+        "eas": [
+            {
+                "id": "EA1",
+                "nombre": "Test EA",
+                "descripcion": "Desc",
+                "horas": 20,
+                "actividades": [{"nombre": "Act1"}],
+                "evaluaciones": [],
+            }
+        ],
+        "evaluaciones": [
+            {"nombre": "Eval Final", "tipo": "transversal", "ponderacion": 40}
+        ],
     }
 
     def setup_method(self):
@@ -626,6 +668,7 @@ class TestCourseSystem:
     def teardown_method(self):
         self.patcher.stop()
         import shutil
+
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_cargar_curso_valido(self):
@@ -682,17 +725,21 @@ class TestCourseSystem:
 # 11. PROGRESO DEL ESTUDIANTE
 # ============================================================
 
+
 class TestProgreso:
     """Tests for progress save/load."""
 
     def setup_method(self):
         self.tmpdir = tempfile.mkdtemp()
-        self.patcher = patch("yap.PROGRESS_FILE", os.path.join(self.tmpdir, "progress.json"))
+        self.patcher = patch(
+            "yap.PROGRESS_FILE", os.path.join(self.tmpdir, "progress.json")
+        )
         self.patcher.start()
 
     def teardown_method(self):
         self.patcher.stop()
         import shutil
+
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_cargar_progreso_sin_archivo(self):
@@ -717,29 +764,44 @@ class TestProgreso:
 # 12. COMANDOS DE CURSO
 # ============================================================
 
+
 class TestCursoCommand:
     """Tests for cmd_curso and iniciar_ea."""
 
     VALID_COURSE = {
         "codigo": "TEST101",
         "nombre": "Curso de Prueba",
-        "horas": 50, "semanas": 10,
+        "horas": 50,
+        "semanas": 10,
         "ambiente": "Lab",
         "herramientas": ["Python"],
         "ras": [{"id": "RA1", "descripcion": "Test RA", "indicadores": ["IL1.1"]}],
-        "eas": [{"id": "EA1", "nombre": "Test EA", "descripcion": "Desc EA",
-                 "horas": 20, "ponderacion": 100,
-                 "actividades": [{"orden": 1, "nombre": "Act1", "descripcion": "Hacer algo"}],
-                 "evaluaciones": []}],
+        "eas": [
+            {
+                "id": "EA1",
+                "nombre": "Test EA",
+                "descripcion": "Desc EA",
+                "horas": 20,
+                "ponderacion": 100,
+                "actividades": [
+                    {"orden": 1, "nombre": "Act1", "descripcion": "Hacer algo"}
+                ],
+                "evaluaciones": [],
+            }
+        ],
         "evaluaciones": [],
     }
 
     def setup_method(self):
         self.tmpdir = tempfile.mkdtemp()
         self.cpat = patch("yap.CURSOS_DIR", self.tmpdir)
-        self.ppat = patch("yap.PROGRESS_FILE", os.path.join(self.tmpdir, "progress.json"))
+        self.ppat = patch(
+            "yap.PROGRESS_FILE", os.path.join(self.tmpdir, "progress.json")
+        )
         # #21: cmd_curso/iniciar_ea abren sesion — aislar para no tocar ~/.config/yap
-        self.spat = patch("yap.SESSIONS_FILE", os.path.join(self.tmpdir, "sessions.json"))
+        self.spat = patch(
+            "yap.SESSIONS_FILE", os.path.join(self.tmpdir, "sessions.json")
+        )
         self.cpat.start()
         self.ppat.start()
         self.spat.start()
@@ -752,6 +814,7 @@ class TestCursoCommand:
         self.ppat.stop()
         self.spat.stop()
         import shutil
+
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     @patch("shutil.get_terminal_size", return_value=Mock(columns=80, lines=24))
@@ -768,9 +831,22 @@ class TestCursoCommand:
         assert "ERROR" in result
 
     @patch("shutil.get_terminal_size", return_value=Mock(columns=80, lines=24))
-    @patch("builtins.input", side_effect=["salir"] + ["salir"] * 10)  # overview prompt, then activities
+    @patch(
+        "yap.cargar_curso", side_effect=PermissionError("[Errno 13] Permission denied")
+    )
+    def test_cmd_curso_sin_permisos_no_traza(self, mock_cargar, mock_size):
+        """#170: PermissionError se informa como mensaje, sin excepcion en pantalla."""
+        result = yap.cmd_curso("TEST101")
+        assert "[ERROR]" in result
+        assert "Permission denied" in result
+
+    @patch("shutil.get_terminal_size", return_value=Mock(columns=80, lines=24))
+    @patch(
+        "builtins.input", side_effect=["salir"] + ["salir"] * 10
+    )  # overview prompt, then activities
     def test_iniciar_ea_muestra_actividades(self, mock_input, mock_size):
         import io
+
         captured = io.StringIO()
         with patch("sys.stdout.write", captured.write):
             result = yap.iniciar_ea("TEST101", "EA1")

@@ -70,6 +70,21 @@ case "$1" in
             fi
         fi
 
+
+        # Unidades systemd
+        if [ -d "$YAP_SHARE/systemd" ]; then
+            mkdir -p /lib/systemd/system
+            for unit in "$YAP_SHARE/systemd"/*; do
+                [ -f "$unit" ] || continue
+                install -m 0644 "$unit" "/lib/systemd/system/$(basename "$unit")"
+            done
+            if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+                systemctl daemon-reload >/dev/null 2>&1 || true
+                systemctl enable yap-daemon.service >/dev/null 2>&1 || true
+                systemctl start yap-daemon.service >/dev/null 2>&1 || true
+            fi
+        fi
+
         # La regla de /usr/share/user-tmpfiles.d/yap.conf se ejecuta al iniciar
         # la sesion systemd del usuario. No crear archivos en HOME como root.
         ;;

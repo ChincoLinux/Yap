@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Yap
+GenericName=Asistente IA local
+Comment=Asistente educativo con IA local y CPU-only para ChincoLinux
+Exec=yap
+Icon=yap
+Terminal=true
+StartupNotify=false
+Categories=Education;Utility;ConsoleOnly;
+Keywords=IA;inteligencia artificial;educacion;asistente;llama;chatbot;

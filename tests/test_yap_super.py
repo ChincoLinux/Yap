@@ -1,6 +1,14 @@
 """
 test_yap_super.py — Super Yap (#91): Gradio Cloud Run + contexto
 
+⚠️  MÓDULO SUSPENDIDO — issue #168  ⚠️
+El backend cloud (Google Cloud Run + Gradio 5) está desactivado indefinidamente
+por decisión económica. Los tests que validan comportamiento cloud se omiten con
+pytest.mark.skip. Los tests de lógica local (contexto, PII, historial) siguen
+activos.
+
+Para reactivar los tests cloud: YAP_SUPER_ENABLED=1 + YAP_SUPER_ENDPOINT=<url>.
+
 Sin Internet, sin LLM, sin llama-cli. Todo mockeado.
 El 8B local (super_yap.py / hiperparametros llama.cpp) ya no existe:
 si el modelo local tarda 3 min, Yap consulta Gradio en Cloud Run.
@@ -9,16 +17,21 @@ si el modelo local tarda 3 min, Yap consulta Gradio en Cloud Run.
 import json
 import os
 import sys
+import pytest
 from unittest.mock import MagicMock, patch
 
+# Marca usada en tests que requieren cloud activo (suspendida)
+_CLOUD_SKIP = pytest.mark.skip(
+    reason="Super Yap cloud suspendido por decisión económica (issue #168). "
+    "Reactivar con YAP_SUPER_ENABLED=1 + YAP_SUPER_ENDPOINT=<url>."
+)
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-import yap
+import yap  # noqa: E402
 
 
 def _json_endpoint():
-    return (
-        f"http://{yap.SUPER_NUBE_HOST_LEGACY}:{yap.SUPER_NUBE_PORT_LEGACY}/v1/query"
-    )
+    return f"http://{yap.SUPER_NUBE_HOST_LEGACY}:{yap.SUPER_NUBE_PORT_LEGACY}/v1/query"
 
 
 class SuperTestBase:
@@ -29,9 +42,7 @@ class SuperTestBase:
         yap._SUPER_ELECCION = None
         yap._gradio_reset_cache()
         self._env_backup = {
-            k: os.environ.get(k)
-            for k in list(os.environ)
-            if k.startswith("YAP_SUPER")
+            k: os.environ.get(k) for k in list(os.environ) if k.startswith("YAP_SUPER")
         }
         for k in list(os.environ):
             if k.startswith("YAP_SUPER"):
@@ -88,7 +99,9 @@ class TestConsultaParaSuper(SuperTestBase):
         assert yap.consulta_para_super("que hora es") is False
 
     def test_pista_explica_delega(self):
-        assert yap.consulta_para_super("explica la diferencia entre while y for") is True
+        assert (
+            yap.consulta_para_super("explica la diferencia entre while y for") is True
+        )
 
     def test_texto_largo_delega(self):
         assert yap.consulta_para_super("x" * 80) is True
@@ -112,7 +125,10 @@ class TestHostSuperPermitido(SuperTestBase):
         assert yap._host_super_permitido("http://137.184.146.113:80/v1/query") is True
 
     def test_run_app_ajeno_bloqueado(self):
-        assert yap._host_super_permitido("https://otro.southamerica-west1.run.app") is False
+        assert (
+            yap._host_super_permitido("https://otro.southamerica-west1.run.app")
+            is False
+        )
 
     def test_rfc1918_permitido(self):
         assert yap._host_super_permitido("http://10.40.0.10:8742/v1/query") is True
@@ -170,16 +186,22 @@ class TestSanitizarYPayload(SuperTestBase):
 class TestDelegacion(SuperTestBase):
     def test_deshabilitada_no_delega(self):
         os.environ["YAP_SUPER_ENABLED"] = "0"
-        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        assert (
+            yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        )
 
+    @_CLOUD_SKIP
     def test_auto_sin_internet_no_delega(self):
         """Sin red, auto se queda en el Llama local."""
         assert yap._super_habilitado() is True
         assert yap.super_configurada() is True
         assert yap._hay_internet() is False
-        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        assert (
+            yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        )
         assert yap.debe_delegar_super("hola") is False
 
+    @_CLOUD_SKIP
     def test_auto_con_internet_delega_a_la_nube(self):
         os.environ["YAP_SUPER_INTERNET"] = "1"
         assert yap._hay_internet() is True
@@ -190,16 +212,22 @@ class TestDelegacion(SuperTestBase):
     def test_auto_ip_legacy_sin_env_no_delega(self):
         os.environ["YAP_SUPER_ENDPOINT"] = _json_endpoint()
         assert yap._super_habilitado() is False
-        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        assert (
+            yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        )
 
     def test_auto_loopback_sin_env_no_delega(self):
         os.environ["YAP_SUPER_ENDPOINT"] = "http://127.0.0.1:8742/v1/query"
         assert yap._super_habilitado() is False
-        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        assert (
+            yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        )
 
     def test_habilitada_compleja_tampoco_adelanta(self):
         self.habilitar()
-        assert yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        assert (
+            yap.debe_delegar_super("explica la diferencia entre while y for") is False
+        )
 
     def test_habilitada_corta_no_delega(self):
         self.habilitar()
@@ -210,21 +238,25 @@ class TestDelegacion(SuperTestBase):
         os.environ["YAP_SUPER_ENDPOINT"] = "http://10.40.0.10:8742/v1/query"
         assert yap.super_configurada() is False
 
+    @_CLOUD_SKIP
     def test_lan_con_token_si_configurada(self):
         os.environ["YAP_SUPER_ENABLED"] = "1"
         os.environ["YAP_SUPER_ENDPOINT"] = "http://10.40.0.10:8742/v1/query"
         os.environ["YAP_SUPER_TOKEN"] = "aula"
         assert yap.super_configurada() is True
 
+    @_CLOUD_SKIP
     def test_loopback_sin_token_si_configurada(self):
         self.habilitar()
         assert yap.super_configurada() is True
 
+    @_CLOUD_SKIP
     def test_loopback_no_exige_7gb(self):
         """Ya no hay 8B local: loopback no pide 7 GB de RAM."""
         self.habilitar(endpoint="http://127.0.0.1:8742/v1/query")
         assert yap.super_configurada() is True
 
+    @_CLOUD_SKIP
     def test_gradio_configurada_sin_env(self):
         assert yap._host_es_super_gradio(yap._super_endpoint()) is True
         assert yap.super_configurada() is True
@@ -250,12 +282,15 @@ class TestCmdQuerySuper(SuperTestBase):
         assert "local-ok" in out
 
     @patch("urllib.request.urlopen")
+    @_CLOUD_SKIP
     def test_respuesta_contrato_yap_conserva_historial(self, mock_urlopen):
         self.habilitar()
         yap.HISTORY.append(("que es un mientras", "Un ciclo con condicion."))
-        mock_urlopen.return_value = _urlopen_json({
-            "texto": "Algoritmo Ejemplo...",
-        })
+        mock_urlopen.return_value = _urlopen_json(
+            {
+                "texto": "Algoritmo Ejemplo...",
+            }
+        )
         out = yap.cmd_query_super("ahora un ejemplo", store_history=True)
         assert "Algoritmo Ejemplo" in out
         assert "[WARN]" not in out
@@ -269,6 +304,7 @@ class TestCmdQuerySuper(SuperTestBase):
 
     @patch("yap.cmd_query", return_value="fallback-local")
     @patch("urllib.request.urlopen", side_effect=TimeoutError("timeout"))
+    @_CLOUD_SKIP
     def test_timeout_cae_a_local(self, _red, mock_local):
         self.habilitar()
         out = yap.cmd_query_super("explica listas", store_history=False)
@@ -278,6 +314,7 @@ class TestCmdQuerySuper(SuperTestBase):
         assert yap.etiqueta_motor() == "DEGRADADO"
 
     @patch("urllib.request.urlopen")
+    @_CLOUD_SKIP
     def test_token_en_header_no_en_json(self, mock_urlopen):
         self.habilitar(token="secreto-aula")
         mock_urlopen.return_value = _urlopen_json({"texto": "ok"})
@@ -311,6 +348,7 @@ class TestInterpretSuper(SuperTestBase):
         assert action == "query"
 
     @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    @_CLOUD_SKIP
     def test_con_internet_la_consulta_va_a_la_nube(self, _cls):
         self.habilitar()
         os.environ["YAP_SUPER_INTERNET"] = "1"
@@ -372,6 +410,7 @@ class TestCmdSuperStatus(SuperTestBase):
         assert yap.SUPER_GRADIO_SSE_TIMEOUT == 180
         assert yap._local_llama_timeout() == 180
 
+    @_CLOUD_SKIP
     def test_familia_modelo_llama_u_otro(self):
         assert yap.etiqueta_familia_modelo() == "Llama"
         self.habilitar()
@@ -400,10 +439,12 @@ def _urlopen_html(html, status=200):
 
 
 def _urlopen_sse(texto="Hola desde Super Yap"):
-    payload = json.dumps({
-        "msg": "process_completed",
-        "output": {"data": [texto]},
-    })
+    payload = json.dumps(
+        {
+            "msg": "process_completed",
+            "output": {"data": [texto]},
+        }
+    )
     lines = [
         f"data: {payload}\n".encode("utf-8"),
         b"",
@@ -480,9 +521,11 @@ class TestGradioNube(SuperTestBase):
 class TestFallbackLocalASuper(SuperTestBase):
     @patch("yap.cmd_query_super", return_value="desde-nube")
     @patch("subprocess.run")
+    @_CLOUD_SKIP
     def test_timeout_local_usa_super(self, mock_run, mock_super):
         self.habilitar()
         from subprocess import TimeoutExpired
+
         mock_run.side_effect = TimeoutExpired("llama-cli", 180)
         out = yap.cmd_query("hola", store_history=False)
         mock_super.assert_called_once()
@@ -492,6 +535,7 @@ class TestFallbackLocalASuper(SuperTestBase):
 
     @patch("yap.cmd_query_super", return_value="desde-nube")
     @patch("subprocess.run")
+    @_CLOUD_SKIP
     def test_tokens_de_mas_van_a_super(self, mock_run, mock_super):
         self.habilitar()
         yap.HISTORY.extend([("u" * 400, "a" * 400) for _ in range(6)])
@@ -501,6 +545,7 @@ class TestFallbackLocalASuper(SuperTestBase):
         assert "desde-nube" in out
 
     @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    @_CLOUD_SKIP
     def test_modo_super_delega_aunque_sea_corta(self, _cls):
         self.habilitar()
         yap._SUPER_MODO = "super"
@@ -519,6 +564,7 @@ class TestEleccionTurnoConsulta(SuperTestBase):
     """#151: en auto interactivo, el estudiante elige nube o local cada turno."""
 
     @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    @_CLOUD_SKIP
     def test_interactivo_respuesta_n_usa_nube(self, _cls):
         self.habilitar()
         os.environ["YAP_SUPER_INTERNET"] = "1"
@@ -531,6 +577,7 @@ class TestEleccionTurnoConsulta(SuperTestBase):
         assert "nube" in mock_input.call_args[0][0]
 
     @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    @_CLOUD_SKIP
     def test_interactivo_respuesta_l_usa_local(self, _cls):
         self.habilitar()
         os.environ["YAP_SUPER_INTERNET"] = "1"
@@ -542,6 +589,7 @@ class TestEleccionTurnoConsulta(SuperTestBase):
         mock_input.assert_called_once()
 
     @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    @_CLOUD_SKIP
     def test_interactivo_enter_por_defecto_usa_nube(self, _cls):
         self.habilitar()
         os.environ["YAP_SUPER_INTERNET"] = "1"
@@ -563,6 +611,7 @@ class TestEleccionTurnoConsulta(SuperTestBase):
         mock_input.assert_not_called()
 
     @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    @_CLOUD_SKIP
     def test_interactivo_sin_tty_no_pregunta(self, _cls):
         self.habilitar()
         os.environ["YAP_SUPER_INTERNET"] = "1"
@@ -574,6 +623,7 @@ class TestEleccionTurnoConsulta(SuperTestBase):
         mock_input.assert_not_called()
 
     @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    @_CLOUD_SKIP
     def test_no_interactivo_mantiene_automatismo(self, _cls):
         self.habilitar()
         os.environ["YAP_SUPER_INTERNET"] = "1"
@@ -581,6 +631,7 @@ class TestEleccionTurnoConsulta(SuperTestBase):
         assert action == "super_query"
 
     @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    @_CLOUD_SKIP
     def test_modo_super_on_no_pregunta(self, _cls):
         self.habilitar()
         yap._SUPER_MODO = "super"
@@ -600,6 +651,7 @@ class TestEleccionTurnoConsulta(SuperTestBase):
         mock_input.assert_not_called()
 
     @patch.object(yap, "classify_intent", return_value=("query", "hola"))
+    @_CLOUD_SKIP
     def test_super_auto_reactiva_pregunta(self, _cls):
         self.habilitar()
         os.environ["YAP_SUPER_INTERNET"] = "1"

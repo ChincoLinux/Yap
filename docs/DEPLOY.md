@@ -251,6 +251,22 @@ sudo git -C /opt/Yap checkout ultra-lowmem && sudo /opt/Yap/setup.sh
 `deploy-yap.sh --branch` permite especificar la rama para todo el lote. Para
 hardware mixto, ejecuta el script dos veces con `--hosts` y `--branch` distintos.
 
+### 3.4 Verificación de salud post-instalación
+
+Yap incluye una herramienta integrada para verificar todos los componentes del sistema
+tras la instalación o actualización:
+
+```bash
+yap --postinstall-check
+```
+
+Esto comprueba:
+- Estado del confinamiento AppArmor (`enforce`).
+- Integridad y sintaxis de las whitelists (`apps.conf` y `web.conf`).
+- Presencia del contrato de agente escolar (`agent/yap.md`).
+- Disponibilidad del modelo local GGUF en `/opt/yap/models`.
+- Estado del servicio `yap-daemon.service` gestionado por systemd.
+
 ---
 
 ## 4. Mantenimiento
@@ -303,6 +319,13 @@ sudo rsync -a /srv/backups/yap/10.0.0.11/ \
 ### 4.3 Monitoreo
 
 ```bash
+# Diagnóstico completo de salud post-instalación
+ssh alumno@10.0.0.11 'yap --postinstall-check'
+
+# Estado del servicio systemd del daemon
+ssh alumno@10.0.0.11 'systemctl status yap-daemon'
+ssh alumno@10.0.0.11 'yap --daemon-status'
+
 # Estado de AppArmor en un equipo remoto
 ssh alumno@10.0.0.11 'yap --apparmor-status'
 
