@@ -151,6 +151,52 @@ es_gguf_valido() {
   return 0
 }
 
+CHECKSUMS_MODELOS="$SCRIPT_DIR/whitelist/modelos.sha256"
+
+# Devuelve el sha256 publicado para (archivo, repositorio). Si no esta
+# declarado, no devuelve nada y el llamador decide que hacer.
+hash_esperado() {
+  local filename="$1" repositorio="$2"
+  [[ -r "$CHECKSUMS_MODELOS" ]] || return 1
+  awk -v f="$filename" -v r="$repositorio" '
+    /^#/ { next }
+    $1 == f && $2 == r { print $3; encontrado=1; exit }
+    END { if (!encontrado) exit 1 }
+  ' "$CHECKSUMS_MODELOS"
+}
+
+# El repositorio sale de la URL: https://<host>/<owner>/<repo>/...
+repositorio_desde_url() {
+  local url="$1"
+  echo "$url" | sed -E 's#^https?://[^/]+/([^/]+)/.*#\1#'
+}
+
+# #235: sin esto, un .gguf con magic correcto y contenido alterado se
+# ejecuta en el equipo del alumno. El tamano y los magic bytes detectan
+# un HTML de error o un fichero truncado, no un binario manipulado.
+# Los mirrors de HuggingFace son terceros: el trafo puede ser de cualquiera.
+verificar_checksum() {
+  local f="$1" repositorio="$2"
+  local esperado real
+  esperado=$(hash_esperado "$(basename "$f")" "$repositorio") || {
+    echo "    [AVISO] Sin checksum publicado para $repositorio; no se puede verificar."
+    return 2
+  }
+  if ! command -v sha256sum >/dev/null 2>&1; then
+    echo "    [AVISO] sha256sum no disponible; no se puede verificar."
+    return 2
+  fi
+  real=$(sha256sum "$f" | awk '{print $1}')
+  if [[ "$real" != "$esperado" ]]; then
+    echo "    [ERROR] Checksum NO coincide para $(basename "$f") ($repositorio)."
+    echo "           esperado: $esperado"
+    echo "           obtenido: $real"
+    return 1
+  fi
+  echo "    Checksum verificado: ${real:0:16}… ($repositorio)"
+  return 0
+}
+
 descargar_url() {
   local url="$1"
   local dest="$2"
@@ -200,13 +246,21 @@ descargar_modelo() {
   local url
   for url in "${urls[@]}"; do
     rm -f "$tmp"
-    if descargar_url "$url" "$tmp" && es_gguf_valido "$tmp" "$min_bytes"; then
-      sudo mkdir -p "$(dirname "$dest")"
-      sudo mv "$tmp" "$dest"
-      sudo chmod 644 "$dest"
-      return 0
+    if ! descargar_url "$url" "$tmp" || ! es_gguf_valido "$tmp" "$min_bytes"; then
+      echo "    [AVISO] Fuente no usable (401/HTML/truncado). Probando otra..."
+      continue
     fi
-    echo "    [AVISO] Fuente no usable (401/HTML/truncado). Probando otra..."
+    # Se verifica ANTES de mover a destino: el modelo se ejecuta en el
+    # equipo del alumno y no debe llegar sin comprobar (#235).
+    if ! verificar_checksum "$tmp" "$(repositorio_desde_url "$url")"; then
+      echo "    [AVISO] Checksum rechazado. Probando otra fuente..."
+      rm -f "$tmp"
+      continue
+    fi
+    sudo mkdir -p "$(dirname "$dest")"
+    sudo mv "$tmp" "$dest"
+    sudo chmod 644 "$dest"
+    return 0
   done
   rm -f "$tmp"
   return 1
@@ -266,6 +320,15 @@ if es_gguf_valido "$MODEL_FILE" "$MIN_BYTES"; then
   echo ""
   echo "  Tamaño: $(ls -lh "$MODEL_FILE" | awk '{print $5}')"
   echo "  Ruta:   $MODEL_FILE"
+  # Se comprueba tambien el modelo ya instalado: si alguien lo sustituyo
+  # por uno alterado, el tamano y los magic bytes no lo delatan (#235).
+  if ! verificar_checksum "$MODEL_FILE" bartowski && \
+     ! verificar_checksum "$MODEL_FILE" unsloth; then
+    echo ""
+    echo "  [AVISO] El modelo instalado NO coincide con ningun checksum"
+    echo "          publicado. Puede ser una version local distinta o un"
+    echo "          fichero alterado. Borra $MODEL_FILE y vuelve a ejecutar."
+  fi
   echo ""
 else
   if [ -f "$MODEL_FILE" ]; then
