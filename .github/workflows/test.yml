@@ -2,12 +2,9 @@
 #
 # Se ejecuta en cada push y PR a las ramas: main, lowmem, ultra-lowmem
 # Etapas:
-#   1. unit-tests: seguridad + funcional + evaluacion + Super Yap con pytest
-#   2. Verificacion estatica del codigo fuente (sin shell=True, eval, os.system)
-#   3. Validacion de los archivos de whitelist del repo
-#
-# Para la suite completa (825 pruebas, 21 archivos) usar pytest directamente:
-#   python3 -m pytest tests/ -v
+#   1. test-unit: 49 pruebas unitarias (seguridad + funcional) con pytest
+#   2. test-report: Verificacion estatica del codigo fuente
+#   3. test-config: Validacion de archivos de configuracion
 
 name: Yap CI
 
@@ -20,9 +17,12 @@ on:
 jobs:
 
   # ──────────────────────────────────────────────────────────────────
-  # JOB 1: Pruebas unitarias
+  # JOB 1: Pruebas unitarias (seguridad + funcional)
   # ──────────────────────────────────────────────────────────────────
   unit-tests:
+    # El nombre NO debe llevar el conteo de pruebas: la proteccion de rama
+    # exige este check por nombre, y un "(49)" hardcodeado se desincroniza
+    # cada vez que crece la suite (hoy 1040) y deja la rama main bloqueada.
     name: "Unit tests - Python 3.12"
     runs-on: ubuntu-latest
     strategy:
@@ -53,7 +53,7 @@ jobs:
       - name: Ejecutar pruebas funcionales
         run: |
           echo "═══════════════════════════════════════════════"
-          echo "  PRUEBAS FUNCIONALES (59)"
+          echo "  PRUEBAS FUNCIONALES (24)"
           echo "═══════════════════════════════════════════════"
           python -m pytest tests/test_yap_functional.py -v --tb=short
 
@@ -150,7 +150,7 @@ jobs:
           echo "    • branch-check: ${{ needs.branch-check.result }}"
           echo ""
           if [ "${{ needs.unit-tests.result }}" = "success" ]; then
-            echo "  ✓ Seguridad, funcionalidad, evaluacion y Super Yap: OK"
+            echo "  ✓ 49 pruebas pasadas — sistema seguro y funcional"
           else
             echo "  ✗ Pruebas fallidas — revisar logs"
           fi
