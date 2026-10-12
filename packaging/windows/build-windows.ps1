@@ -116,7 +116,19 @@ foreach ($f in $required) {
 }
 Write-Host "    OK: todos los archivos fuente presentes." -ForegroundColor Green
 
-# ─── 5. Run Inno Setup ───────────────────────────────────────────────────────
+# ─── 5. Version (leida del fichero VERSION, jamas escrita a mano) ────────────
+# El .iss dejaba la version hardcodeada en 1.0.1 mientras VERSION iba por
+# 1.0.6: cinco releases de instaladores con nombre y registro equivocados.
+# Ver https://github.com/ChincoLinux/Yap/issues/242
+$VersionFile = Join-Path $RepoRoot "VERSION"
+$YapVersion = (Get-Content $VersionFile -Raw).Trim()
+
+if ($YapVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.]+)?$') {
+    Write-Error "ERROR: VERSION con valor '$YapVersion' no es un semver valido. Corrige $VersionFile."
+}
+Write-Host "    OK: VERSION = $YapVersion" -ForegroundColor Green
+
+# ─── 6. Run Inno Setup ───────────────────────────────────────────────────────
 if (-not $SkipISCC) {
     Write-Host "`n[4/4] Compilando instalador con Inno Setup..." -ForegroundColor Yellow
 
@@ -134,7 +146,7 @@ if (-not $SkipISCC) {
     } else {
         $issFile = Join-Path $ScriptDir "yap-installer.iss"
         Push-Location $RepoRoot
-        & $iscc $issFile /O"$DistDir"
+        & $iscc $issFile "/DMyAppVersion=$YapVersion" /O"$DistDir"
         Pop-Location
 
         if ($LASTEXITCODE -eq 0) {

@@ -10,10 +10,17 @@
 ; Usage:
 ;   ISCC.exe packaging\windows\yap-installer.iss
 ;
-; Output: dist\windows\yap-1.0.1-setup.exe
+; Output: dist\windows\yap-<VERSION>-setup.exe
+;
+; La version NO se fija aqui: build-windows.ps1 la inyecta con
+; /DMyAppVersion= (leida del fichero VERSION). Si se compila a mano sin
+; ese argumento se usa 0.0.0, a proposito: un artefacto claramente
+; invalido vale mas que uno que parece correcto. Ver #242.
 
 #define MyAppName       "Yap"
-#define MyAppVersion    "1.0.1"
+#ifndef MyAppVersion
+  #define MyAppVersion "0.0.0"
+#endif
 #define MyAppPublisher  "ChincoLinux"
 #define MyAppURL        "https://github.com/ChincoLinux/Yap"
 #define MyAppExeName    "yap-launcher.bat"
