@@ -172,41 +172,33 @@ debian.org
 
 ---
 
-## Auto-merge (`.github/workflows/auto-merge.yml`)
+## Inventario de workflows (`.github/workflows/`)
 
-```yaml
-on:
-  pull_request_review:
-    types: [submitted]
-  check_suite:
-    types: [completed]
+Doce workflows reales y su trigger. Este bloque se reconcilió contra el
+repositorio en #198: antes documentaba `auto-merge.yml` y `fallback-merge.yml`,
+que no existen (el segundo además lo prohíbe un test), y omitía ocho workflows.
 
-jobs:
-  auto-merge:
-    if: github.event.review.state == 'approved' && github.event.check_suite.conclusion == 'success'
-    steps:
-      - gh pr merge --auto --squash
-```
+| Workflow | Trigger | Qué hace |
+|---|---|---|
+| `test.yml` | `push`, `pull_request` | Unit tests, validación de ramas, resultado |
+| `pr-review.yml` | `pull_request` | Revisión A-Dev: `HD-YAP-SEC-001`, branch, CI |
+| `pr-validation.yml` | `pull_request` | Build & Verify + smoke test de CLI |
+| `pr-quality-suite.yml` | `pull_request` | style, static, arch, tests_cov, deps |
+| `quality-gates.yml` | `push`, `pull_request` | CodeQL, secret scanning, dependency review |
+| `build-deb.yml` | `pull_request`, `release` | `.deb` y tests de empaquetado |
+| `build-packages.yml` | `push`, `pull_request` | `.deb`, `.rpm`, Flatpak, Windows |
+| `pr-state-labeler.yml` | `pull_request`, `check_run` | Etiqueta el estado de la PR |
+| `pr-traceability-check.yml` | `pull_request` | PR ↔ issue |
+| `auto-add-to-project.yml` | `issues`, `pull_request` | Tablero del proyecto |
+| `weekly-sprint-assignment.yml` | `schedule` | Sprint semanal |
+| `auto-release.yml` | `push` (tag `v*`), `workflow_dispatch` | Publica el release |
 
-**Condiciones:**
-- Review = `APPROVED` (de `yap-reviewer` o humano)
-- CI = `success`
-- No draft, no WIP
+### No hay auto-merge automático
 
----
-
-## Fallback merge (`.github/workflows/fallback-merge.yml`)
-
-Si auto-merge falla (conflictos, etc.), intenta merge manual con rebase.
-
----
-
-## Auto-release (`.github/workflows/auto-release.yml`)
-
-En merge a `main`:
-- Bump version (semver patch)
-- Genera changelog
-- Crea release GitHub
+`auto-merge.yml` y `fallback-merge.yml` **no existen**. La fusión es manual
+por una persona tras CI verde y aprobación de `core-devs`. El merge con
+`--auto` se habilita desde la CLI cuando quien revisa lo decide, no por un
+workflow propio.
 
 ---
 

@@ -1,5 +1,17 @@
 # Super Yap — Gradio en Cloud Run (#91)
 
+> **Estado: suspendido.** El backend nube está **deshabilitado por decisión
+> económica** (#168). `_super_habilitado()` devuelve `False` por defecto, así
+> que en la práctica Yap opera **local-only**. Los 38 issues relacionados
+> llevan el label `cloud-suspended`.
+>
+> Reactivarlo queda en manos del operador: `YAP_SUPER_ENABLED=1` y
+> `YAP_SUPER_ENDPOINT=<url Cloud Run>`. Ninguna distribución lo trae activo.
+>
+> Lo que sigue documenta el diseño original, que se conserva para una
+> eventual reactivación. **No describa funcionalidad disponible hoy**: nada
+> de esto funciona tal como viene empaquetado.
+
 El alumno sigue usando **Yap local** (Llama 3.2 1B/3B, CPU). Super Yap **no
 corre un Llama 8B local** ni hiperparámetros de `llama.cpp` en el PC del
 aula. El modelo grande vive en **Google Cloud Run** (Gradio 5 `/chat`).
