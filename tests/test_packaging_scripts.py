@@ -24,19 +24,33 @@ def _ruta(relativo):
     return os.path.join(RAIZ, relativo)
 
 
+def _interprete(relativo):
+    """El intérpeter que declara el shebang: en Ubuntu /bin/sh es dash y no
+    acepta los bashismos de setup.sh (#183)."""
+    with open(_ruta(relativo), encoding="utf-8", errors="replace") as f:
+        shebang = f.readline()
+    return "bash" if "bash" in shebang else "sh"
+
+
 class TestSintaxisShell:
     def test_los_scripts_parsean(self):
         for relativo in SCRIPTS:
             ruta = _ruta(relativo)
             assert os.path.isfile(ruta), f"existe {relativo}"
             proceso = subprocess.run(
-                ["sh", "-n", ruta],
+                [_interprete(relativo), "-n", ruta],
                 capture_output=True,
                 text=True,
                 timeout=30,
                 stdin=subprocess.DEVNULL,
             )
             assert proceso.returncode == 0, f"{relativo}: {proceso.stderr}"
+
+    def test_interprete_según_shebang(self):
+        assert _interprete("setup.sh") == "bash"
+        assert _interprete("build-deb.sh") == "bash"
+        assert _interprete("packaging/test-install-debian.sh") == "sh"
+        assert _interprete("packaging/test-integration-os.sh") == "sh"
 
 
 class TestScriptIntegracion:
