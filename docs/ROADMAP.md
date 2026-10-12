@@ -59,14 +59,14 @@ de ChincoLinux. #32 y #34 se cerraron por esa decisión.
 | 38 | Telemetría local anónima — métricas de uso para mejorar el agente | P3 | Completado (3) |
 | 39 | Modo offline total — sin dependencia de red en ningún flujo | P1 | Suspendido (`cloud-suspended`) |
 | 40 | Benchmarks de rendimiento en hardware educativo real | P1 | Cerrado — decisión registrada (4) |
-| 204 | Refactor: dividir `yap.py` (8196 líneas) en paquete instalable | P1 | Abierto |
+| 204 | Refactor: dividir `yap.py` (más de 8000 líneas) en paquete instalable | P1 | Abierto |
 
 ### Fase 5 — YAP DESKTOP AI FOR STUDENT (v1.5)
 
 **Objetivo:** Que el alumno pueda instalar Yap como aplicación de escritorio y usarlo como
 CLI, app de escritorio o binario standalone: el mismo producto, tres formas de ejecutarlo.
 
-Epic **#199**. La GUI existe (`yap_desktop/`, 1251 líneas, con bandeja, atajo global y
+Epic **#199**. La GUI existe (`yap_desktop/`, más de 1200 líneas, con bandeja, atajo global y
 motor en segundo plano) pero **no está empaquetada en ningún objetivo**: ni `.deb`, ni
 `.rpm`, ni Flatpak, ni Inno Setup.
 

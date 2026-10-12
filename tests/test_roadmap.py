@@ -87,16 +87,25 @@ class TestEpicsNuevos:
 
 
 class TestCifras:
-    def test_lineas_de_yap_py(self):
-        """Si la cifra se cita, debe coincidir con el fichero."""
-        reales = len((RAIZ / "yap.py").read_text(encoding="utf-8").splitlines())
-        cita = re.search(r"`yap\.py` \((\d+) líneas\)", _texto())
-        assert cita, "no se cita el tamaño de yap.py"
-        assert (
-            int(cita.group(1)) == reales
-        ), f"el roadmap dice {cita.group(1)} lineas, hay {reales}"
+    def test_yap_py_supera_la_cota(self):
+        """El roadmap cita cotas, no cifras exactas.
 
-    def test_lineas_de_yap_desktop(self):
+        Un igual exacto se romperia en cada PR que toque yap.py: el numero
+        debe expresar "es un monolito que hay que dividir", no reflejar el
+        fichero en cada commit. Ver #239, donde la auditoria de seguridad
+        seguia citando 932 lineas de un fichero de mas de 8000.
+        """
+        reales = len((RAIZ / "yap.py").read_text(encoding="utf-8").splitlines())
+        cita = re.search(r"`yap\.py` \(más de (\d+) líneas\)", _texto())
+        assert cita, "no se cita el tamano de yap.py"
+        cota = int(cita.group(1))
+        assert (
+            reales > cota
+        ), f"el roadmap dice mas de {cota} lineas, y yap.py tiene {reales}"
+        # Y la cota sigue describiendo el problema: un monolito grande.
+        assert cota > 1000
+
+    def test_yap_desktop_supera_la_cota(self):
         desktop = RAIZ / "yap_desktop"
         if not desktop.exists():
             return
@@ -104,11 +113,11 @@ class TestCifras:
             len(p.read_text(encoding="utf-8", errors="ignore").splitlines())
             for p in desktop.rglob("*.py")
         )
-        cita = re.search(r"`yap_desktop/`, (\d+) líneas", _texto())
+        cita = re.search(r"`yap_desktop/`, más de (\d+) líneas", _texto())
         assert cita, "no se cita el tamano de yap_desktop"
-        assert (
-            abs(int(cita.group(1)) - reales) < 400
-        ), f"el roadmap dice {cita.group(1)} lineas, hay {reales}"
+        assert reales > int(
+            cita.group(1)
+        ), f"el roadmap dice mas de {cita.group(1)}, y hay {reales}"
 
     def test_fecha_de_actualizacion(self):
         assert re.search(r"\*\*Última actualización:\*\* \d{4}-\d{2}-\d{2}", _texto())
