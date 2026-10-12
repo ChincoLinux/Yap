@@ -272,9 +272,6 @@ SUPER_NUBE_HOSTS = (SUPER_GRADIO_HOST, SUPER_NUBE_HOST_LEGACY)
 SUPER_NUBE_PORT = 443
 SUPER_NUBE_PORT_LEGACY = 8742
 SUPER_DEFAULT_ENDPOINT = f"https://{SUPER_GRADIO_HOST}"
-# ponytail: clave de invocacion Cloud Run del laboratorio; override con
-# YAP_SUPER_TOKEN / YAP_SUPER_TOKEN_FILE. No se imprime ni va al historial.
-SUPER_NUBE_KEY_DEFAULT = "Rz6IDgPK6w5kfTRGJzQG3rgscJXoxEQr"
 SUPER_TOKEN_FILE = f"{CONFIG_DIR}/super-token"
 SUPER_HISTORY_MAX = 8
 SUPER_PROMPT_MAX = 4000
@@ -6443,6 +6440,7 @@ def cmd_open_app(app_name):
     # ponytail: stdin al vacio. La aplicacion vive mas que la llamada y, con
     # la terminal heredada, compite por ella con el REPL de Yap
     # start_new_session=True desacopla el proceso de la sesion del terminal (#104).
+    # yap-sin-timeout: app de GUI desprendida; no tiene sentido esperarla.
     subprocess.Popen(
         [bin_path],
         stdout=subprocess.DEVNULL,
@@ -6558,8 +6556,9 @@ def _super_token():
             return token
     except OSError:
         pass
-    if _host_es_super_gradio(_super_endpoint()):
-        return SUPER_NUBE_KEY_DEFAULT
+    # Sin clave por defecto: el token viene de YAP_SUPER_TOKEN o del
+    # fichero con permisos 600. Ver #213 — una clave en el codigo esta en
+    # todo clone y en el historial de git, y borrarla no la invalida.
     return ""
 
 
@@ -7500,6 +7499,7 @@ def cmd_intro_pseint():
     # 1. Abrir PDF estatico con la guia de ejercicios
     if os.path.exists(PSEINT_GUIA_PDF):
         try:
+            # yap-sin-timeout: xdg-open se desprende y la guia se abre sola.
             subprocess.Popen(
                 ["xdg-open", PSEINT_GUIA_PDF],
                 stdout=subprocess.DEVNULL,
