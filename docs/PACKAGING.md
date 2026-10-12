@@ -1,5 +1,16 @@
 # Empaquetado .deb de Yap
 
+> **Alcance de este documento: sólo Debian/Ubuntu.** La CI construye cuatro
+> formatos — `.deb` (Debian/Ubuntu), `.rpm` (Fedora), Flatpak e instalador
+> de Windows (Inno Setup) — desde `.github/workflows/build-packages.yml`.
+> Los ficheros de esos targets viven en `packaging/rpm/`,
+> `packaging/flatpak/` y `packaging/windows/`. Este documento cubre el
+> `.deb`, que es el más usado en aulas.
+>
+> Yap se desarrolla como **software empaquetado para cualquier sistema
+> operativo**, no limitado a ChincoLinux OS (decisión registrada al cerrar
+> #32 y #34).
+
 Guia para construir, instalar y publicar los paquetes Debian de Yap (issues #31 y #33).
 
 ## Paquetes

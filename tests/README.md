@@ -1,11 +1,11 @@
 # Yap — Suite de Pruebas
 
-Suite completa: **30 archivos, 1075 pruebas**, sin LLM, sin GPU y sin Internet.
+Suite completa: **30 archivos, 1079 pruebas**, sin LLM, sin GPU y sin Internet.
 La unica dependencia externa es `pytest`.
 
 ```bash
 python3 -m pip install pytest    # unica dependencia
-python3 -m pytest tests/ -v      # 1075 pruebas
+python3 -m pytest tests/ -v      # 1079 pruebas
 ```
 
 ---
@@ -50,7 +50,7 @@ tests/
 └── README.md                   # Este archivo
 ```
 
-Agrupadas por area, las 1075 pruebas quedan asi: seguridad e inyeccion 52 ·
+Agrupadas por area, las 1079 pruebas quedan asi: seguridad e inyeccion 52 ·
 funcional, PSeInt y evaluacion 158 · empaquetado, aula y AppArmor 92 ·
 perfil, RAG, sesiones, profesor y Super Yap 335 · accesibilidad, adaptacion y
 telemetria 187 · interaccion, feedback, historial e i18n 167 · CI, desktop y
@@ -79,7 +79,7 @@ cubren modulos sin requisito catalogado, asi que se ejecutan solo con pytest.
 Las cifras no coinciden exactamente: `parse_pytest_output()` cuenta lineas con
 `PASSED` y `FAILED`, asi que un test `SKIPPED` no suma. En los 6 archivos del
 runner hay 24 skips (283 contados, 307 recogidos) y en la suite completa hay
-24 tambien (1051 contados, 1075 recogidos).
+24 tambien (1055 contados, 1079 recogidos).
 
 ---
 

@@ -121,12 +121,12 @@ Yap/
 
 ```bash
 pip install pytest
-python3 -m pytest tests/ -v          # 825 pruebas (sin LLM/GPU/Internet)
+python3 -m pytest tests/ -v          # 1079 pruebas (sin LLM/GPU/Internet)
 python3 tests/run_tests.py --report  # Reporte TXT
 python3 tests/run_tests.py --vm      # Infra (solo en VM)
 ```
 
-**Cobertura:** 21 archivos, 825 pruebas. `run_tests.py` ejecuta 5 de ellos
+**Cobertura:** 30 archivos, 1079 pruebas. `run_tests.py` ejecuta 5 de ellos
 (237 pruebas) + 5 chequeos de infraestructura + 5 estáticos + mapeo de 26
 requisitos. Detalle en [tests/README.md](tests/README.md).
 
