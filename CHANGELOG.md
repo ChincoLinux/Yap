@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [1.0.7] - 2026-10-12
+### Added
+
+### Changed
+- ci: el scanner de HD-YAP-SEC-001 marcaba falsos positivos en documentación (#194)
+
+### Fixed
+
 ## [1.0.5] - 2026-10-12
 ### Added
 
