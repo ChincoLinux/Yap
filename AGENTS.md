@@ -16,7 +16,7 @@ This guide helps AI agents (like Claude Code, Devin, etc.) understand how to col
 | Repositorio | `ChincoLinux/Yap` (organización) |
 | Fork de trabajo | `VECTORG99/Yap` |
 | Archivo principal | `yap.py` (~6200 líneas, stdlib-only) |
-| CI | `.github/workflows/test.yml` — 11 workflows; `pytest tests/` = 825 tests, sin LLM/GPU/Internet |
+| CI | `.github/workflows/test.yml` — 11 workflows; `pytest tests/` = 1079 tests, sin LLM/GPU/Internet |
 | Modelo | Llama 3.2 1B/3B Instruct (Q4_K_M, CPU-only) |
 
 ## Labels Guide for AI Agents
@@ -99,7 +99,7 @@ These labels track the PR lifecycle state. They are mutually exclusive and auto-
 2. **Developer claims** (comment on issue or assign)
 3. **Fresh branch created** following the hygiene protocol
 4. **PR created** with `Closes #XXX`, conventional commit title
-5. **CI checks run** automatically (825 tests + branch-check + A-Dev Hardness review)
+5. **CI checks run** automatically (1079 tests + branch-check + A-Dev Hardness review)
 6. **Code review** by maintainers or AI (advisory comments from `yap-reviewer` bot)
 7. **Changes addressed** if requested
 8. **Merge** when approved and checks pass (auto-merge native, squash)
@@ -164,7 +164,7 @@ Yap/
 │   ├── apps.conf
 │   └── web.conf
 ├── cursos/                # JSON de cursos (FPY1101, etc.)
-├── tests/                 # Suite de tests: 21 archivos, 825 tests (ver tests/README.md)
+├── tests/                 # Suite de tests: 30 archivos, 1079 tests (ver tests/README.md)
 ├── docs/                  # ROADMAP, PACKAGING, TRUNK-BASED, SECURITY-AUDIT
 ├── .github/
 │   ├── workflows/         # CI, pr-review, test, auto-release
@@ -184,7 +184,7 @@ Yap/
 ## Testing
 
 ```bash
-# Run all tests (825, no LLM/GPU/Internet needed)
+# Run all tests (1079, no LLM/GPU/Internet needed)
 python3 -m pytest tests/ -v
 
 # Run with coverage
@@ -197,7 +197,7 @@ python3 -m pytest tests/test_yap_security.py -v
 python3 tests/run_tests.py --report
 ```
 
-**Cobertura:** 825 pruebas en 21 archivos. `pytest tests/` = suite completa;
+**Cobertura:** 1079 pruebas en 30 archivos. `pytest tests/` = suite completa;
 `python3 tests/run_tests.py` = 237 pruebas + 10 chequeos + mapeo de 26 requisitos.
 Ver [tests/README.md](tests/README.md).
 

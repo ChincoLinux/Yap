@@ -9,7 +9,7 @@ revisor verifica; la misma lista vive en la sección "Checklist previo" de
 - [ ] **Formato:** `ruff format --check yap.py tests/` → *already formatted*.
 - [ ] **Lint:** `ruff check yap.py tests/` → sin errores.
 - [ ] **Análisis estático:** `python3 -m pyflakes yap.py tests/` → sin salida.
-- [ ] **Tests:** `python3 -m pytest tests/ -q` → **1016 passed, 24 skipped**, 0 failed.
+- [ ] **Tests:** `python3 -m pytest tests/ -q` → **1055 passed, 24 skipped**, 0 failed.
 - [ ] **Workflows:** `actionlint .github/workflows/*.yml` → sin errores de sintaxis
       (sólo si la PR toca `.github/workflows/`).
 - [ ] **Scripts de shell:** `python3 -m pytest tests/test_packaging_scripts.py -q`

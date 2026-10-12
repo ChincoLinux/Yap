@@ -45,7 +45,7 @@ lector de pantalla. Todas esas capacidades viven en un unico archivo,
 | [docs/RAG.md](docs/RAG.md) | RAG local con BM25, sin dependencias |
 | [docs/SECURITY-AUDIT.md](docs/SECURITY-AUDIT.md) | Auditoria de seguridad post-talleres |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Roadmap y prioridades |
-| [tests/README.md](tests/README.md) | Suite de pruebas: 30 archivos, 1075 tests |
+| [tests/README.md](tests/README.md) | Suite de pruebas: 30 archivos, 1079 tests |
 | [AGENTS.md](AGENTS.md) | Guia para agentes IA que colaboran en el repo |
 | [CLAUDE.md](CLAUDE.md) | Arquitectura tecnica resumida |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Como contribuir |
@@ -70,7 +70,7 @@ Yap/
 ├── cursos/                # Cursos en JSON (FPY1101.json)
 ├── packaging/             # Plantillas DEBIAN: yap, yap-models-1b, yap-models-3b
 ├── apparmor/              # Perfiles AppArmor del agente (#14)
-├── tests/                 # 30 archivos de pruebas, 1075 tests + run_tests.py
+├── tests/                 # 30 archivos de pruebas, 1079 tests + run_tests.py
 ├── docs/                  # DEPLOY, PACKAGING, RAG, ROADMAP, SECURITY-AUDIT, SUPER-YAP, TRUNK-BASED
 ├── scripts/ci/            # Utilidades de CI: trazabilidad PR, labels, preflight
 ├── agent-platform/        # Plantillas de despliegue de Super Yap
@@ -1061,7 +1061,7 @@ Este proyecto se distribuye bajo **licencia MIT** (ver [LICENSE](LICENSE)). El m
 
 ## 12. Pruebas y verificacion
 
-La suite tiene **30 archivos y 1075 pruebas**. La unica dependencia externa es
+La suite tiene **30 archivos y 1079 pruebas**. La unica dependencia externa es
 `pytest`: ni el modelo, ni la GPU, ni Internet. Detalle por archivo y por
 requisito en [tests/README.md](tests/README.md).
 
@@ -1070,7 +1070,7 @@ requisito en [tests/README.md](tests/README.md).
 ```bash
 python3 -m pip install pytest          # unica dependencia
 
-python3 -m pytest tests/ -v            # 1075 pruebas (desarrollo y CI)
+python3 -m pytest tests/ -v            # 1079 pruebas (desarrollo y CI)
 python3 -m pytest tests/test_yap_rag.py -v   # un area
 python3 -m pytest tests/ -v -k whitelist    # por palabra clave
 
@@ -1093,7 +1093,7 @@ python3 tests/run_tests.py --report    # runner + tests/report/report_<fecha>.tx
 Los numeros no cuadran al decimal porque el parser del runner cuenta lineas con
 `PASSED` y `FAILED`: un test `SKIPPED` no suma. Hay 24 skips en los seis
 archivos del runner (283 contados, 307 recogidos) y 24 en la suite completa
-(1051 contados, 1075 recogidos).
+(1055 contados, 1079 recogidos).
 
 `run_tests.py` ejecuta 5 etapas en orden: pytest sobre los archivos de
 `ARCHIVOS_PYTEST`, verificaciones de infraestructura, verificacion estatica del
@@ -1146,7 +1146,7 @@ Once workflows en `.github/workflows/`. El principal, `test.yml`, corre en cada
 
 | Job | Que hace |
 |---|---|
-| **unit-tests** | 1075 pruebas en Python 3.12 (seguridad, funcional, i18n, empaquetado, desktop, post-install) + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
+| **unit-tests** | 1079 pruebas en Python 3.12 (seguridad, funcional, i18n, empaquetado, desktop, post-install) + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
 | **branch-check** | Verifica que `MODEL_PATH` en cada rama apunte al modelo correcto |
 | **results** | Resumen del pipeline |
 
