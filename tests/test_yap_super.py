@@ -475,7 +475,9 @@ class TestGradioNube(SuperTestBase):
 
     @patch("yap._gradio_urlopen")
     def test_chat_gradio_join_y_sse(self, mock_urlopen):
-        self.habilitar(endpoint=yap.SUPER_DEFAULT_ENDPOINT)
+        # El token ya no viene del codigo (#213): hay que configurarlo para
+        # poder comprobar que llega como query param.
+        self.habilitar(endpoint=yap.SUPER_DEFAULT_ENDPOINT, token="tok-de-prueba")
         mock_urlopen.side_effect = [
             _urlopen_html(_gradio_html()),
             _urlopen_json({"event_id": "e1"}),
@@ -499,23 +501,50 @@ class TestGradioNube(SuperTestBase):
 
     @patch("yap._gradio_urlopen")
     def test_clave_no_va_en_json_ni_en_historial(self, mock_urlopen):
+        """El token configurado no debe aparecer ni en el cuerpo ni en el historial."""
+        secreto = "clave-de-prueba-que-no-debe-filtrarse"
         self.habilitar(endpoint=yap.SUPER_DEFAULT_ENDPOINT)
-        mock_urlopen.side_effect = [
-            _urlopen_html(_gradio_html()),
-            _urlopen_json({"event_id": "e1"}),
-            _urlopen_sse("ok"),
-        ]
-        yap.cmd_query_super("explica", store_history=True)
+        with patch.dict("os.environ", {"YAP_SUPER_TOKEN": secreto}):
+            assert secreto in yap._super_token(), "el override no llego"
+            mock_urlopen.side_effect = [
+                _urlopen_html(_gradio_html()),
+                _urlopen_json({"event_id": "e1"}),
+                _urlopen_sse("ok"),
+            ]
+            yap.cmd_query_super("explica", store_history=True)
         join_req = mock_urlopen.call_args_list[1][0][0]
         body = json.loads(join_req.data.decode("utf-8"))
         blob = json.dumps(body)
-        assert yap.SUPER_NUBE_KEY_DEFAULT not in blob
-        assert yap.SUPER_NUBE_KEY_DEFAULT not in yap.HISTORY[-1][1]
+        assert secreto not in blob, "el token se filtro al cuerpo de la peticion"
+        assert secreto not in yap.HISTORY[-1][1], "el token se filtro al historial"
 
     def test_status_no_imprime_clave_gradio(self):
-        out = yap.cmd_super_status()
-        assert yap.SUPER_NUBE_KEY_DEFAULT not in out
+        secreto = "otra-clave-de-prueba-sensible"
+        with patch.dict("os.environ", {"YAP_SUPER_TOKEN": secreto}):
+            out = yap.cmd_super_status()
+        assert secreto not in out, "cmd_super_status imprime el token"
         assert "Gradio" in out or "gradio" in out.lower() or "chat" in out.lower()
+
+    def test_sin_clave_hardcodeada(self):
+        """#213 — el agente no lleva credenciales de proveedor."""
+        assert not hasattr(
+            yap, "SUPER_NUBE_KEY_DEFAULT"
+        ), "vuelve a existir una clave por defecto en el codigo"
+
+    def test_sin_token_devuelve_vacio(self):
+        """Sin YAP_SUPER_TOKEN ni fichero, no hay token: fallo cerrado."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as vacio:
+            with patch.dict(
+                "os.environ",
+                {"YAP_SUPER_TOKEN": "", "YAP_SUPER_TOKEN_FILE": f"{vacio}/no-existe"},
+                clear=False,
+            ):
+                os.environ.pop("YAP_SUPER_TOKEN", None)
+                assert (
+                    yap._super_token() == ""
+                ), "_super_token() devuelve algo sin configuracion"
 
 
 class TestFallbackLocalASuper(SuperTestBase):
