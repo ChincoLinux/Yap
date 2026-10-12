@@ -44,7 +44,7 @@ class TestHistorySave:
         with mock.patch.object(yap, "HISTORY_FILE", hist_file):
             with mock.patch.object(yap, "HISTORY", [("hola", "hola de vuelta")]):
                 yap._save_history_session()
-                with open(hist_file) as f:
+                with open(hist_file, encoding="utf-8") as f:
                     data = json.load(f)
                 assert len(data) == 1
                 assert data[0]["turns"][0]["user"] == "hola"
@@ -83,7 +83,7 @@ class TestHistoryLoad:
     def test_load_json_invalido(self):
         tmp = tempfile.mkdtemp()
         hist_file = os.path.join(tmp, "history.json")
-        with open(hist_file, "w") as f:
+        with open(hist_file, "w", encoding="utf-8") as f:
             f.write("not json{{{")
         with mock.patch.object(yap, "HISTORY_FILE", hist_file):
             assert yap._load_history_sessions() == []
@@ -92,7 +92,7 @@ class TestHistoryLoad:
         """Si el JSON no es una lista, retorna vacío."""
         tmp = tempfile.mkdtemp()
         hist_file = os.path.join(tmp, "history.json")
-        with open(hist_file, "w") as f:
+        with open(hist_file, "w", encoding="utf-8") as f:
             json.dump({"not": "a list"}, f)
         with mock.patch.object(yap, "HISTORY_FILE", hist_file):
             assert yap._load_history_sessions() == []
@@ -138,7 +138,7 @@ class TestCmdHistorial:
                 "turns": [{"user": "chao", "assistant": "bye"}],
             },
         ]
-        with open(hist_file, "w") as f:
+        with open(hist_file, "w", encoding="utf-8") as f:
             json.dump(sessions, f)
         with mock.patch.object(yap, "HISTORY_FILE", hist_file):
             result = yap.cmd_historial()
@@ -159,7 +159,7 @@ class TestCmdHistorial:
                 ],
             },
         ]
-        with open(hist_file, "w") as f:
+        with open(hist_file, "w", encoding="utf-8") as f:
             json.dump(sessions, f)
         with mock.patch.object(yap, "HISTORY_FILE", hist_file):
             with mock.patch.object(yap, "HISTORY", []):
@@ -178,7 +178,7 @@ class TestCmdHistorial:
         tmp = tempfile.mkdtemp()
         hist_file = os.path.join(tmp, "history.json")
         sessions = [{"timestamp": "2026-01-01", "turns": []}]
-        with open(hist_file, "w") as f:
+        with open(hist_file, "w", encoding="utf-8") as f:
             json.dump(sessions, f)
         with mock.patch.object(yap, "HISTORY_FILE", hist_file):
             result = yap.cmd_historial(resume_last=True)

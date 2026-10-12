@@ -200,7 +200,9 @@ jobs:
 
             // ─── HD-YAP-TEST-001 (MUST) ────────────────────────
             console.log('\n🧪 Evaluando HD-YAP-TEST-001 (MUST)...');
-            const unitTests = checkRuns.find(c => c.name === 'Unit tests (49) - Python 3.12 (3.12)');
+            // El nombre del check lo emite el test.yml de CADA rama, así que se
+            // busca por prefijo: un rename en la rama no debe romper la revisión.
+            const unitTests = checkRuns.find(c => c.name.startsWith('Unit tests'));
             const branchCheck = checkRuns.find(c => c.name === 'Validacion de ramas');
             const ciPassed = unitTests?.conclusion === 'success' && branchCheck?.conclusion === 'success';
             const ciPending = !unitTests || !branchCheck || unitTests.status !== 'completed' || branchCheck.status !== 'completed';
