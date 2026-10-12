@@ -598,3 +598,59 @@ class TestElAutoInstaladorVerificaDeVerdad:
             assert destino.exists(), "el modelo bueno no se instalo"
         finally:
             yap_core.CHECKSUMS_MODELOS = original
+
+
+class TestEmpaquetadoDeYapCore:
+    """yap.py importa yap_core, así que todo target debe llevarlo.
+
+    La primera pasada de este PR falló en las dos instalaciones de CI con
+    ModuleNotFoundError: el .deb empaquetaba yap.py y no yap_core.py.
+    """
+
+    RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def test_deb_lo_instala(self):
+        texto = open(os.path.join(self.RAIZ, "build-deb.sh"), encoding="utf-8").read()
+        assert "yap_core.py" in texto, "build-deb.sh no instala yap_core.py"
+
+    def test_rpm_lo_instala_y_lo_declara(self):
+        texto = open(
+            os.path.join(self.RAIZ, "packaging", "rpm", "yap.spec"), encoding="utf-8"
+        ).read()
+        assert "install -m 644 yap_core.py" in texto
+        assert (
+            "/opt/yap/yap_core.py\n" in texto + "\n"
+        ), "falta en la seccion %files del RPM"
+
+    def test_flatpak_lo_instala(self):
+        texto = open(
+            os.path.join(self.RAIZ, "packaging", "flatpak", "org.chincolinux.Yap.json"),
+            encoding="utf-8",
+        ).read()
+        assert "yap_core.py" in texto
+
+    def test_instalador_de_windows_lo_incluye(self):
+        texto = open(
+            os.path.join(self.RAIZ, "packaging", "windows", "yap-installer.iss"),
+            encoding="utf-8",
+        ).read()
+        assert 'Source: "yap_core.py"' in texto
+
+    def test_yap_importa_yap_core(self):
+        """Si yap.py no lo importa, todo esto sobra; que no se caiga."""
+        import importlib
+
+        importlib.reload(importlib.import_module("yap_core"))
+        assert hasattr(yap_core, "get_engine")
+
+    def test_todos_los_targets_cubiertos(self):
+        """Cada fichero que nombra yap.py debe nombrar yap_core.py."""
+        rutas = [
+            "build-deb.sh",
+            os.path.join("packaging", "rpm", "yap.spec"),
+            os.path.join("packaging", "flatpak", "org.chincolinux.Yap.json"),
+            os.path.join("packaging", "windows", "yap-installer.iss"),
+        ]
+        for rel in rutas:
+            texto = open(os.path.join(self.RAIZ, rel), encoding="utf-8").read()
+            assert "yap_core.py" in texto, f"{rel} no empaqueta yap_core.py"

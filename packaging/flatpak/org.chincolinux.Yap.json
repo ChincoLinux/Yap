@@ -22,6 +22,7 @@
       "buildsystem": "simple",
       "build-commands": [
         "install -Dm755 yap.py /app/lib/yap/yap.py",
+        "install -Dm644 yap_core.py /app/lib/yap/yap_core.py",
         "install -Dm755 llama-cli /app/bin/llama-cli",
         "install -Dm644 whitelist/apps.conf /app/share/yap/whitelist/apps.conf",
         "install -Dm644 whitelist/web.conf /app/share/yap/whitelist/web.conf",

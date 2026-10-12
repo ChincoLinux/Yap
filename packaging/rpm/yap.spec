@@ -74,6 +74,7 @@ install -d %{buildroot}/usr/share/user-tmpfiles.d
 
 # Agent and runtime
 install -m 755 yap.py %{buildroot}/opt/yap/yap.py
+install -m 644 yap_core.py %{buildroot}/opt/yap/yap_core.py
 install -m 755 llama-cli %{buildroot}/usr/local/bin/llama-cli
 
 # Symlink: /usr/local/bin/yap -> /opt/yap/yap.py
@@ -216,6 +217,7 @@ fi
 # ─── files ───────────────────────────────────────────────────────────────────
 %files
 /opt/yap/yap.py
+/opt/yap/yap_core.py
 /usr/local/bin/yap
 /usr/local/bin/llama-cli
 /usr/share/yap/whitelist/

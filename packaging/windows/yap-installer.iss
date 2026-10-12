@@ -79,6 +79,7 @@ Name: "{app}\bin"
 [Files]
 ; Main agent
 Source: "yap.py";                         DestDir: "{app}";                Flags: ignoreversion
+Source: "yap_core.py";                    DestDir: "{app}";                Flags: ignoreversion
 Source: "VERSION";                        DestDir: "{app}";                Flags: ignoreversion
 Source: "LICENSE";                        DestDir: "{app}";                Flags: ignoreversion
 Source: "USAGE.md";                       DestDir: "{app}";                Flags: ignoreversion

@@ -230,6 +230,7 @@ stage_yap() {
     "$staging/usr/share/doc/yap"
 
   install_file 0755 "$SCRIPT_DIR/yap.py" "$staging/opt/yap/yap.py"
+  install_file 0644 "$SCRIPT_DIR/yap_core.py" "$staging/opt/yap/yap_core.py"
   ln -sf /opt/yap/yap.py "$staging/usr/local/bin/yap"
 
   ensure_llama_cli "$staging/usr/local/bin/llama-cli"
