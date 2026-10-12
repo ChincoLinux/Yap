@@ -84,7 +84,7 @@
     "unknown_option": "Opción no válida. Elige un número del menú."
   },
   "help": {
-    "body": "  Preguntar:     Cualquier pregunta directa al AI\n  Abrir app:     'Abre [aplicacion]' (Firefox, Terminal, etc.)\n  Wikipedia:     'Busca [tema]' (resumen desde Wikipedia)\n  Tutor PSeInt:  Preguntas sobre programacion con PSeInt\n  Introduccion:  'Quiero aprender PSeInt' — tutorial interactivo\n  Curso:         'curso FPY1101' — acceder al plan de estudio\n  Iniciar EA:    'iniciar EA1' — comenzar experiencia de aprendizaje\n  Progreso:      'progreso' — % completado, puntajes y nota (1.0-7.0)\n  Historial:     'historial' — ver sesiones anteriores\n  Retomar:       'historial --ultimo' — continuar última sesión\n  Sesion:        'sesion' — estado de la sesion activa\n                 'sesion nueva|pausar|retomar|cerrar|listar'\n  Telemetria:    'telemetria' — resumen local de tu uso\n  Idioma:        'idioma' — cambiar idioma de la interfaz (es|en|arn)"
+    "body": "  Preguntar:     Cualquier pregunta directa al AI\n  Abrir app:     'Abre [aplicacion]' (Firefox, Terminal, etc.)\n  Wikipedia:     'Busca [tema]' (resumen desde Wikipedia)\n  Tutor PSeInt:  Preguntas sobre programacion con PSeInt\n  Introduccion:  'Quiero aprender PSeInt' — tutorial interactivo\n  Ejercicios:    'ejercicios' / 'ejercicios lista' — practica evaluada\n  Curso:         'curso FPY1101' — acceder al plan de estudio\n  Iniciar EA:    'iniciar EA1' — comenzar experiencia de aprendizaje\n  Progreso:      'progreso' — % completado, puntajes y nota (1.0-7.0)\n  Historial:     'historial' — ver sesiones anteriores\n  Retomar:       'historial --ultimo' — continuar última sesión\n  Sesion:        'sesion' — estado de la sesion activa\n                 'sesion nueva|pausar|retomar|cerrar|listar'\n  Telemetria:    'telemetria' — resumen local de tu uso\n  Idioma:        'idioma' — cambiar idioma de la interfaz (es|en|arn)"
   },
   "profile": {
     "current": "Idioma actual: {name} ({lang})",
@@ -250,10 +250,12 @@
     "s4_body": "Escribe 'como hago un ciclo mientras' para consultar al tutor de programacion.\nEl tutor responde con pseudocodigo PSeInt paso a paso.",
     "s5_title": "Tutorial PSeInt interactivo",
     "s5_body": "Escribe 'quiero aprender pseint' para iniciar el tutorial completo.\nAbre PSeInt, guia PDF, y presenta ejercicios con asistencia IA en tiempo real.",
+    "s_ej_title": "Ejercicios con validacion",
+    "s_ej_body": "Escribe 'ejercicios lista' para ver el catalogo.\nEscribe 'ejercicios' para practicar: Yap evalua tu respuesta y ofrece pistas.",
     "s6_title": "Sistema de Cursos",
     "s6_body": "Escribe 'curso FPY1101' para ver el plan de Fundamentos de Programacion.\nEscribe 'iniciar EA1' para empezar la primera experiencia de aprendizaje.\nLas actividades se evaluan automaticamente. Tienes hasta 3 intentos.\nProgreso se guarda automaticamente. Retoma donde quedaste.",
     "s7_title": "Comandos esenciales",
-    "s7_body": "  ayuda        — esta lista de comandos\n  guia         — tutorial interactivo (este)\n  curso CODIGO — ver plan de un curso\n  iniciar EA1  — empezar sesion guiada\n  mi progreso  — ver avance, puntajes y notas\n  idioma       — cambiar idioma de la interfaz\n  salir / Ctrl+C — terminar"
+    "s7_body": "  ayuda        — esta lista de comandos\n  guia         — tutorial interactivo (este)\n  curso CODIGO — ver plan de un curso\n  iniciar EA1  — empezar sesion guiada\n  ejercicios   — practica con validacion automatica\n  mi progreso  — ver avance, puntajes y notas\n  idioma       — cambiar idioma de la interfaz\n  salir / Ctrl+C — terminar"
   },
   "progress": {
     "empty": "No hay progreso registrado. Inicia un curso con 'yap curso FPY1101'.",

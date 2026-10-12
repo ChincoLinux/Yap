@@ -34,7 +34,7 @@ class TestAppWhitelist:
         # Crear whitelist temporal para pruebas
         self.tmp_dir = tempfile.mkdtemp()
         self.apps_path = os.path.join(self.tmp_dir, "apps.conf")
-        with open(self.apps_path, "w") as f:
+        with open(self.apps_path, "w", encoding="utf-8") as f:
             f.write("# Apps permitidas\n")
             f.write("LibreOffice:libreoffice\n")
             f.write("Firefox:firefox-esr,firefox\n")
@@ -85,7 +85,7 @@ class TestDomainWhitelist:
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()
         self.web_path = os.path.join(self.tmp_dir, "web.conf")
-        with open(self.web_path, "w") as f:
+        with open(self.web_path, "w", encoding="utf-8") as f:
             f.write("# Dominios permitidos\n")
             f.write("wikipedia.org\n")
             f.write("debian.org\n")
@@ -160,7 +160,7 @@ class TestCommandSecurity:
         """Intentar injection en nombre de app debe fallar gracefulmente."""
         tmp_dir = tempfile.mkdtemp()
         apps_path = os.path.join(tmp_dir, "apps.conf")
-        with open(apps_path, "w") as f:
+        with open(apps_path, "w", encoding="utf-8") as f:
             f.write("LibreOffice:libreoffice\n")
 
         with mock.patch.object(yap, "WHITELIST_APPS", apps_path):
@@ -186,7 +186,7 @@ class TestCommandSecurity:
         """Intentar URLs maliciosas debe ser bloqueado."""
         tmp_dir = tempfile.mkdtemp()
         web_path = os.path.join(tmp_dir, "web.conf")
-        with open(web_path, "w") as f:
+        with open(web_path, "w", encoding="utf-8") as f:
             f.write("wikipedia.org\n")
 
         with mock.patch.object(yap, "WHITELIST_WEB", web_path):
@@ -220,7 +220,7 @@ class TestConfigLoading:
         """Lineas con # deben ser ignoradas."""
         tmp_dir = tempfile.mkdtemp()
         path = os.path.join(tmp_dir, "test.conf")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write("# Comentario\n")
             f.write("  # Otro comentario\n")
             f.write("App:comando\n")
@@ -237,7 +237,7 @@ class TestConfigLoading:
         """Lineas vacias deben ser ignoradas."""
         tmp_dir = tempfile.mkdtemp()
         path = os.path.join(tmp_dir, "test.conf")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write("\n\n\n")
             f.write("App:comando\n")
             f.write("\n")
@@ -253,7 +253,7 @@ class TestConfigLoading:
         """Lineas sin ':' deben ser ignoradas."""
         tmp_dir = tempfile.mkdtemp()
         path = os.path.join(tmp_dir, "test.conf")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write("linea sin dos puntos\n")
             f.write("App:comando\n")
 

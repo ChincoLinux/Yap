@@ -34,7 +34,7 @@ class TestOpenApp:
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()
         self.apps_path = os.path.join(self.tmp_dir, "apps.conf")
-        with open(self.apps_path, "w") as f:
+        with open(self.apps_path, "w", encoding="utf-8") as f:
             f.write("LibreOffice:libreoffice\n")
             f.write("Firefox:firefox-esr,firefox\n")
 
@@ -104,7 +104,7 @@ class TestWebfetch:
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()
         self.web_path = os.path.join(self.tmp_dir, "web.conf")
-        with open(self.web_path, "w") as f:
+        with open(self.web_path, "w", encoding="utf-8") as f:
             f.write("wikipedia.org\n")
             f.write("debian.org\n")
 
@@ -321,17 +321,22 @@ class TestPSeIntConfig:
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_cargar_ejercicios_devuelve_lista(self):
-        with open(self.exercises_path, "w") as f:
+        with open(self.exercises_path, "w", encoding="utf-8") as f:
             f.write("Hola Mundo:Escribe un programa\n")
             f.write("Suma:Suma dos numeros|Paso 1; Paso 2\n")
         with patch.object(yap, "PSEINT_EXERCISES", self.exercises_path):
             ej = yap.cargar_ejercicios()
         assert len(ej) == 2
-        assert ej[0] == ("Hola Mundo", "Escribe un programa", "")
-        assert ej[1] == ("Suma", "Suma dos numeros", "Paso 1; Paso 2")
+        assert ej[0]["titulo"] == "Hola Mundo"
+        assert ej[0]["enunciado"] == "Escribe un programa"
+        assert ej[0]["solucion"] == ""
+        assert ej[0]["formato"] == "v1"
+        assert ej[1]["titulo"] == "Suma"
+        assert ej[1]["enunciado"] == "Suma dos numeros"
+        assert ej[1]["solucion"] == "Paso 1; Paso 2"
 
     def test_cargar_ignora_comentarios(self):
-        with open(self.exercises_path, "w") as f:
+        with open(self.exercises_path, "w", encoding="utf-8") as f:
             f.write("# Esto es un comentario\n")
             f.write("Hola Mundo:Escribe un programa\n")
         with patch.object(yap, "PSEINT_EXERCISES", self.exercises_path):
@@ -361,7 +366,7 @@ class TestIntroduccionPSeInt:
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()
         self.exercises_path = os.path.join(self.tmp_dir, "ejercicios.conf")
-        with open(self.exercises_path, "w") as f:
+        with open(self.exercises_path, "w", encoding="utf-8") as f:
             f.write("Hola Mundo:Escribe un programa\n")
             f.write("Suma:Suma dos numeros\n")
 
@@ -668,7 +673,7 @@ class TestCourseSystem:
 
     def test_cargar_curso_valido(self):
         path = os.path.join(self.tmpdir, "TEST101.json")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(self.VALID_COURSE, f)
         result = yap.cargar_curso("TEST101")
         assert result["codigo"] == "TEST101"
@@ -680,14 +685,14 @@ class TestCourseSystem:
 
     def test_cargar_curso_corrupto(self):
         path = os.path.join(self.tmpdir, "BAD.json")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write("not json")
         with pytest.raises(json.JSONDecodeError):
             yap.cargar_curso("BAD")
 
     def test_cargar_curso_faltan_claves(self):
         path = os.path.join(self.tmpdir, "INCOMPLETO.json")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump({"codigo": "X"}, f)
         with pytest.raises(ValueError, match="faltan"):
             yap.cargar_curso("INCOMPLETO")
@@ -696,7 +701,7 @@ class TestCourseSystem:
         for code, name in [("A101", "Alpha"), ("B202", "Beta")]:
             data = dict(self.VALID_COURSE, codigo=code, nombre=name)
             path = os.path.join(self.tmpdir, f"{code}.json")
-            with open(path, "w") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f)
         cursos = yap.listar_cursos()
         assert len(cursos) == 2
@@ -706,10 +711,10 @@ class TestCourseSystem:
 
     def test_listar_cursos_salta_malformados(self):
         path = os.path.join(self.tmpdir, "BUENO.json")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(self.VALID_COURSE, f)
         path2 = os.path.join(self.tmpdir, "MALO.json")
-        with open(path2, "w") as f:
+        with open(path2, "w", encoding="utf-8") as f:
             f.write("{corrupt")
         cursos = yap.listar_cursos()
         assert len(cursos) == 1
@@ -801,7 +806,7 @@ class TestCursoCommand:
         self.ppat.start()
         self.spat.start()
         path = os.path.join(self.tmpdir, "TEST101.json")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(self.VALID_COURSE, f)
 
     def teardown_method(self):

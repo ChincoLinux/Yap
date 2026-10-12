@@ -231,14 +231,16 @@ class TestExportacion(TelemetryTestBase):
         """Las fechas de uso podrían correlacionarse con una persona concreta."""
         yap.registrar_uso("query")
         yap.cmd_telemetria("exportar")
-        contenido = open(self.efile, encoding="utf-8").read()
+        with open(self.efile, encoding="utf-8") as _f:
+            contenido = _f.read()
         assert "creado" not in contenido
         assert "actualizado" not in contenido
 
     def test_el_export_no_lleva_rutas_ni_usuario(self):
         yap.registrar_uso("query")
         yap.cmd_telemetria("exportar")
-        contenido = open(self.efile, encoding="utf-8").read()
+        with open(self.efile, encoding="utf-8") as _f:
+            contenido = _f.read()
         assert os.path.expanduser("~") not in contenido
         assert "/home/" not in contenido
         assert "C:\\" not in contenido

@@ -84,7 +84,7 @@
     "unknown_option": "Invalid option. Choose a number from the menu."
   },
   "help": {
-    "body": "  Ask:           Any direct question to the AI\n  Open app:      'Open [app]' (Firefox, Terminal, etc.)\n  Wikipedia:     'Search [topic]' (summary from Wikipedia)\n  PSeInt tutor:  Programming questions with PSeInt\n  Intro:         'I want to learn PSeInt' — interactive tutorial\n  Course:        'course FPY1101' — open the study plan\n  Start EA:      'start EA1' — begin a learning experience\n  Progress:      'progress' — % complete, scores and grade (1.0-7.0)\n  History:       'history' — view previous sessions\n  Resume:        'history --last' — continue the last session\n  Session:       'session' — active session status\n                 'session new|pause|resume|close|list'\n  Telemetry:     'telemetry' — local usage summary\n  Language:      'language' — change interface language (es|en|arn)"
+    "body": "  Ask:           Any direct question to the AI\n  Open app:      'Open [app]' (Firefox, Terminal, etc.)\n  Wikipedia:     'Search [topic]' (summary from Wikipedia)\n  PSeInt tutor:  Programming questions with PSeInt\n  Intro:         'I want to learn PSeInt' — interactive tutorial\n  Exercises:    'ejercicios' / 'ejercicios lista' — graded practice\n  Course:        'course FPY1101' — open the study plan\n  Start EA:      'start EA1' — begin a learning experience\n  Progress:      'progress' — % complete, scores and grade (1.0-7.0)\n  History:       'history' — view previous sessions\n  Resume:        'history --last' — continue the last session\n  Session:       'session' — active session status\n                 'session new|pause|resume|close|list'\n  Telemetry:     'telemetry' — local usage summary\n  Language:      'language' — change interface language (es|en|arn)"
   },
   "profile": {
     "current": "Current language: {name} ({lang})",
@@ -250,10 +250,12 @@
     "s4_body": "Type 'how do I write a while loop' to ask the programming tutor.\nThe tutor answers with PSeInt pseudocode step by step.",
     "s5_title": "Interactive PSeInt tutorial",
     "s5_body": "Type 'I want to learn pseint' to start the full tutorial.\nIt opens PSeInt, a PDF guide, and presents exercises with real-time AI help.",
+    "s_ej_title": "Exercises with validation",
+    "s_ej_body": "Type 'ejercicios lista' to see the catalogue.\nType 'ejercicios' to practise: Yap evaluates your answer and gives you hints.",
     "s6_title": "Course system",
     "s6_body": "Type 'course FPY1101' to see the Programming Fundamentals plan.\nType 'start EA1' to begin the first learning experience.\nActivities are graded automatically. You have up to 3 attempts.\nProgress is saved automatically. Resume where you left off.",
     "s7_title": "Essential commands",
-    "s7_body": "  help         — this command list\n  guide        — interactive tutorial (this)\n  course CODE  — view a course plan\n  start EA1    — start a guided session\n  progress     — view progress, scores and grades\n  language     — change the interface language\n  quit / Ctrl+C — exit"
+    "s7_body": "  help         — this command list\n  guide        — interactive tutorial (this)\n  course CODE  — view a course plan\n  start EA1    — start a guided session\n  ejercicios   — practise with automatic validation\n  progress     — view progress, scores and grades\n  language     — change the interface language\n  quit / Ctrl+C — exit"
   },
   "progress": {
     "empty": "No progress recorded. Start a course with 'yap course FPY1101'.",
