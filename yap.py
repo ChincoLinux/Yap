@@ -23,6 +23,18 @@ import atexit
 import unicodedata
 import math
 
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
 WHITELIST_WEB = f"{CONFIG_DIR}/whitelist/web.conf"
@@ -175,18 +187,39 @@ MODEL_1B_NAME = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
 MODEL_3B_PATH = f"{MODEL_DIR}/{MODEL_3B_NAME}"
 MODEL_1B_PATH = f"{MODEL_DIR}/{MODEL_1B_NAME}"
 
+REPO_DIR = os.path.abspath(os.path.dirname(__file__))
+LOCAL_BIN_DIR = os.path.join(REPO_DIR, "bin")
+LOCAL_MODELS_DIR = os.path.join(REPO_DIR, "models")
+
+# Sincronización automática de bin/ local si contiene llama-cli
+if os.path.isdir(LOCAL_BIN_DIR):
+    bin_name = "llama-cli.exe" if sys.platform == "win32" else "llama-cli"
+    if (
+        os.path.isfile(os.path.join(LOCAL_BIN_DIR, bin_name))
+        and shutil.which("llama-cli") is None
+    ):
+        os.environ["PATH"] = LOCAL_BIN_DIR + os.pathsep + os.environ.get("PATH", "")
+
 
 def _modelo_local_path(raw=""):
     """Llama 3.2 Instruct Q4_K_M, techo 3B. Nunca 8B."""
     t = (raw or "").strip() or MODEL_3B_PATH
     base = os.path.basename(t.replace("\\", "/")).lower()
     if "8b" in base:
-        return MODEL_3B_PATH
-    if "llama-3.2-1b-instruct-q4_k_m" in base:
-        return t if ("/" in t or "\\" in t) else MODEL_1B_PATH
-    if "llama-3.2-3b-instruct-q4_k_m" in base:
-        return t if ("/" in t or "\\" in t) else MODEL_3B_PATH
-    return MODEL_3B_PATH
+        target = MODEL_3B_PATH
+    elif "llama-3.2-1b-instruct-q4_k_m" in base:
+        target = t if ("/" in t or "\\" in t) else MODEL_1B_PATH
+    elif "llama-3.2-3b-instruct-q4_k_m" in base:
+        target = t if ("/" in t or "\\" in t) else MODEL_3B_PATH
+    else:
+        target = MODEL_3B_PATH
+
+    # Si la ruta por defecto (/opt/yap/models/...) no existe, buscar en carpeta models/ local
+    if not os.path.exists(target):
+        cand = os.path.join(LOCAL_MODELS_DIR, os.path.basename(target))
+        if os.path.exists(cand):
+            return cand
+    return target
 
 
 MODEL_PATH = _modelo_local_path(os.environ.get("YAP_MODEL_PATH", MODEL_3B_PATH))
@@ -7277,7 +7310,19 @@ def _responder_super_por_fallback(prompt, context, store_history, motivo):
     return None
 
 
-def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=True):
+def cmd_query(
+    prompt, context=None, store_history=True, allow_super_fallback=True, on_token=None
+):
+    if on_token is not None:
+        import yap_core
+
+        return yap_core.query_stream(
+            prompt,
+            context=context,
+            store_history=store_history,
+            allow_super_fallback=allow_super_fallback,
+            on_token=on_token,
+        )
     if (
         allow_super_fallback
         and _super_disponible()
@@ -7325,6 +7370,13 @@ def cmd_query(prompt, context=None, store_history=True, allow_super_fallback=Tru
     parts.append(f"{HEADER}assistant{FOOTER}\n\n")
 
     full_prompt = "".join(parts)
+
+    if (
+        shutil.which("llama-cli") is None or not os.path.exists(MODEL_PATH)
+    ) and "pytest" not in sys.modules:
+        import yap_core
+
+        yap_core.asegurar_llama_instalado(auto_instalar=True)
 
     cmd = [
         "llama-cli",
@@ -7390,6 +7442,13 @@ def cmd_pseint(query):
     parts.append(f"{HEADER}assistant{FOOTER}\n\n")
 
     full_prompt = "".join(parts)
+
+    if (
+        shutil.which("llama-cli") is None or not os.path.exists(MODEL_PATH)
+    ) and "pytest" not in sys.modules:
+        import yap_core
+
+        yap_core.asegurar_llama_instalado(auto_instalar=True)
 
     cmd = [
         "llama-cli",
@@ -7661,7 +7720,7 @@ def classify_intent(user_input):
                 "idioma",
             ):
                 return action, param
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
 
     return "query", user_input.strip()
@@ -7923,6 +7982,11 @@ def interpret(user_input, interactivo=False):
 
 
 def main():
+    if "pytest" not in sys.modules and not os.environ.get("PYTEST_CURRENT_TEST"):
+        import yap_core
+
+        yap_core.sincronizar_rutas_locales()
+
     # Accesibilidad: paleta (alto contraste) + filtro de salida (lector/Orca)
     _aplicar_accesibilidad_entorno()
 
@@ -8214,6 +8278,13 @@ def handle_action(action, param, original_input):
         _cons = linea_consumo()
         if _cons:
             print(_cons)
+
+
+def get_engine():
+    """Retorna la instancia del motor desacoplado yap_core (#152)."""
+    import yap_core
+
+    return yap_core.get_engine()
 
 
 if __name__ == "__main__":
