@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yap"
+version = "1.0.6"
+description = "Asistente de IA local para aulas, sin conexión a Internet"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+
+# stdlib-only por política: el agente no tiene dependencias de runtime.
+# Ver yap.py — los imports están enumerados y socket/ctypes/pickle/base64/
+# requests están prohibidos por A-Dev HD-YAP-SEC-001.
+dependencies = []
+
+[project.optional-dependencies]
+# La GUI necesita uno de los dos, no ambos. PyQt6 es el recomendado;
+# PySide6 funciona como alternativa cuando PyQt6 no está empaquetado
+# en la distribución del alumno.
+gui = ["PyQt6>=6.5"]
+
+[project.urls]
+Homepage = "https://github.com/ChincoLinux/Yap"
+Issues = "https://github.com/ChincoLinux/Yap/issues"
+Changelog = "https://github.com/ChincoLinux/Yap/blob/main/CHANGELOG.md"
+
+[project.scripts]
+yap = "yap:main"
+yap-gui = "yap_desktop.app:main"
+
+[tool.setuptools]
+# yap.py vive en la raíz como fichero plano y resuelve i18n/ relativo a su
+# propio fichero (_i18n_dirs). Empaquetarlo como py-module pondría ese
+# fichero en site-packages, donde los catálogos no le siguen y t() devuelve
+# la clave literal ("help.body" en vez de la ayuda). Moverlo a un paquete
+# yap/ con sus datos es #204; hasta entonces, el manifest declara la GUI y
+# los entry points, y yap.py se instala por los mecanismos ya existentes.
+packages = ["yap_desktop"]
+
+[tool.setuptools.package-data]
+yap_desktop = ["py.typed"]
