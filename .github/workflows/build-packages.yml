@@ -57,8 +57,7 @@ jobs:
             git dpkg-dev fakeroot apparmor apparmor-utils \
             python3 python3-pytest ca-certificates curl
 
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - name: Build .deb (stub llama-cli)
         run: chmod +x build-deb.sh && ./build-deb.sh --stub-llama --outdir dist
 
@@ -71,7 +70,7 @@ jobs:
         run: python3 -m pytest tests/ -q -x 2>&1 | tail -10
 
       - name: Upload .deb artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: yap-deb-${{ matrix.suite }}
           path: dist/*.deb
@@ -91,8 +90,7 @@ jobs:
         run: |
           dnf install -y rpm-build python3 python3-pytest git tar
 
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - name: Create stub llama-cli binary
         run: |
           printf '#!/bin/bash\necho "[stub llama-cli] $@"\n' > llama-cli
@@ -120,7 +118,7 @@ jobs:
         run: find ~/rpmbuild/RPMS -name '*.rpm' -exec ls -lh {} \;
 
       - name: Upload RPM artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: yap-rpm-fedora
           path: ~/rpmbuild/RPMS/**/*.rpm
@@ -134,8 +132,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - name: Install flatpak-builder
         run: |
           sudo apt-get update -qq
@@ -166,7 +163,7 @@ jobs:
           ls -lh dist/yap.flatpak
 
       - name: Upload Flatpak artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: yap-flatpak
           path: dist/yap.flatpak
@@ -180,10 +177,9 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: '3.12'
 
@@ -215,7 +211,7 @@ jobs:
         shell: pwsh
 
       - name: Upload Windows installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: yap-windows-installer
           path: dist/windows/*.exe
@@ -231,10 +227,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish == 'true')
 
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           path: release-assets
 
@@ -246,7 +241,7 @@ jobs:
         run: echo "ver=$(cat VERSION)" >> $GITHUB_OUTPUT
 
       - name: Create or update GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
         with:
           tag_name: ${{ github.ref_name }}
           name: "Yap v${{ steps.version.outputs.ver }}"
