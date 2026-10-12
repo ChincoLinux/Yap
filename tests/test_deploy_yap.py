@@ -132,8 +132,13 @@ class TestAyuda:
                 assert "ssh" in linea
 
     def test_sintaxis_valida(self):
-        for shell in ("bash", "sh"):
-            r = subprocess.run(
-                [shell, "-n", str(SCRIPT)], capture_output=True, text=True, timeout=60
-            )
-            assert r.returncode == 0, f"{shell} -n: {r.stderr}"
+        """Solo bash: el script es #!/usr/bin/env bash y usa mapfile y local.
+
+        Comprobarlo con sh -n seria un error, porque en Debian/Ubuntu /bin/sh
+        es dash y estas construcciones no existen alli.
+        """
+        assert _fuente().splitlines()[0] == "#!/usr/bin/env bash"
+        r = subprocess.run(
+            ["bash", "-n", str(SCRIPT)], capture_output=True, text=True, timeout=60
+        )
+        assert r.returncode == 0, f"bash -n: {r.stderr}"
