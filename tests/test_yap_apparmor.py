@@ -179,15 +179,11 @@ class TestProfileExists:
     """Requisito: El perfil AppArmor existe en el repo."""
 
     def test_profile_file_exists(self):
-        path = os.path.join(
-            yap.RAIZ_INSTALACION, "apparmor", "usr.local.bin.yap"
-        )
+        path = os.path.join(yap.RAIZ_INSTALACION, "apparmor", "usr.local.bin.yap")
         assert os.path.exists(path), f"Perfil AppArmor no encontrado: {path}"
 
     def test_profile_has_enforce_mode(self):
-        path = os.path.join(
-            yap.RAIZ_INSTALACION, "apparmor", "usr.local.bin.yap"
-        )
+        path = os.path.join(yap.RAIZ_INSTALACION, "apparmor", "usr.local.bin.yap")
         with open(path, encoding="utf-8") as f:
             content = f.read()
         # AppArmor default-deny means the profile enforces by default
@@ -198,9 +194,7 @@ class TestProfileExists:
 
     def test_profile_deny_by_default(self):
         """El perfil debe tener default-deny (no allow everything)."""
-        path = os.path.join(
-            yap.RAIZ_INSTALACION, "apparmor", "usr.local.bin.yap"
-        )
+        path = os.path.join(yap.RAIZ_INSTALACION, "apparmor", "usr.local.bin.yap")
         with open(path, encoding="utf-8") as f:
             content = f.read()
         # No debe tener allow all (root-level wildcard without specific path)

@@ -187,7 +187,7 @@ jobs:
           # Modulos de primer nivel del propio repo: no son dependencias.
           # Se comprueba que el fichero exista, para que no sirva de
           # atajo a nadie que quiera colar algo con ese nombre.
-          FIRST_PARTY = {'yap_core'}
+          FIRST_PARTY = {'yap', 'yap_core'}
           for nombre in FIRST_PARTY:
               if not os.path.exists(nombre + '.py'):
                   print(f'::error::Modulo de primer nivel declarado sin fichero: {nombre}.py')

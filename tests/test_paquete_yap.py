@@ -102,9 +102,9 @@ class TestPuntosDeEntrada:
         hace falta __main__.py.
         """
         texto = (PAQUETE / "__init__.py").read_text(encoding="utf-8")
-        assert 'if __name__ == "__main__"' in texto, (
-            "el bloque main del init es el que quedo inalcanzable"
-        )
+        assert (
+            'if __name__ == "__main__"' in texto
+        ), "el bloque main del init es el que quedo inalcanzable"
         assert (PAQUETE / "__main__.py").read_text(encoding="utf-8").count("main") >= 1
 
 
