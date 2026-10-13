@@ -185,13 +185,14 @@ jobs:
           import ast, sys, os
           STDLIB = set(sys.stdlib_module_names)
           # Modulos de primer nivel del propio repo: no son dependencias.
-          # Se comprueba que el fichero exista, para que no sirva de
-          # atajo a nadie que quiera colar algo con ese nombre.
-          FIRST_PARTY = {'yap', 'yap_core'}
-          for nombre in FIRST_PARTY:
-              if not os.path.exists(nombre + '.py'):
-                  print(f'::error::Modulo de primer nivel declarado sin fichero: {nombre}.py')
-                  sys.exit(1)
+          # Se derivan de los .py de la raiz, no se declaran: una lista
+          # a mano se desincroniza entre ramas — fallo yo al abrir el
+          # #254 declarando yap_core, que vive en el #253 y aun no existe
+          # aqui. Un .py en la raiz es de primer nivel por definicion.
+          FIRST_PARTY = {
+              f[:-3] for f in os.listdir('.')
+              if f.endswith('.py') and os.path.isfile(f)
+          }
           tree = ast.parse(open('yap.py').read())
           non_stdlib = set()
           for node in ast.walk(tree):
