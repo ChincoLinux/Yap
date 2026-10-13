@@ -180,13 +180,13 @@ class TestProfileExists:
 
     def test_profile_file_exists(self):
         path = os.path.join(
-            os.path.dirname(yap.__file__), "apparmor", "usr.local.bin.yap"
+            yap.RAIZ_INSTALACION, "apparmor", "usr.local.bin.yap"
         )
         assert os.path.exists(path), f"Perfil AppArmor no encontrado: {path}"
 
     def test_profile_has_enforce_mode(self):
         path = os.path.join(
-            os.path.dirname(yap.__file__), "apparmor", "usr.local.bin.yap"
+            yap.RAIZ_INSTALACION, "apparmor", "usr.local.bin.yap"
         )
         with open(path, encoding="utf-8") as f:
             content = f.read()
@@ -199,7 +199,7 @@ class TestProfileExists:
     def test_profile_deny_by_default(self):
         """El perfil debe tener default-deny (no allow everything)."""
         path = os.path.join(
-            os.path.dirname(yap.__file__), "apparmor", "usr.local.bin.yap"
+            yap.RAIZ_INSTALACION, "apparmor", "usr.local.bin.yap"
         )
         with open(path, encoding="utf-8") as f:
             content = f.read()
@@ -224,7 +224,7 @@ class TestSetupShIntegration:
     """Requisito: setup.sh incluye instalación de AppArmor."""
 
     def test_setup_has_apparmor_step(self):
-        setup_path = os.path.join(os.path.dirname(yap.__file__), "setup.sh")
+        setup_path = os.path.join(yap.RAIZ_INSTALACION, "setup.sh")
         with open(setup_path, encoding="utf-8") as f:
             content = f.read()
         assert "AppArmor" in content or "apparmor" in content
@@ -233,7 +233,7 @@ class TestSetupShIntegration:
 
     def test_setup_reads_version_after_script_dir(self):
         """SCRIPT_DIR must be set before YAP_VERSION reads $SCRIPT_DIR/VERSION."""
-        setup_path = os.path.join(os.path.dirname(yap.__file__), "setup.sh")
+        setup_path = os.path.join(yap.RAIZ_INSTALACION, "setup.sh")
         with open(setup_path, encoding="utf-8") as f:
             lines = f.readlines()
         script_dir_line = None
@@ -260,7 +260,7 @@ class TestCiWorkflows:
 
     def test_fallback_merge_workflow_removed(self):
         path = os.path.join(
-            os.path.dirname(yap.__file__),
+            yap.RAIZ_INSTALACION,
             ".github",
             "workflows",
             "fallback-merge.yml",
@@ -272,7 +272,7 @@ class TestCiWorkflows:
 
     def test_auto_release_imports_os_before_environ(self):
         path = os.path.join(
-            os.path.dirname(yap.__file__),
+            yap.RAIZ_INSTALACION,
             ".github",
             "workflows",
             "auto-release.yml",
@@ -293,7 +293,7 @@ class TestCiWorkflows:
         cadena no se cerraba nunca y contradecia ADEV.md y GOVERNANCE.md.
         """
         path = os.path.join(
-            os.path.dirname(yap.__file__),
+            yap.RAIZ_INSTALACION,
             ".github",
             "workflows",
             "auto-release.yml",

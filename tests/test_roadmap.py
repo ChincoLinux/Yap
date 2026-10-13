@@ -95,7 +95,11 @@ class TestCifras:
         fichero en cada commit. Ver #239, donde la auditoria de seguridad
         seguia citando 932 lineas de un fichero de mas de 8000.
         """
-        reales = len((RAIZ / "yap.py").read_text(encoding="utf-8").splitlines())
+        # La implementacion vive en yap/__init__.py desde #204; el
+        # yap.py de la raiz es un shim de una decena de lineas.
+        import yap
+
+        reales = len(Path(yap.__file__).read_text(encoding="utf-8").splitlines())
         cita = re.search(r"`yap\.py` \(más de (\d+) líneas\)", _texto())
         assert cita, "no se cita el tamano de yap.py"
         cota = int(cita.group(1))
