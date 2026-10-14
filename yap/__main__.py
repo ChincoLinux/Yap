@@ -6,7 +6,6 @@ esto: dentro del paquete ese fichero se importa como `yap`, nunca como
 `__main__`, asi que sin este fichero `-m yap` no arrancaria.
 """
 
-
 from yap import main
 
 if __name__ == "__main__":

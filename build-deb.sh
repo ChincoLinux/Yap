@@ -230,6 +230,7 @@ stage_yap() {
     "$staging/usr/share/doc/yap"
 
   install_file 0755 "$SCRIPT_DIR/yap.py" "$staging/opt/yap/yap.py"
+  install_file 0644 "$SCRIPT_DIR/yap_core.py" "$staging/opt/yap/yap_core.py"
   # El paquete yap/ lleva la implementacion; yap.py de la raiz es el shim.
   cp -r "$SCRIPT_DIR/yap" "$staging/opt/yap/yap"
   find "$staging/opt/yap/yap" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true

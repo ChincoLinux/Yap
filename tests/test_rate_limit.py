@@ -97,6 +97,16 @@ class TestCmdQuery:
         run.assert_not_called()
         assert str(MAX) in out
 
+    def test_el_streaming_tambien_esta_limitado(self):
+        """on_token va por yap_core.query_stream: el limite va antes."""
+        import yap_core
+
+        _llenar(yap.time.monotonic())
+        with mock.patch.object(yap_core, "query_stream") as stream:
+            out = yap.cmd_query("x", store_history=False, on_token=lambda _t: None)
+        stream.assert_not_called()
+        assert str(MAX) in out
+
 
 def test_el_estado_no_persiste_entre_procesos():
     """En memoria: reiniciar Yap resetea el contador, a proposito."""
