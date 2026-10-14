@@ -48,10 +48,45 @@ def test_piso_de_recall_desarrollo(res):
     assert dev["recall_crudo"]["@5"] >= 85.0, dev["recall_crudo"]
 
 
-def test_piso_de_recall_instalado_sobre_lo_alcanzable(res):
+def test_piso_de_recall_instalado(res):
+    """Antes de #262 el aula solo veia los cursos: 24/42 alcanzables."""
     inst = _corpus(res, "instalado")
-    assert inst["alcanzables"] >= 20
-    assert inst["recall_crudo_alcanzables"]["@5"] >= 90.0
+    assert (
+        inst["alcanzables"] == inst["preguntas"]
+    ), "hay preguntas sin respuesta en el aula"
+    assert inst["recall_crudo"]["@5"] >= 85.0, inst["recall_crudo"]
+
+
+def test_el_aula_y_el_checkout_indexan_lo_mismo(res):
+    """Si un cambio de empaquetado los separa, el RAG del aula diverge del
+    que se mide y se desarrolla (#262)."""
+    dev, inst = _corpus(res, "desarrollo"), _corpus(res, "instalado")
+    assert dev["ficheros"] == inst["ficheros"]
+    assert dev["fragmentos"] == inst["fragmentos"]
+
+
+def test_ningun_documento_de_desarrollo_llega_al_prompt(res):
+    permitidas = {"USAGE.md", "apps.conf", "web.conf"}
+    for c in res["corpus"]:
+        for f in c["detalle"]:
+            ajenas = {
+                x
+                for x in f["fuentes_en_prompt"]
+                if x not in permitidas and not x.endswith(".json")
+            }
+            assert not ajenas, f"{c['corpus']} {f['id']}: {ajenas}"
+
+
+def test_la_simulacion_del_aula_sigue_a_build_deb():
+    """rag_eval._arbol_instalado copia el layout del .deb; si build-deb.sh o
+    postinst cambian de rutas, la simulacion miente."""
+    deb = (RAIZ / "build-deb.sh").read_text(encoding="utf-8")
+    postinst = (RAIZ / "packaging/yap/DEBIAN/postinst").read_text(encoding="utf-8")
+    assert "usr/share/doc/yap/$doc" in deb and "USAGE.md" in deb
+    assert '"$YAP_ETC/whitelist' in postinst or "$YAP_ETC/whitelist" in postinst
+    assert "$YAP_ETC/cursos" in postinst
+    assert yap.DOC_DIR == "/usr/share/doc/yap"
+    assert yap.WHITELIST_APPS.startswith(yap.CONFIG_DIR)
 
 
 def test_el_presupuesto_de_tokens_se_respeta(res):
