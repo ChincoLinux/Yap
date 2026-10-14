@@ -18,6 +18,10 @@ jobs:
       - name: Assign unassigned issues to team members
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7
         with:
+          # PAT: secreto de ORGANIZACION, no del repo. Hace falta porque el
+          # script asigna issues en ChincoLinux/ChincoLinux y crea el informe en
+          # ChincoLinux/.github, fuera del alcance del GITHUB_TOKEN de este repo.
+          # El bloque permissions: de arriba NO limita a un PAT. Ver #255.
           github-token: ${{ secrets.PROJECT_PAT }}
           script: |
             const ORG = 'ChincoLinux';
