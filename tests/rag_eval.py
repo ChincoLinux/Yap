@@ -289,6 +289,28 @@ def barrido(datos, chunk_sizes=(50, 100, 300, 1000), umbrales=(0, 2, 4, 6)):
     return filas
 
 
+def barrido_cobertura(datos, coberturas=(0.0, 0.2, 0.34, 0.5)):
+    """Efecto de RAG_MIN_COBERTURA (#263) sobre el corpus del aula: cuanto
+    llega al prompt, cuantos controles reciben contexto y cuantos tokens."""
+    viejo = yap.RAG_MIN_COBERTURA
+    filas = []
+    try:
+        for c in coberturas:
+            yap.RAG_MIN_COBERTURA = c
+            r = medir_corpus("instalado", datos)
+            filas.append(
+                {
+                    "min_cobertura": c,
+                    "en_prompt": r["en_prompt"],
+                    "controles_contaminados": r["controles_contaminados"],
+                    "tokens_en_prompt_media": r["tokens_en_prompt_media"],
+                }
+            )
+    finally:
+        yap.RAG_MIN_COBERTURA = viejo
+    return filas
+
+
 def medir(path=PREGUNTAS):
     datos = cargar_preguntas(path)
     viejo = (yap.CURSOS_DIR, yap.RAG_INDEX_DIR, yap._RAG_INDEX, yap.RAG_ENABLED)
@@ -300,9 +322,11 @@ def medir(path=PREGUNTAS):
                 "RAG_TOP_K": yap.RAG_TOP_K,
                 "RAG_MAX_CONTEXT_TOKENS": yap.RAG_MAX_CONTEXT_TOKENS,
                 "RAG_CHUNK_SIZE": yap.RAG_CHUNK_SIZE,
+                "RAG_MIN_COBERTURA": yap.RAG_MIN_COBERTURA,
             },
             "corpus": [medir_corpus(c, datos) for c in ("desarrollo", "instalado")],
             "barrido": barrido(datos),
+            "barrido_cobertura": barrido_cobertura(datos),
         }
     finally:
         yap.CURSOS_DIR, yap.RAG_INDEX_DIR, yap._RAG_INDEX, yap.RAG_ENABLED = viejo
@@ -345,6 +369,15 @@ def informe(res):
         lineas.append(
             f"  {b['corpus']:10} chunk={b['chunk_size']:<5} "
             f"frag={b['fragmentos']:<4} r@5={b['recall5_alcanzables']}%  {um}"
+        )
+    lineas += [
+        "",
+        "cobertura minima (aula): llega al prompt / controles con contexto / tokens",
+    ]
+    for b in res.get("barrido_cobertura", []):
+        lineas.append(
+            f"  >= {b['min_cobertura']:<4}  {b['en_prompt']}% / "
+            f"{b['controles_contaminados']}% / {b['tokens_en_prompt_media']}"
         )
     return "\n".join(lineas)
 

@@ -2845,6 +2845,18 @@ RAG_ENABLED = os.environ.get("YAP_RAG_ENABLED", "1") != "0"
 RAG_TOP_K = int(os.environ.get("YAP_RAG_TOP_K", "5"))
 RAG_MAX_CONTEXT_TOKENS = int(os.environ.get("YAP_RAG_MAX_TOKENS", "512"))
 RAG_CHUNK_SIZE = 300  # max words per chunk
+# Filtro de relevancia (#263). BM25 puntua cualquier palabra compartida, y
+# "que", "es" o "la" bastaban para inyectar contexto de curso en preguntas sin
+# relacion. Un fragmento entra al prompt solo si contiene al menos esta
+# fraccion de las palabras de contenido de la consulta. Elegido con
+# tests/benchmark.py --rag (docs/RAG.md, seccion 6).
+RAG_MIN_COBERTURA = float(os.environ.get("YAP_RAG_MIN_COBERTURA", "0.2"))
+RAG_STOPWORDS = frozenset(
+    """a al algo como con cual cuales cuando cuanto cuantos cuanta de del desde
+    donde el en entre es esta estan este esto hay la las le lo los mas me mi mis
+    muy no o para pero por puedo que quien se ser si sin sobre su sus tengo tiene
+    un una uno unos y ya yo hace hacer hago dice decir puede pueden""".split()
+)
 
 _RAG_INDEX = None
 
@@ -3258,12 +3270,33 @@ def rag_rebuild():
     return _RAG_INDEX.N, int((t1 - t0) * 1000)
 
 
+def _rag_terminos_de_contenido(texto):
+    return {w for w in _rag_tokenize(texto) if w not in RAG_STOPWORDS}
+
+
+def _rag_filtrar_relevantes(query, results, min_cobertura=None):
+    """Descarta fragmentos que no comparten contenido con la consulta (#263).
+
+    Sin palabras de contenido (solo "que es la...") no hay nada que buscar.
+    """
+    minimo = RAG_MIN_COBERTURA if min_cobertura is None else min_cobertura
+    terminos = _rag_terminos_de_contenido(query)
+    if not terminos:
+        return []
+    filtrados = []
+    for r in results:
+        presentes = terminos & set(_rag_tokenize(r.get("text", "")))
+        if len(presentes) / len(terminos) >= minimo:
+            filtrados.append(r)
+    return filtrados
+
+
 def rag_retrieve(query, top_k=RAG_TOP_K, max_tokens=RAG_MAX_CONTEXT_TOKENS):
     """Retrieve fragments matching query."""
     if not RAG_ENABLED:
         return []
     idx = _rag_load_or_build()
-    results = idx.query(query, top_k=top_k)
+    results = _rag_filtrar_relevantes(query, idx.query(query, top_k=top_k))
 
     # Trim to budget
     total_tokens = 0
