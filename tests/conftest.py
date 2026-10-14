@@ -32,3 +32,13 @@ def _sin_super_nube_en_tests(monkeypatch):
         monkeypatch.setenv("YAP_SUPER_ENABLED", "0")
     if os.environ.get("YAP_SUPER_INTERNET", "").strip() == "":
         monkeypatch.setenv("YAP_SUPER_INTERNET", "0")
+
+
+@pytest.fixture(autouse=True)
+def _limite_de_consultas_limpio():
+    """Cada test empieza con la ventana de #256 vacia: la suite entera corre
+    en segundos y, sin esto, el test numero 31 que consulte al LLM fallaria
+    por el limite y no por lo que prueba."""
+    yap._CONSULTAS_RECIENTES.clear()
+    yield
+    yap._CONSULTAS_RECIENTES.clear()
