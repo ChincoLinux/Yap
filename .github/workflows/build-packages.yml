@@ -14,6 +14,7 @@ on:
     paths:
       - 'packaging/**'
       - 'yap.py'
+      - 'yap/**'
       - 'build-deb.sh'
       - 'whitelist/**'
       - 'cursos/**'
@@ -102,7 +103,7 @@ jobs:
           mkdir -p ~/rpmbuild/{SOURCES,SPECS,BUILD,RPMS,SRPMS}
           tar czf ~/rpmbuild/SOURCES/yap-${VER}.tar.gz \
             --transform "s,^,yap-${VER}/," \
-            yap.py llama-cli VERSION LICENSE USAGE.md README.md \
+            yap.py yap/ llama-cli VERSION LICENSE USAGE.md README.md \
             whitelist/ cursos/ apparmor/ packaging/
           cp packaging/rpm/yap.spec ~/rpmbuild/SPECS/
 
