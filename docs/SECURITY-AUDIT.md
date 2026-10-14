@@ -81,7 +81,8 @@ El perfil **no fija rutas de código**, sólo ejecutables permitidos: `llama-cli
 | `pr-review` | `contents:read, pull-requests:write` | correcto |
 | `pr-state-labeler`, `pr-traceability-check` | `pull-requests:write, issues:write` | correcto |
 | `auto-release`, `build-deb`, `build-packages` | `contents: write` | correcto, actions pineadas |
-| `test.yml`, `auto-add-to-project` | default (`read`) | ver H-2 |
+| `test.yml` | `contents: read` | correcto (#255) |
+| `auto-add-to-project` | `{}` + PAT de org justificado | correcto (#255) |
 
 Las **59** referencias a actions están pineadas por SHA desde #249. Sin `pull_request_target` en ningún workflow.
 
@@ -89,22 +90,17 @@ Las **59** referencias a actions están pineadas por SHA desde #249. Sin `pull_r
 
 ## Hallazgos
 
-### H-1 — `secrets.PROJECT_PAT` no existe — **media**
+### H-1 — `PROJECT_PAT` sin justificar en el fichero — **baja** (corregido en #255)
 
 `auto-add-to-project.yml` y `weekly-sprint-assignment.yml` usan `${{ secrets.PROJECT_PAT }}`.
 
-Verificado contra la API: `GET /repos/ChincoLinux/Yap/actions/secrets` devuelve **`total_count: 0`**. El repositorio no tiene ningún secreto configurado, así que ese valor resuelve a cadena vacía y los dos workflows están **rotos en silencio**. `auto-add-to-project` corre en cada issue y cada PR abierto.
+*Corrección:* la primera versión de esta auditoría afirmaba que el secreto no existía, porque `GET /repos/.../actions/secrets` devuelve `total_count: 0`. Es un secreto **de organización**: `GET /repos/.../actions/organization-secrets` lo lista, y los dos workflows corren en verde. El error fue consultar sólo el endpoint de repositorio.
 
-No hay fuga de credencial porque no hay credencial. El riesgo es que alguien lo "arregle" sin darse cuenta de dos cosas:
+El PAT es necesario: el `GITHUB_TOKEN` no puede escribir en un Project v2 de la organización ni asignar issues en otros repos. Lo que faltaba era hacerlo explícito, porque **un PAT no lo limita el bloque `permissions:`**. Ahora cada uso lleva un comentario con el motivo, y `tests/test_workflows_permisos.py` lo exige.
 
-1. Un **PAT no lo limita el bloque `permissions:`** — esa clave sólo restringe el `GITHUB_TOKEN`. Un PAT conserva todos los permisos de su dueño.
-2. `auto-add-to-project.yml` **no tiene bloque `permissions:`**.
+### H-2 — Dos workflows sin `permissions:` explícito — **baja** (corregido en #255)
 
-**Recomendación:** migrar a `GITHUB_TOKEN` con `permissions: contents: read` explícito. Si el proyecto de GitHub lo exige, un PAT de alcance mínimo y documentado.
-
-### H-2 — Dos workflows sin `permissions:` explícito — **baja**
-
-`test.yml` y `auto-add-to-project.yml`. El default del repo es `read`, así que hoy no hay exceso de permisos, pero el default es un ajuste de Settings, no una garantía del fichero. Si alguien lo cambia, los dos se amplían sin que ninguna PR lo muestre en diff.
+`test.yml` y `auto-add-to-project.yml` heredaban el default de Settings, que no aparece en ningún diff. Ahora `test.yml` declara `contents: read` y `auto-add-to-project.yml` declara `permissions: {}`, porque no usa el `GITHUB_TOKEN`. El test exige `permissions:` a nivel raíz en todos los workflows.
 
 ### H-3 — `sha_pinning_required` desactivado — **media**
 
