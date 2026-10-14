@@ -157,3 +157,77 @@ La suite de pruebas en [`tests/test_yap_rag.py`](../tests/test_yap_rag.py) valid
   - Tiempo de recuperación: **~1.5 ms** (SLA exige < 300 ms).
   - Tiempo de rebuild completo: **< 0.1 s** (SLA exige < 60 s).
 - **Golden Set Pedagógico**: 31 consultas formuladas desde la perspectiva del estudiante evaluadas con tasa de acierto y relevancia comprobadas.
+
+---
+
+## 6. Medición (#214)
+
+**Fecha:** 2026-10-13 · **Ajustes:** `RAG_TOP_K=5`, `RAG_MAX_CONTEXT_TOKENS=512`, `RAG_CHUNK_SIZE=300` · **Modelo:** ninguno — se mide la recuperación, no la generación.
+
+```bash
+python3 tests/benchmark.py --rag            # o: python3 tests/rag_eval.py
+python3 tests/benchmark.py --rag --json r.json
+```
+
+El conjunto está en `tests/rag_eval/preguntas.json`: **42 preguntas de alumno** (24 del curso FPY1101, 14 de uso de Yap, 4 de whitelists), cada una con la fuente que la respalda y una marca de texto verificable, más **10 controles** cuya respuesta no está en el corpus. Una pregunta acierta si un fragmento recuperado viene de la fuente esperada y contiene la marca.
+
+Se mide sobre **dos corpus**, porque no son el mismo:
+
+| Corpus | Qué indexa | Ficheros | Fragmentos |
+|---|---|---|---|
+| desarrollo | un checkout del repo: `docs/`, `USAGE.md`, `AGENTS.md`, `whitelist/`, `cursos/` | 16 | 704 |
+| instalado | un equipo con el `.deb`: sólo `/etc/yap/cursos/` | 1 | 21 |
+
+El corpus se busca junto a `yap.py`. En el `.deb` eso es `/opt/yap/`, y `build-deb.sh` no instala allí `docs/`, `whitelist/` ni `USAGE.md`. **En el aula el RAG sólo ve los cursos.**
+
+### Resultados
+
+| | desarrollo | instalado |
+|---|---|---|
+| preguntas con respuesta en el corpus | 42/42 | **24/42** |
+| recall@1 | 66.7 % | 57.1 % (100 % de lo alcanzable) |
+| recall@3 | 85.7 % | 57.1 % (100 %) |
+| recall@5 | 92.9 % | 57.1 % (100 %) |
+| recall@8 | 92.9 % | 57.1 % (100 %) |
+| la respuesta llega al prompt | 92.9 % | 57.1 % |
+| tokens añadidos al prompt (media / máx) | 234 / 468 | 388 / 508 |
+| latencia de `rag_retrieve` (mediana / p95) | 2.6 / 3.4 ms | 0.13 / 0.18 ms |
+| construcción del índice | 9 ms | 0.5 ms |
+| **controles que reciben contexto** | **10/10** | **10/10** |
+
+### Lectura
+
+1. **El retrieval funciona sobre lo que indexa.** En el corpus instalado acierta el 100 % de lo alcanzable en el primer fragmento.
+2. **En el aula no indexa lo que el alumno pregunta sobre Yap.** Las 18 preguntas de uso y whitelists no tienen respuesta en el corpus instalado: `USAGE.md` y las whitelists existen en el equipo, pero en otras rutas.
+3. **En desarrollo indexa documentación interna.** `DEPLOY.md`, `PACKAGING.md`, `SECURITY-AUDIT.md`, `ROADMAP.md` y `TRUNK-BASED.md` aparecen en el prompt de preguntas de alumno, y dos de las tres preguntas de whitelists fallan porque `DEPLOY.md` le gana a `web.conf`.
+4. **Contaminación total.** Las 10 preguntas fuera del corpus reciben contexto, porque no hay score mínimo: cualquier palabra compartida («que», «es», «la») basta. En el corpus instalado eso son **~430 tokens de curso** inyectados en preguntas como «quién escribió Cien años de soledad», con un score BM25 de 0.15.
+
+### Los tres ajustes
+
+| Ajuste | Veredicto | Dato |
+|---|---|---|
+| `RAG_TOP_K=5` | **se mantiene** | recall@3 = 85.7 % → @5 = 92.9 % → @8 = 92.9 %. Bajar a 3 pierde 3 aciertos; subir a 8 no gana ninguno. |
+| `RAG_MAX_CONTEXT_TOKENS=512` | **se mantiene** | Nunca recortó un acierto: «llega al prompt» = recall@5 en ambos corpus. En el corpus instalado llega a 508 tokens, así que sí limita el ruido. |
+| `RAG_CHUNK_SIZE=300` | **irrelevante hoy** | Sólo parte párrafos de más de 300 palabras; la unidad real es el párrafo. Con 100, 300 o 1000 el resultado es idéntico; con 50 se pierden 2 aciertos. |
+
+### Simulaciones (no implementadas)
+
+Para que la siguiente decisión salga con datos, el harness simula un **score mínimo** sobre el mejor fragmento (`barrido` en el JSON):
+
+| Corpus | Umbral | Aciertos conservados | Controles bloqueados |
+|---|---|---|---|
+| instalado | 2 | 24/24 | 3/10 |
+| instalado | **4** | **24/24** | **7/10** |
+| instalado | 6 | 20/24 | 8/10 |
+| desarrollo | 4 | 39/39 | 0/10 |
+| desarrollo | 6 | 38/39 | 2/10 |
+
+Una prueba aparte con stopwords en español (sin el harness) dio, en el corpus instalado, 24/24 aciertos y 8/10 controles bloqueados con umbral 2.
+
+Un umbral sirve en el corpus instalado y no en el de desarrollo, donde los controles puntúan tanto como los aciertos. Hay que corregir el corpus primero y volver a medir después.
+
+### Pendiente
+
+- **Calidad de la respuesta con y sin RAG.** Necesita `llama-cli` y el modelo; esta medición no los usa. Con lo de arriba, el valor esperado del RAG en el aula hoy se limita a las preguntas sobre el curso.
+- **Corpus del equipo instalado** (#262) y **score mínimo** (#263), en ese orden.
+

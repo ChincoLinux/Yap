@@ -15,6 +15,7 @@ Uso:
     python3 tests/benchmark.py --quick         # menos repeticiones
     python3 tests/benchmark.py --json res.json # resultados en JSON
     python3 tests/benchmark.py --timeout 120   # tope por corrida (segundos)
+    python3 tests/benchmark.py --rag           # medir el RAG (#214), sin modelo
 
 Sin `llama-cli` o sin modelo el script termina con codigo 2 y un mensaje
 claro: no mide nada inventado. Los resultados se pegan en
@@ -158,7 +159,18 @@ def main(argv=None):
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--quick", action="store_true", help="2 repeticiones")
     parser.add_argument("--json", default=None, help="escribir resultados en JSON")
+    parser.add_argument(
+        "--rag",
+        action="store_true",
+        help="medir el RAG (recall@k, coste, contaminacion); no necesita modelo",
+    )
     args = parser.parse_args(argv)
+
+    if args.rag:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import rag_eval
+
+        return rag_eval.main(["--json", args.json] if args.json else [])
 
     if args.quick:
         args.repeticiones = 2
