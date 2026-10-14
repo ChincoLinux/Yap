@@ -142,6 +142,7 @@ yap rag buscar criterios de evaluacion FPY1101
 | `YAP_RAG_ENABLED` | `1` | `1` para activar RAG local; `0` para desactivar por completo. |
 | `YAP_RAG_TOP_K` | `5` | Número máximo de fragmentos a recuperar antes del recorte de presupuesto. |
 | `YAP_RAG_MAX_TOKENS` | `512` | Presupuesto máximo de tokens permitidos para inyección en el prompt. |
+| `YAP_RAG_MIN_COBERTURA` | `0.2` | Fracción mínima de las palabras de contenido de la consulta (sin stopwords) que un fragmento debe contener para entrar al prompt (#263). `0` desactiva el filtro. |
 
 ---
 
@@ -230,7 +231,7 @@ Un umbral sirve en el corpus instalado y no en el de desarrollo, donde los contr
 ### Pendiente
 
 - **Calidad de la respuesta con y sin RAG.** Necesita `llama-cli` y el modelo; esta medición no los usa. Con lo de arriba, el valor esperado del RAG en el aula hoy se limita a las preguntas sobre el curso.
-- **Score mínimo** (#263). El corpus del equipo instalado se corrigió en #262: ver abajo.
+- Corpus del equipo instalado (#262) y filtro de relevancia (#263): resueltos, ver abajo.
 
 ### Tras #262 — corpus de alumno
 
@@ -252,4 +253,23 @@ Desarrollo e instalado indexan ahora exactamente lo mismo, y `tests/test_rag_eva
 Fallan 3 de 42: «¿está permitido Khan Academy?» (`khanacademy.org` no comparte tokens con «khan academy»), «¿qué datos guarda la telemetría?» y «¿cómo vuelvo a ver el tutorial?» (rango 8).
 
 **El umbral de score ya no separa.** Con este corpus, la mediana de score de los aciertos es 11.96 y el máximo de los controles 10.34. Umbral 4: 39/39 aciertos, **0/10** controles bloqueados; umbral 6: pierde 5 aciertos para bloquear 4. La simulación de la primera medición (umbral 4 → 7/10 bloqueados) dependía de un corpus de 21 fragmentos y ya no aplica. #263 tiene que buscar otra señal (stopwords, score normalizado por longitud de consulta, o proporción de términos de la consulta presentes).
+
+### Tras #263 — filtro de relevancia
+
+**Fecha:** 2026-10-13. Mismo conjunto y corpus de #262.
+
+Un umbral fijo sobre el score BM25 no separaba aciertos de controles (sección anterior). La señal que sí separa es la **cobertura**: qué fracción de las palabras de contenido de la consulta —sin stopwords («que», «es», «la», «como», «hace»…)— aparece en el fragmento. `rag_retrieve` descarta los fragmentos por debajo de `RAG_MIN_COBERTURA`, y una consulta sin palabras de contenido no recupera nada.
+
+| `RAG_MIN_COBERTURA` | la respuesta llega al prompt | controles con contexto | tokens al prompt (media) |
+|---|---|---|---|
+| 0 (sin filtro) | 92.9 % | 10/10 | 260 |
+| **0.2 (default)** | **92.9 %** | **3/10** | 221 |
+| 0.34 | 85.7 % | 1/10 | 131 |
+| 0.5 | 85.7 % | 1/10 | 131 |
+
+Se elige **0.2**: no pierde ningún acierto. 0.34 limpia casi todos los controles a costa de 3 aciertos; está disponible con `YAP_RAG_MIN_COBERTURA=0.34` si en el aula pesa más el ruido que el recall.
+
+Los 3 controles que siguen recibiendo contexto comparten palabras reales con el corpus: «receta» (la actividad «receta para un robot» del curso), «inglés» (cambio de idioma en `USAGE.md`) y «sistema» (curso). Es el límite de un buscador léxico; ajustar más las stopwords contra 10 controles sería sobreajustar.
+
+`tests/test_rag_eval.py` fija ahora que el filtro no pierde aciertos (lo que llega al prompt = recall@5) y un techo de 3/10 controles contaminados.
 

@@ -124,3 +124,27 @@ def test_benchmark_rag_corre_sin_modelo(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "recall" in r.stdout
     assert salida.is_file()
+
+
+def test_el_filtro_no_pierde_aciertos(res):
+    """Lo que BM25 recupera en el top 5 sigue llegando al prompt (#263)."""
+    for c in res["corpus"]:
+        assert c["en_prompt"] >= c["recall_crudo"]["@5"] - 0.01, c["corpus"]
+
+
+def test_techo_de_contaminacion(res):
+    """Antes de #263, 10/10 controles recibian contexto. Medido: 3/10."""
+    for c in res["corpus"]:
+        assert c["controles_contaminados"] <= 30.0, (
+            c["corpus"],
+            c["detalle_controles"],
+        )
+
+
+def test_barrido_de_cobertura_es_monotono(res):
+    """Subir el minimo nunca anade contexto: si lo hace, el filtro esta roto."""
+    filas = res["barrido_cobertura"]
+    assert len(filas) >= 3
+    for a, b in zip(filas, filas[1:]):
+        assert b["controles_contaminados"] <= a["controles_contaminados"]
+        assert b["tokens_en_prompt_media"] <= a["tokens_en_prompt_media"]
