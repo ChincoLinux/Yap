@@ -1,115 +1,178 @@
-# Yap — Auditoría de Seguridad Post-Talleres Formativos (#15)
+# Yap — Auditoría de seguridad
 
-**Fecha:** 2026-08-14
-**Auditor:** Devin (automated)
-**Alcance:** `yap.py` (932 líneas), `setup.sh`, `apparmor/`, `tests/`
+**Fecha:** 2026-10-13 · **Base:** `main` @ `1082e80` · **Reemplaza a:** la auditoría de 2026-08-14
 
-## Resumen Ejecutivo
+## Resumen
 
-Se realizó una auditoría integral de seguridad tras la implementación del sistema de cursos
-formativos. Se identificaron **3 hallazgos** (1 crítico, 2 informativos), todos mitigados
-en este commit.
+**Sin hallazgos críticos en código de producción.** Las cuatro prohibiciones centrales de `HD-YAP-SEC-001` tienen **cero** ocurrencias en todo el repo. El riesgo que queda está en CI/CD y en la configuración del repositorio, no en el agente.
+
+---
+
+## Alcance
+
+La auditoría anterior cubría `yap.py`, `setup.sh`, `apparmor/` y `tests/`. Esta cubre las siete superficies que ejecutan o distribuyen código:
+
+| Superficie | Líneas / cantidad | Cubierta antes |
+|---|---|---|
+| `yap.py` | 8220 | sí |
+| `yap_desktop/` | 1251 | **no** |
+| `setup.sh` | 594 | sí |
+| `deploy-yap.sh` | 265 | **no** |
+| `build-deb.sh` | 371 | **no** |
+| `packaging/` (RPM, Flatpak, Inno Setup) | — | **no** |
+| `.github/workflows/` | 12 workflows | **no** |
+| `apparmor/usr.local.bin.yap` | 84 | sí |
+
+La auditoría anterior declaraba `yap.py (932 líneas)`; el fichero tiene **8220**. Ver #239.
+
+---
+
+## Métodos
+
+Recorrido **AST** de los 52 ficheros Python, no `grep`. La distinción importa — ver "Falsos positivos" abajo, donde un `grep` habría dado cuatro falsos positivos de los que dos llevan a conclusiones incorrectas.
+
+Comprobado contra los criterios de `docs/REVIEW.md` (`HD-YAP-SEC-001`), y verificado el estado de cada recomendación de la auditoría anterior.
+
+---
+
+## Verificación de prohibiciones
+
+| Requisito | Ocurrencias |
+|---|---|
+| `shell=True` | **0** |
+| `eval()` / `exec()` builtin | **0** |
+| `os.system()` / `os.popen()` | **0** |
+| `import socket / ctypes / pickle / base64 / shelve / marshal` | **0** |
+| `subprocess.run` sin `timeout=` | **0** |
+| Imports no-stdlib | **0** |
+| `curl -k` / `wget --no-check-certificate` / `curl \| sh` | **0** |
+| `chmod 777` | **0** |
+
+### Los cuatro `Popen` sin `timeout=`
+
+Todos justificados, verificados uno a uno:
+
+| Ubicación | Por qué es correcto |
+|---|---|
+| `yap.py:3745` | `proc.communicate(timeout=120)` a continuación |
+| `yap.py:6413` | App de GUI desprendida, `start_new_session=True` |
+| `yap.py:7444` | `xdg-open`, proceso desprendido |
+| `yap_desktop/daemon.py:177` | `communicate(timeout=self._timeout)` |
+
+En el PR #253 los tres de `yap.py` llevan un comentario `yap-sin-timeout` declarando la excepción en el propio código, y hay un test que falla si se quita el marcador.
+
+---
+
+## AppArmor
+
+El perfil **no fija rutas de código**, sólo ejecutables permitidos: `llama-cli`, `xdg-open`, `notify-send`, `firefox*`, `libreoffice*`, `pseint`, `evince`, `okular`, `gedit`, `code`, `python3`. Referencia `/opt/yap/`, que cubre el paquete `yap/` introducido en #254.
+
+**Sin impacto tras el cambio de estructura.** Deniega por defecto.
+
+---
+
+## CI/CD
+
+| Workflow | Permisos | Evaluación |
+|---|---|---|
+| `pr-quality-suite` | `contents: read` | correcto |
+| `pr-validation` | `contents: read` | correcto |
+| `quality-gates` | `contents: read` | correcto |
+| `pr-review` | `contents:read, pull-requests:write` | correcto |
+| `pr-state-labeler`, `pr-traceability-check` | `pull-requests:write, issues:write` | correcto |
+| `auto-release`, `build-deb`, `build-packages` | `contents: write` | correcto, actions pineadas |
+| `test.yml` | `contents: read` | correcto (#255) |
+| `auto-add-to-project` | `{}` + PAT de org justificado | correcto (#255) |
+
+Las **59** referencias a actions están pineadas por SHA desde #249. Sin `pull_request_target` en ningún workflow.
+
+---
 
 ## Hallazgos
 
-### H-01: Path Traversal en cargar_curso() — CRÍTICO
+### H-1 — `PROJECT_PAT` sin justificar en el fichero — **baja** (corregido en #255)
 
-**Severidad:** CRÍTICO
-**Archivo:** `yap.py:146`
-**Descripción:** La función `cargar_curso(codigo)` usaba `os.path.join(CURSOS_DIR, f"{codigo}.json")`
-sin sanitizar `codigo`. Un usuario podía pasar `../../etc/passwd` como código de curso,
-logrando leer archivos arbitrarios del sistema.
+`auto-add-to-project.yml` y `weekly-sprint-assignment.yml` usan `${{ secrets.PROJECT_PAT }}`.
 
-**PoC:**
-```
-yap curso ../../etc/passwd
-```
+*Corrección:* la primera versión de esta auditoría afirmaba que el secreto no existía, porque `GET /repos/.../actions/secrets` devuelve `total_count: 0`. Es un secreto **de organización**: `GET /repos/.../actions/organization-secrets` lo lista, y los dos workflows corren en verde. El error fue consultar sólo el endpoint de repositorio.
 
-**Mitigación:**
-1. Sanitización con `os.path.basename()` — elimina cualquier componente de directorio
-2. Validación de realpath — verifica que el path resultante esté dentro de CURSOS_DIR
-3. Rechazo explícito si `safe_codigo != codigo`
+El PAT es necesario: el `GITHUB_TOKEN` no puede escribir en un Project v2 de la organización ni asignar issues en otros repos. Lo que faltaba era hacerlo explícito, porque **un PAT no lo limita el bloque `permissions:`**. Ahora cada uso lleva un comentario con el motivo, y `tests/test_workflows_permisos.py` lo exige.
 
-**Estado:** Mitigado en este commit.
+### H-2 — Dos workflows sin `permissions:` explícito — **baja** (corregido en #255)
 
----
+`test.yml` y `auto-add-to-project.yml` heredaban el default de Settings, que no aparece en ningún diff. Ahora `test.yml` declara `contents: read` y `auto-add-to-project.yml` declara `permissions: {}`, porque no usa el `GITHUB_TOKEN`. El test exige `permissions:` a nivel raíz en todos los workflows.
 
-### H-02: Falta de validación de scheme en cmd_webfetch() — MEDIO
+### H-3 — `sha_pinning_required` desactivado — **media**
 
-**Severidad:** MEDIO
-**Archivo:** `yap.py:468`
-**Descripción:** Aunque la whitelist de dominios bloquea la mayoría de URLs maliciosas,
-no había validación explícita del scheme. Schemes como `file://`, `javascript://`, o
-`data://` podrían bypassar la validación de dominios en edge cases (ej: URLs sin netloc).
+El pineado lo sostienen los 7 tests de `test_actions_pineadas.py`, pero GitHub no lo exige. El `PATCH` devuelve `404` desde el PAT actual (sin permiso de administración). Hay que activarlo a mano en **Settings → Actions → General**.
 
-**Mitigación:**
-Añadida validación explícita: solo `http` y `https` están permitidos. Cualquier otro
-scheme es rechazado antes de validar el dominio.
+### H-4 — Rate limiting del LLM sin implementar — **media**
 
-**Estado:** Mitigado en este commit (defensa en profundidad).
+La recomendación P1 de la auditoría anterior. Verificado: **0** ocurrencias. Sigue pendiente un año después.
+
+El coste es local —el modelo corre en el equipo del alumno—, pero sin límite una consulta en bucle agota CPU y batería en un Celeron sin que el alumno entienda por qué la máquina va lenta.
+
+### H-5 — `docs/REVIEW.md` desactualizado tras #204 — **baja** (corregido en #271)
+
+La checklist dice *"Prohibido en `yap.py`"* y manda ejecutar `ruff format --check yap.py tests/`. Con #254, `yap.py` es un shim de 43 líneas y la implementación vive en `yap/__init__.py`. La checklist deja de apuntar al código que hay que revisar.
 
 ---
 
-### H-03: Confirmaciones guardadas sin validación de contenido — INFO
+## Falsos positivos descartados
 
-**Severidad:** INFO
-**Archivo:** `yap.py:123` (`_save_confirmations`)
-**Descripción:** Las confirmaciones se guardan en JSON sin validar el contenido antes
-de escribir. Si un atacante puede modificar `confirmations.json`, podría inyectar
-claves arbitrarias. Sin embargo, el archivo está en `~/.config/yap/` (propiedad del
-usuario) y se usa escritura atómica.
+La auditoría anterior advertía: *"es frecuente el falso positivo cuando el patrón aparece en documentación o en tests que lo verifican ausente."* Se confirmó:
 
-**Mitigación:** No se requiere acción adicional. El archivo es de usuario, no de sistema.
-AppArmor (#14) confina el acceso a `~/.config/yap/`.
+- **`yap_desktop/app.py:177` — `exec()`**. Es `app.exec()`, el event loop de Qt. Un `grep` por `exec(` lo marca; el AST distingue builtin de atributo. Marcarlo como crítico habría sido incorrecto.
+- **37 `shutil.rmtree` y 2 `os.remove`**. Todos en `tests/`, limpiando directorios temporales.
+- **16 `subprocess.run` sin `stdin=DEVNULL`**, casi todos en tests que lanzan `bash -n` o `pytest`, sin entrada interactiva.
 
-**Estado:** Aceptado (riesgo residual bajo).
+---
 
-## Verificaciones Realizadas
+## Estado de la auditoría anterior (2026-08-14)
 
-### 1. Análisis de código fuente
+Sus tres hallazgos siguen **mitigados y verificados en esta revisión**:
 
-| Check | Estado |
-|-------|--------|
-| `shell=True` en subprocess | No encontrado |
-| `eval()` / `exec()` | No encontrado |
-| `os.system()` | No encontrado |
-| Command injection en subprocess | No vulnerable (argumentos como lista, no string) |
-| Path traversal en cargar_curso | **Encontrado y mitigado (H-01)** |
-| Path traversal en cargar_ejercicios | No vulnerable (path fijo, no user input) |
-| Path traversal en cargar_progreso | No vulnerable (path fijo) |
-| Escritura insegura en progress.json | No vulnerable (escritura atómica tmp+rename) |
-| Escritura insegura en history.json | No vulnerable (escritura atómica) |
-| Fugas de info en logs | No encontrado (no se logea contenido sensible) |
-| Scheme validation en webfetch | **Añadido (H-02)** |
-| SSRF (IPs internas) | Bloqueado por whitelist de dominios |
-| Imports peligrosos (socket, ctypes, pickle) | No encontrados |
+| Hallazgo | Estado |
+|---|---|
+| H-01 Path traversal en `cargar_curso()` | mitigado — `basename()` + `realpath` confinado |
+| H-02 Scheme no validado en `cmd_webfetch()` | mitigado — sólo `http`/`https` |
+| H-03 Confirmaciones sin validar | aceptado — fichero de usuario, escritura atómica, AppArmor confina `~/.config/yap/` |
 
-### 2. Fuzzing de entradas
+Y sus recomendaciones:
 
-Se añadieron tests de fuzzing en `test_yap_security_audit.py` cubriendo:
-- Path traversal con `../`, `..\\`, paths absolutos
-- Injection en nombres de apps (`;`, `|`, `&&`, `$()`, `` ` ``)
-- URLs maliciosas (`file://`, `javascript:`, `data:`, IPs internas)
-- JSON corrupto en cursos
-- Entradas muy largas
-- Caracteres Unicode/emoji
-- Null bytes
+| Recomendación | Estado hoy |
+|---|---|
+| P0 — AppArmor enforce | **hecho**, enforce por defecto en la post-instalación |
+| P1 — rate limiting en `cmd_query` | **sin implementar** (H-4) |
+| P2 — cifrar `history.json` | sin hacer. El contenido es texto de chat del alumno |
+| P3 — sandboxing con bubblewrap | sin hacer |
 
-### 3. Cobertura de tests
+---
 
-| Suite | Tests | Estado |
-|-------|-------|--------|
-| test_yap_functional.py | 30 | PASS |
-| test_yap_security.py | 25 | PASS |
-| test_yap_confirmation.py | 20 | PASS |
-| test_yap_history.py | 17 | PASS |
-| test_yap_apparmor.py | 14 | PASS |
-| test_yap_security_audit.py | 15 | PASS |
-| **Total** | **121** | **ALL PASS** |
+## Hallazgos posteriores a esa auditoría, ya corregidos
 
-## Recomendaciones Futuras
+La auditoría anterior no pudo verlos porque no existían. Todos cerrados en esta rama de trabajo:
 
-1. **P0:** Migrar a AppArmor enforce mode en producción (requiere testing en Debian 13)
-2. **P1:** Añadir rate limiting en cmd_query (prevenir abuso del LLM)
-3. **P2:** Cifrar history.json si contiene datos sensibles
-4. **P3:** Añadir sandboxing con bubblewrap como alternativa a AppArmor
+| Issue | Qué era | Cerrado por |
+|---|---|---|
+| #213 (parte de código) | Clave de Cloud Run hardcodeada | #251 |
+| #234 | `cmd_webfetch` descarga sin techo | #244 |
+| #235 | Modelos GGUF sin checksum | #252 |
+| #236 | Whitelists empujadas por `/tmp` | #246 |
+| #237 | Informe de despliegue borrado por su propio `trap` | #246 |
+| #238 | JSON de USB sin límite de tamaño | #244 |
+| #240 | Ninguna action pineada por SHA | #249 |
+| #241 | Tres tests de seguridad que no prueban lo que afirman | #248 |
+| #242 | Instalador de Windows cinco releases desfasado | #245 |
+
+---
+
+## Conclusión
+
+El código de ejecución de Yap está en buen estado para su contexto: un agente local en el aula, sin superficie de red propia y confinado por AppArmor.
+
+El riesgo residual está en tres sitios, ninguno explotable desde el aula:
+
+1. **Configuración de GitHub** — H-1, H-2, H-3. Ninguno es una vulnerabilidad; los tres son ajustes.
+2. **Un P1 sin implementar** — H-4, el rate limiting. Es el único que afecta al alumno, y afecta a su experiencia, no a su seguridad.
+3. **Una credencial viva en el historial de git** — #213. Está fuera del código desde #251, pero sigue en el historial desde `51202e7` y en cada clone. **Hay que revocarla en GCP.** Es lo único de esta lista que una revisión de código no puede resolver.

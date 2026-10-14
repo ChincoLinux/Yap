@@ -31,6 +31,7 @@
     "domain_blocked": "[ERROR] Dominio '{domain}' bloqueado.\nDominios permitidos: {allowed}",
     "fetch": "[ERROR] Error al obtener {url}: {error}",
     "too_large": "[ERROR] {url} excede el maximo de {max_kb} KB. Recurso no descargado.",
+    "rate_limited": "[WARN] Demasiadas consultas seguidas ({max} por minuto). Espera {segundos} s: el modelo corre en este equipo y un bucle lo deja sin CPU.",
     "timeout": "[WARN] Tiempo de espera agotado (120s)",
     "llama_missing": "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap.",
     "no_exercises": "[ERROR] No hay ejercicios configurados en {path}",

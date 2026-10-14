@@ -72,11 +72,12 @@ Las razones técnicas son:
 ## 2. Funcionamiento del Pipeline
 
 ### A. Descubrimiento de Corpus y Seguridad
-El motor RAG descubre automáticamente los siguientes recursos locales:
+El corpus es **de alumno**, y el mismo en un checkout y en un equipo instalado (#262):
 - `/etc/yap/cursos/*.json`: asignaturas, resultados de aprendizaje (RAs), experiencias (EAs) y actividades (ej. `FPY1101.json`).
-- `docs/*.md`: documentación operativa y guías de desarrollo.
-- `whitelist/*.conf`: listas de aplicaciones y dominios web autorizados.
-- `USAGE.md` y `AGENTS.md`.
+- `USAGE.md`: junto al código (checkout, Windows) o en `/usr/share/doc/yap/` (`.deb`, `.rpm`).
+- `apps.conf` y `web.conf`: las whitelists que Yap aplica (`/etc/yap/whitelist/`), o las del repo si no hay instaladas. Cada fragmento lleva una cabecera («Aplicaciones y programas permitidos…», «Páginas y sitios web permitidos…»): sin ella, una lista de dominios no comparte ni una palabra con «¿qué páginas puedo visitar?».
+
+La documentación de desarrollo (`docs/*.md`, `AGENTS.md`) **no** entra: antes de #262 llegaba al prompt de preguntas de alumno.
 
 > **Seguridad contra Path Traversal**: Todas las rutas descubiertas se canonicen mediante `os.path.realpath()` y se verifica que su prefijo resida estrictamente dentro de los directorios permitidos. Enlaces simbólicos hacia rutas sensibles del sistema operativo son descartados automáticamente.
 
@@ -141,6 +142,7 @@ yap rag buscar criterios de evaluacion FPY1101
 | `YAP_RAG_ENABLED` | `1` | `1` para activar RAG local; `0` para desactivar por completo. |
 | `YAP_RAG_TOP_K` | `5` | Número máximo de fragmentos a recuperar antes del recorte de presupuesto. |
 | `YAP_RAG_MAX_TOKENS` | `512` | Presupuesto máximo de tokens permitidos para inyección en el prompt. |
+| `YAP_RAG_MIN_COBERTURA` | `0.2` | Fracción mínima de las palabras de contenido de la consulta (sin stopwords) que un fragmento debe contener para entrar al prompt (#263). `0` desactiva el filtro. |
 
 ---
 
@@ -157,3 +159,117 @@ La suite de pruebas en [`tests/test_yap_rag.py`](../tests/test_yap_rag.py) valid
   - Tiempo de recuperación: **~1.5 ms** (SLA exige < 300 ms).
   - Tiempo de rebuild completo: **< 0.1 s** (SLA exige < 60 s).
 - **Golden Set Pedagógico**: 31 consultas formuladas desde la perspectiva del estudiante evaluadas con tasa de acierto y relevancia comprobadas.
+
+---
+
+## 6. Medición (#214)
+
+**Fecha:** 2026-10-13 · **Ajustes:** `RAG_TOP_K=5`, `RAG_MAX_CONTEXT_TOKENS=512`, `RAG_CHUNK_SIZE=300` · **Modelo:** ninguno — se mide la recuperación, no la generación.
+
+```bash
+python3 tests/benchmark.py --rag            # o: python3 tests/rag_eval.py
+python3 tests/benchmark.py --rag --json r.json
+```
+
+El conjunto está en `tests/rag_eval/preguntas.json`: **42 preguntas de alumno** (24 del curso FPY1101, 14 de uso de Yap, 4 de whitelists), cada una con la fuente que la respalda y una marca de texto verificable, más **10 controles** cuya respuesta no está en el corpus. Una pregunta acierta si un fragmento recuperado viene de la fuente esperada y contiene la marca.
+
+Se mide sobre **dos corpus**, porque no son el mismo:
+
+| Corpus | Qué indexa | Ficheros | Fragmentos |
+|---|---|---|---|
+| desarrollo | un checkout del repo: `docs/`, `USAGE.md`, `AGENTS.md`, `whitelist/`, `cursos/` | 16 | 704 |
+| instalado | un equipo con el `.deb`: sólo `/etc/yap/cursos/` | 1 | 21 |
+
+El corpus se busca junto a `yap.py`. En el `.deb` eso es `/opt/yap/`, y `build-deb.sh` no instala allí `docs/`, `whitelist/` ni `USAGE.md`. **En el aula el RAG sólo ve los cursos.**
+
+### Resultados
+
+| | desarrollo | instalado |
+|---|---|---|
+| preguntas con respuesta en el corpus | 42/42 | **24/42** |
+| recall@1 | 66.7 % | 57.1 % (100 % de lo alcanzable) |
+| recall@3 | 85.7 % | 57.1 % (100 %) |
+| recall@5 | 92.9 % | 57.1 % (100 %) |
+| recall@8 | 92.9 % | 57.1 % (100 %) |
+| la respuesta llega al prompt | 92.9 % | 57.1 % |
+| tokens añadidos al prompt (media / máx) | 234 / 468 | 388 / 508 |
+| latencia de `rag_retrieve` (mediana / p95) | 2.6 / 3.4 ms | 0.13 / 0.18 ms |
+| construcción del índice | 9 ms | 0.5 ms |
+| **controles que reciben contexto** | **10/10** | **10/10** |
+
+### Lectura
+
+1. **El retrieval funciona sobre lo que indexa.** En el corpus instalado acierta el 100 % de lo alcanzable en el primer fragmento.
+2. **En el aula no indexa lo que el alumno pregunta sobre Yap.** Las 18 preguntas de uso y whitelists no tienen respuesta en el corpus instalado: `USAGE.md` y las whitelists existen en el equipo, pero en otras rutas.
+3. **En desarrollo indexa documentación interna.** `DEPLOY.md`, `PACKAGING.md`, `SECURITY-AUDIT.md`, `ROADMAP.md` y `TRUNK-BASED.md` aparecen en el prompt de preguntas de alumno, y dos de las tres preguntas de whitelists fallan porque `DEPLOY.md` le gana a `web.conf`.
+4. **Contaminación total.** Las 10 preguntas fuera del corpus reciben contexto, porque no hay score mínimo: cualquier palabra compartida («que», «es», «la») basta. En el corpus instalado eso son **~430 tokens de curso** inyectados en preguntas como «quién escribió Cien años de soledad», con un score BM25 de 0.15.
+
+### Los tres ajustes
+
+| Ajuste | Veredicto | Dato |
+|---|---|---|
+| `RAG_TOP_K=5` | **se mantiene** | recall@3 = 85.7 % → @5 = 92.9 % → @8 = 92.9 %. Bajar a 3 pierde 3 aciertos; subir a 8 no gana ninguno. |
+| `RAG_MAX_CONTEXT_TOKENS=512` | **se mantiene** | Nunca recortó un acierto: «llega al prompt» = recall@5 en ambos corpus. En el corpus instalado llega a 508 tokens, así que sí limita el ruido. |
+| `RAG_CHUNK_SIZE=300` | **irrelevante hoy** | Sólo parte párrafos de más de 300 palabras; la unidad real es el párrafo. Con 100, 300 o 1000 el resultado es idéntico; con 50 se pierden 2 aciertos. |
+
+### Simulaciones (no implementadas)
+
+Para que la siguiente decisión salga con datos, el harness simula un **score mínimo** sobre el mejor fragmento (`barrido` en el JSON):
+
+| Corpus | Umbral | Aciertos conservados | Controles bloqueados |
+|---|---|---|---|
+| instalado | 2 | 24/24 | 3/10 |
+| instalado | **4** | **24/24** | **7/10** |
+| instalado | 6 | 20/24 | 8/10 |
+| desarrollo | 4 | 39/39 | 0/10 |
+| desarrollo | 6 | 38/39 | 2/10 |
+
+Una prueba aparte con stopwords en español (sin el harness) dio, en el corpus instalado, 24/24 aciertos y 8/10 controles bloqueados con umbral 2.
+
+Un umbral sirve en el corpus instalado y no en el de desarrollo, donde los controles puntúan tanto como los aciertos. Hay que corregir el corpus primero y volver a medir después.
+
+### Pendiente
+
+- **Calidad de la respuesta con y sin RAG.** Necesita `llama-cli` y el modelo; esta medición no los usa. Con lo de arriba, el valor esperado del RAG en el aula hoy se limita a las preguntas sobre el curso.
+- Corpus del equipo instalado (#262) y filtro de relevancia (#263): resueltos, ver abajo.
+
+### Tras #262 — corpus de alumno
+
+**Fecha:** 2026-10-13. Mismo conjunto, mismos ajustes.
+
+| | antes (instalado) | después (ambos) |
+|---|---|---|
+| ficheros / fragmentos | 1 / 21 | 4 / 188 |
+| preguntas con respuesta en el corpus | 24/42 | **42/42** |
+| recall@1 / @3 / @5 / @8 | 57.1 / 57.1 / 57.1 / 57.1 % | 66.7 / 92.9 / 92.9 / 95.2 % |
+| la respuesta llega al prompt | 57.1 % | **92.9 %** |
+| tokens al prompt (media / máx) | 388 / 508 | 261 / 499 |
+| latencia `rag_retrieve` (mediana) | 0.13 ms | 0.63 ms |
+| documentos de desarrollo en el prompt | — (checkout: sí) | **ninguno** |
+| controles que reciben contexto | 10/10 | 10/10 |
+
+Desarrollo e instalado indexan ahora exactamente lo mismo, y `tests/test_rag_eval.py` lo exige.
+
+Fallan 3 de 42: «¿está permitido Khan Academy?» (`khanacademy.org` no comparte tokens con «khan academy»), «¿qué datos guarda la telemetría?» y «¿cómo vuelvo a ver el tutorial?» (rango 8).
+
+**El umbral de score ya no separa.** Con este corpus, la mediana de score de los aciertos es 11.96 y el máximo de los controles 10.34. Umbral 4: 39/39 aciertos, **0/10** controles bloqueados; umbral 6: pierde 5 aciertos para bloquear 4. La simulación de la primera medición (umbral 4 → 7/10 bloqueados) dependía de un corpus de 21 fragmentos y ya no aplica. #263 tiene que buscar otra señal (stopwords, score normalizado por longitud de consulta, o proporción de términos de la consulta presentes).
+
+### Tras #263 — filtro de relevancia
+
+**Fecha:** 2026-10-13. Mismo conjunto y corpus de #262.
+
+Un umbral fijo sobre el score BM25 no separaba aciertos de controles (sección anterior). La señal que sí separa es la **cobertura**: qué fracción de las palabras de contenido de la consulta —sin stopwords («que», «es», «la», «como», «hace»…)— aparece en el fragmento. `rag_retrieve` descarta los fragmentos por debajo de `RAG_MIN_COBERTURA`, y una consulta sin palabras de contenido no recupera nada.
+
+| `RAG_MIN_COBERTURA` | la respuesta llega al prompt | controles con contexto | tokens al prompt (media) |
+|---|---|---|---|
+| 0 (sin filtro) | 92.9 % | 10/10 | 260 |
+| **0.2 (default)** | **92.9 %** | **3/10** | 221 |
+| 0.34 | 85.7 % | 1/10 | 131 |
+| 0.5 | 85.7 % | 1/10 | 131 |
+
+Se elige **0.2**: no pierde ningún acierto. 0.34 limpia casi todos los controles a costa de 3 aciertos; está disponible con `YAP_RAG_MIN_COBERTURA=0.34` si en el aula pesa más el ruido que el recall.
+
+Los 3 controles que siguen recibiendo contexto comparten palabras reales con el corpus: «receta» (la actividad «receta para un robot» del curso), «inglés» (cambio de idioma en `USAGE.md`) y «sistema» (curso). Es el límite de un buscador léxico; ajustar más las stopwords contra 10 controles sería sobreajustar.
+
+`tests/test_rag_eval.py` fija ahora que el filtro no pierde aciertos (lo que llega al prompt = recall@5) y un techo de 3/10 controles contaminados.
+

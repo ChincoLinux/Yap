@@ -31,10 +31,10 @@ jobs:
         run: pip install ruff==0.6.9
 
       - name: Check code style (ruff format --check)
-        run: ruff format --check yap.py tests/
+        run: ruff format --check *.py yap/ tests/
 
       - name: Lint (ruff check)
-        run: ruff check yap.py tests/
+        run: ruff check *.py yap/ tests/
 
   static:
     name: static
@@ -53,24 +53,27 @@ jobs:
         run: pip install pyflakes==3.2.0
 
       - name: Static analysis (pyflakes)
-        run: pyflakes yap.py tests/
+        run: pyflakes *.py yap/ tests/
 
       - name: HD-YAP-SEC-001 static checks
         run: |
           set -e
           FAIL=0
+          # Codigo del agente: los .py de la raiz y el paquete yap/ (#267).
+          # Desde #254 yap.py es un shim; mirar solo ese fichero no ve nada.
+          FUENTES=$(ls *.py; find yap -name '*.py')
           for pattern in "shell=True" "eval(" "os.system(" "import socket" "import ctypes" "import pickle" "import base64"; do
-            if grep -n "$pattern" yap.py 2>/dev/null | grep -v '^\s*#' | grep -q .; then
-              echo "FAIL: found '$pattern' in yap.py (not in a comment)"
-              grep -n "$pattern" yap.py | grep -v '^\s*#' || true
+            if grep -nF "$pattern" $FUENTES 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -q .; then
+              echo "FAIL: found '$pattern' (not in a comment)"
+              grep -nF "$pattern" $FUENTES | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true
               FAIL=1
             fi
           done
           if [ $FAIL -ne 0 ]; then
-            echo "::error::HD-YAP-SEC-001 violated: prohibited patterns found in yap.py"
+            echo "::error::HD-YAP-SEC-001 violated: prohibited patterns found"
             exit 1
           fi
-          echo "PASS: no prohibited patterns in yap.py"
+          echo "PASS: no prohibited patterns in: $(echo $FUENTES)"
 
   arch:
     name: arch
@@ -88,13 +91,18 @@ jobs:
       - name: Architecture validation (imports + structure)
         run: |
           set -e
-          # Verify yap.py parses cleanly
-          python3 -c "import ast; ast.parse(open('yap.py').read()); print('PASS: yap.py parses cleanly')"
+          # Todo el codigo del agente parsea: raiz y paquete yap/ (#267)
+          python3 -c "
+          import ast, glob
+          for f in sorted(glob.glob('*.py') + glob.glob('yap/**/*.py', recursive=True)):
+              ast.parse(open(f).read())
+              print(f'PASS: {f} parses cleanly')
+          "
 
           # Verify no circular imports in test files
           python3 -c "
-          import ast, sys
-          for f in ['yap.py']:
+          import ast, glob, sys
+          for f in sorted(glob.glob('*.py') + glob.glob('yap/**/*.py', recursive=True)):
               tree = ast.parse(open(f).read())
               imports = [n for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))]
               print(f'{f}: {len(imports)} imports OK')
@@ -182,26 +190,37 @@ jobs:
           # Yap is stdlib-only by design (CLAUDE.md §3). Flag any new import
           # that is not in the stdlib or the existing whitelist.
           python3 -c "
-          import ast, sys
+          import ast, sys, os
           STDLIB = set(sys.stdlib_module_names)
-          tree = ast.parse(open('yap.py').read())
+          # Modulos de primer nivel del propio repo: no son dependencias.
+          # Se derivan de los .py de la raiz, no se declaran: una lista
+          # a mano se desincroniza entre ramas — fallo yo al abrir el
+          # #254 declarando yap_core, que vive en el #253 y aun no existe
+          # aqui. Un .py en la raiz es de primer nivel por definicion.
+          FIRST_PARTY = {
+              f[:-3] for f in os.listdir('.')
+              if f.endswith('.py') and os.path.isfile(f)
+          }
+          # Todo el codigo del agente, no solo el shim yap.py (#267)
+          import glob
+          FUENTES = sorted(glob.glob('*.py') + glob.glob('yap/**/*.py', recursive=True))
           non_stdlib = set()
-          for node in ast.walk(tree):
+          for node in (n for f in FUENTES for n in ast.walk(ast.parse(open(f).read()))):
               if isinstance(node, ast.Import):
                   for alias in node.names:
                       root = alias.name.split('.')[0]
-                      if root not in STDLIB:
+                      if root not in STDLIB and root not in FIRST_PARTY:
                           non_stdlib.add(root)
               elif isinstance(node, ast.ImportFrom):
                   if node.module:
                       root = node.module.split('.')[0]
-                      if root not in STDLIB:
+                      if root not in STDLIB and root not in FIRST_PARTY:
                           non_stdlib.add(root)
           if non_stdlib:
-              print(f'::error::Non-stdlib imports detected in yap.py: {non_stdlib}')
+              print(f'::error::Non-stdlib imports detected: {non_stdlib}')
               print('Yap must be stdlib-only per CLAUDE.md §3')
               sys.exit(1)
-          print('PASS: yap.py uses only stdlib imports')
+          print(f'PASS: {len(FUENTES)} files use only stdlib and first-party modules')
           "
 
   quality-summary:

@@ -45,7 +45,7 @@ lector de pantalla. Todas esas capacidades viven en un unico archivo,
 | [docs/RAG.md](docs/RAG.md) | RAG local con BM25, sin dependencias |
 | [docs/SECURITY-AUDIT.md](docs/SECURITY-AUDIT.md) | Auditoria de seguridad post-talleres |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Roadmap y prioridades |
-| [tests/README.md](tests/README.md) | Suite de pruebas: 30 archivos, 1079 tests |
+| [tests/README.md](tests/README.md) | Suite de pruebas |
 | [AGENTS.md](AGENTS.md) | Guia para agentes IA que colaboran en el repo |
 | [CLAUDE.md](CLAUDE.md) | Arquitectura tecnica resumida |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Como contribuir |
@@ -56,7 +56,9 @@ lector de pantalla. Todas esas capacidades viven en un unico archivo,
 
 ```
 Yap/
-├── yap.py                 # El agente completo (8196 lineas, stdlib-only)
+├── yap.py                 # Shim de entrada: `from yap import main` (#204)
+├── yap/                   # El agente (stdlib-only); `python3 -m yap`
+├── yap_core.py            # Motor con streaming para la GUI (#152)
 ├── setup.sh               # Instalador de desarrollo: compila llama.cpp, baja el modelo
 ├── build-deb.sh           # Genera yap_*.deb y yap-models-*.deb (#31)
 ├── deploy-yap.sh          # Despliegue masivo por SSH en un lab (#31)
@@ -70,7 +72,7 @@ Yap/
 ├── cursos/                # Cursos en JSON (FPY1101.json)
 ├── packaging/             # Plantillas DEBIAN: yap, yap-models-1b, yap-models-3b
 ├── apparmor/              # Perfiles AppArmor del agente (#14)
-├── tests/                 # 30 archivos de pruebas, 1079 tests + run_tests.py
+├── tests/                 # Suite de pruebas + run_tests.py
 ├── docs/                  # DEPLOY, PACKAGING, RAG, ROADMAP, SECURITY-AUDIT, SUPER-YAP, TRUNK-BASED
 ├── scripts/ci/            # Utilidades de CI: trazabilidad PR, labels, preflight
 ├── agent-platform/        # Plantillas de despliegue de Super Yap (a trasladar, #212)
@@ -298,9 +300,10 @@ El instalador automatiza la configuracion del entorno. Conceptos clave:
 | **`ln -sf`** | Enlace simbolico a `yap.py` en el repositorio; `git pull` actualiza sin reinstalar |
 | **`core.hooksPath`** | Instala `.githooks/post-checkout`, que informa del cambio de modelo al cambiar de rama |
 
-### 4.2 Python — Agente principal (`yap.py`)
+### 4.2 Python — Agente principal (paquete `yap/`)
 
-Un solo archivo, 8196 lineas, **stdlib-only**. Los imports son a proposito
+Mas de 8000 lineas en `yap/__init__.py`, **stdlib-only**; `yap.py` es un shim
+de entrada desde #204. Los imports son a proposito
 pocos: `subprocess`, `sys`, `os`, `time`, `shutil`, `textwrap`, `json`, `glob`,
 `urllib.*`, `http.cookiejar`, `re`, `atexit`, `unicodedata`, `math`, `hashlib`.
 Prohibidos por politica: `socket`, `ctypes`, `pickle`, `base64`, `requests`.
@@ -1114,7 +1117,7 @@ Este proyecto se distribuye bajo **licencia MIT** (ver [LICENSE](LICENSE)). El m
 
 ## 12. Pruebas y verificacion
 
-La suite tiene **30 archivos y 1079 pruebas**. La unica dependencia externa es
+La suite tiene **mas de 1200 pruebas**. La unica dependencia externa es
 `pytest`: ni el modelo, ni la GPU, ni Internet. Detalle por archivo y por
 requisito en [tests/README.md](tests/README.md).
 
@@ -1123,7 +1126,7 @@ requisito en [tests/README.md](tests/README.md).
 ```bash
 python3 -m pip install pytest          # unica dependencia
 
-python3 -m pytest tests/ -v            # 1079 pruebas (desarrollo y CI)
+python3 -m pytest tests/ -v            # suite completa (desarrollo y CI)
 python3 -m pytest tests/test_yap_rag.py -v   # un area
 python3 -m pytest tests/ -v -k whitelist    # por palabra clave
 
@@ -1145,8 +1148,7 @@ python3 tests/run_tests.py --report    # runner + tests/report/report_<fecha>.tx
 
 Los numeros no cuadran al decimal porque el parser del runner cuenta lineas con
 `PASSED` y `FAILED`: un test `SKIPPED` no suma. Hay 24 skips en los seis
-archivos del runner (283 contados, 307 recogidos) y 24 en la suite completa
-(1055 contados, 1079 recogidos).
+archivos del runner (283 contados, 307 recogidos) y 24 en la suite completa.
 
 `run_tests.py` ejecuta 5 etapas en orden: pytest sobre los archivos de
 `ARCHIVOS_PYTEST`, verificaciones de infraestructura, verificacion estatica del
@@ -1199,7 +1201,7 @@ Once workflows en `.github/workflows/`. El principal, `test.yml`, corre en cada
 
 | Job | Que hace |
 |---|---|
-| **unit-tests** | 1079 pruebas en Python 3.12 (seguridad, funcional, i18n, empaquetado, desktop, post-install) + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
+| **unit-tests** | Suite completa en Python 3.12 (seguridad, funcional, i18n, empaquetado, desktop, post-install) + verificacion estatica (`shell=True`, `eval()`, `os.system()`) + validacion de whitelist |
 | **branch-check** | Verifica que `MODEL_PATH` en cada rama apunte al modelo correcto |
 | **results** | Resumen del pipeline |
 

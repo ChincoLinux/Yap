@@ -14,6 +14,10 @@ on:
   pull_request:
     branches: [main, lowmem, ultra-lowmem]
 
+# Solo lee el repo. Explicito para no depender del default de Settings (#255).
+permissions:
+  contents: read
+
 jobs:
 
   # ──────────────────────────────────────────────────────────────────
@@ -86,9 +90,19 @@ jobs:
           echo "  VERIFICACION ESTATICA DE CODIGO"
           echo "═══════════════════════════════════════════════"
           # Verificar que no hay shell=True, eval(), os.system()
-          ! grep -rn "shell=True" yap.py && echo "✓ sin shell=True"
-          ! grep -rn "eval(" yap.py && echo "✓ sin eval()"
-          ! grep -rn "os\.system(" yap.py && echo "✓ sin os.system()"
+          # El codigo esta en yap/ desde #254; yap.py es el shim (#267).
+          # Antes era `! grep ... && echo`: bash -e no aborta con un comando
+          # negado, asi que este paso nunca fallo, encontrara lo que encontrara.
+          FALLO=0
+          for patron in "shell=True" "eval(" "os.system("; do
+            if grep -rnF --include='*.py' "$patron" *.py yap/; then
+              echo "::error::encontrado '$patron'"
+              FALLO=1
+            else
+              echo "✓ sin $patron"
+            fi
+          done
+          exit $FALLO
 
       - name: Verificar archivos de configuracion
         run: |
@@ -121,7 +135,7 @@ jobs:
           for branch in main lowmem ultra-lowmem; do
             if git show-ref --verify refs/heads/$branch 2>/dev/null || \
                git show-ref --verify refs/remotes/origin/$branch 2>/dev/null; then
-              model=$(git show $branch:yap.py 2>/dev/null | grep 'MODEL_PATH =' | sed "s|.*/||;s|\"||g")
+              model=$( (git show $branch:yap/__init__.py 2>/dev/null || git show $branch:yap.py 2>/dev/null) | grep 'MODEL_PATH =' | sed "s|.*/||;s|\"||g")
               echo "  $branch → $model"
             fi
           done

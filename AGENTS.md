@@ -15,8 +15,8 @@ This guide helps AI agents (like Claude Code, Devin, etc.) understand how to col
 |---|---|
 | Repositorio | `ChincoLinux/Yap` (organización) |
 | Fork de trabajo | `VECTORG99/Yap` |
-| Archivo principal | `yap.py` (8196 líneas, stdlib-only) |
-| CI | `.github/workflows/test.yml` — 11 workflows; `pytest tests/` = 1079 tests, sin LLM/GPU/Internet |
+| Código | paquete `yap/` (más de 8000 líneas, stdlib-only); `yap.py` es el shim de entrada; `yap_core.py` el motor (#152) |
+| CI | `.github/workflows/` (12 workflows, `test.yml` da los checks requeridos); `pytest tests/` = más de 1200 tests, sin LLM/GPU/Internet |
 | Modelo | Llama 3.2 1B/3B Instruct (Q4_K_M, CPU-only) |
 
 ## Labels Guide for AI Agents
@@ -99,7 +99,7 @@ These labels track the PR lifecycle state. They are mutually exclusive and auto-
 2. **Developer claims** (comment on issue or assign)
 3. **Fresh branch created** following the hygiene protocol
 4. **PR created** with `Closes #XXX`, conventional commit title
-5. **CI checks run** automatically (1079 tests + branch-check + A-Dev Hardness review)
+5. **CI checks run** automatically (full pytest suite + branch-check + A-Dev Hardness review)
 6. **Code review** by maintainers or AI (advisory comments from `yap-reviewer` bot)
 7. **Changes addressed** if requested
 8. **Merge** when approved and checks pass (auto-merge native, squash)
@@ -137,7 +137,7 @@ Always verify manually if a flagged pattern is in executable code or in text/doc
 
 ### Code Style
 
-- Python 3.12, stdlib-only (no pip dependencies in `yap.py`)
+- Python 3.12, stdlib-only (no pip dependencies in `yap.py`, `yap/` or `yap_core.py`)
 - `shutil.which()` before `subprocess.Popen` for app launching
 - All `subprocess.run()` / `Popen()` must have `timeout=`
 - No `shell=True`, `eval()`, `os.system()` — prohibited
@@ -176,7 +176,9 @@ Yap/
 ├── CLAUDE.md              # Arquitectura técnica detallada
 ├── CONTRIBUTING.md        # Guía de contribución
 ├── GOVERNANCE.md          # Gobernanza de la organización
-├── yap.py                 # Agente principal + cliente Gradio Cloud Run (#91, suspendido, a migrar #212)
+├── yap.py                 # Shim de entrada: `from yap import main` (#204)
+├── yap/                   # Paquete del agente: __init__.py (implementación) y __main__.py (`python3 -m yap`)
+├── yap_core.py            # Motor con streaming y cola de tareas (#152)
 ├── setup.sh               # Instalador de desarrollo (compila llama.cpp, descarga modelo)
 ├── build-deb.sh           # Genera paquetes .deb (issue #31)
 ├── packaging/             # Plantillas DEBIAN (yap, yap-models-1b/3b)
@@ -186,7 +188,7 @@ Yap/
 │   ├── apps.conf
 │   └── web.conf
 ├── cursos/                # JSON de cursos (FPY1101, etc.)
-├── tests/                 # Suite de tests: 30 archivos, 1079 tests (ver tests/README.md)
+├── tests/                 # Suite de tests (ver tests/README.md)
 ├── docs/                  # ROADMAP, PACKAGING, TRUNK-BASED, SECURITY-AUDIT
 ├── .github/
 │   ├── workflows/         # CI, pr-review, test, auto-release
@@ -206,7 +208,7 @@ Yap/
 ## Testing
 
 ```bash
-# Run all tests (1079, no LLM/GPU/Internet needed)
+# Run all tests (no LLM/GPU/Internet needed)
 python3 -m pytest tests/ -v
 
 # Run with coverage
@@ -219,7 +221,7 @@ python3 -m pytest tests/test_yap_security.py -v
 python3 tests/run_tests.py --report
 ```
 
-**Cobertura:** 1079 pruebas en 30 archivos. `pytest tests/` = suite completa;
+**Cobertura:** `pytest tests/` = suite completa, más de 1200 pruebas;
 `python3 tests/run_tests.py` = 237 pruebas + 10 chequeos + mapeo de 26 requisitos.
 Ver [tests/README.md](tests/README.md).
 
@@ -230,7 +232,7 @@ Ver [tests/README.md](tests/README.md).
 - **`whitelist/apps.conf`** — `Nombre:bin1,bin2` (multi-binario con fallback)
 - **`whitelist/web.conf`** — dominios exactos o subdominio directo (`d == domain or domain.endswith("."+d)`)
 
-### Prohibited in `yap.py`
+### Prohibited in agent code (`*.py` at the root and `yap/`)
 
 - `shell=True`, `eval()`, `os.system()`
 - `import socket`, `ctypes`, `pickle`, `base64`

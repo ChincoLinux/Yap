@@ -1,0 +1,31 @@
+# Checksums de los modelos GGUF que descarga setup.sh
+#
+# Formato: <archivo>  <repositorio>  <sha256>  <bytes>
+# Campos separados por espacios; el archivo no lleva espacios.
+#
+# setup.sh verifica el hash antes de mover el modelo a destino (#235).
+# Antes sólo se comprobaba el tamaño minimo y los magic bytes GGUF, que
+# detectan un HTML de error o un fichero truncado pero no un binario
+# alterado. El modelo se ejecuta con privilegios de usuario en el equipo
+# del alumno.
+#
+# Los mirrors de HuggingFace (hf-mirror.com) son terceros: un mirror
+# comprometido serviria un .gguf con magic correcto y contenido
+# manipulado, y la comprobacion antigua lo aceptaria.
+#
+# bartowski y unsloth empaquetan el mismo modelo base en binarios
+# distintos, asi que cada uno tiene su hash. setup.sh elige el hash
+# segun el repositorio del que descargo de verdad.
+#
+# Origen de los valores: la API de HuggingFace (GET /api/models/<repo>/tree/main),
+# campo lfs.oid, que es el SHA256 del objeto LFS. Verificado el 2026-10-12.
+#
+# Cómo regenerar (necesita los modelos descargados):
+#   cd /opt/yap/models
+#   sha256sum *.gguf
+# Y actualizar tambien el repositorio de origen en este fichero.
+
+Llama-3.2-1B-Instruct-Q4_K_M.gguf  bartowski  6f85a640a97cf2bf5b8e764087b1e83da0fdb51d7c9fab7d0fece9385611df83  807694464
+Llama-3.2-3B-Instruct-Q4_K_M.gguf  bartowski  6c1a2b41161032677be168d354123594c0e6e67d2b9227c84f296ad037c728ff  2019377696
+Llama-3.2-1B-Instruct-Q4_K_M.gguf  unsloth     3f5a22426976ab26cfe84dba63c1d08391717abb1af893e10f1b2968d862dcc1  807694368
+Llama-3.2-3B-Instruct-Q4_K_M.gguf  unsloth     6c99cc00ae910f6a532a80022cb4bc1939094527a089c29294b841c0bd87f74d  2019377600
