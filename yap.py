@@ -2846,6 +2846,29 @@ def _rag_chunk_text(text, source, chunk_size=RAG_CHUNK_SIZE):
     return chunks
 
 
+def _rag_texto(valor):
+    """Texto plano de un campo de curso, sea cual sea su forma (#260).
+
+    Los cursos reales mezclan formas: `indicadores` es una lista de objetos
+    {id, descripcion}, `herramientas` una lista de strings. Suponer strings
+    tumbaba toda consulta con TypeError en los equipos instalados.
+    """
+    if valor is None:
+        return ""
+    if isinstance(valor, str):
+        return valor
+    if isinstance(valor, dict):
+        ident = _rag_texto(valor.get("id", ""))
+        partes = (
+            _rag_texto(valor.get(k)) for k in ("nombre", "descripcion", "enunciado")
+        )
+        cuerpo = " ".join(x for x in partes if x)
+        return f"{ident}: {cuerpo}" if ident and cuerpo else (ident or cuerpo)
+    if isinstance(valor, (list, tuple)):
+        return ", ".join(x for x in (_rag_texto(v) for v in valor) if x)
+    return str(valor)
+
+
 def _rag_chunk_json_curso(data, source):
     """Chunk a course JSON into semantic pieces."""
     chunks = []
@@ -2862,8 +2885,7 @@ def _rag_chunk_json_curso(data, source):
     for ra in ras:
         ra_id = ra.get("id", "")
         ra_desc = ra.get("descripcion", "")
-        inds = ra.get("indicadores", [])
-        inds_str = ", ".join(inds) if isinstance(inds, list) else str(inds)
+        inds_str = _rag_texto(ra.get("indicadores", []))
         text = f"RA {ra_id}: {ra_desc}. Indicadores: {inds_str}."
         chunks.append({"text": text, "source": source})
 
@@ -2873,12 +2895,7 @@ def _rag_chunk_json_curso(data, source):
         ea_nombre = ea.get("nombre", "")
         ea_desc = ea.get("descripcion", "")
         ea_horas = ea.get("horas", 0)
-        herramientas = ea.get("herramientas", [])
-        herrs_str = (
-            ", ".join(herramientas)
-            if isinstance(herramientas, list)
-            else str(herramientas)
-        )
+        herrs_str = _rag_texto(ea.get("herramientas", []))
         text = f"EA {ea_id}: {ea_nombre}. {ea_desc}. {ea_horas} horas. Herramientas: {herrs_str}."
         chunks.append({"text": text, "source": source})
 
@@ -2888,8 +2905,8 @@ def _rag_chunk_json_curso(data, source):
             act_nombre = act.get("nombre", "")
             act_desc = act.get("descripcion", "")
             enunciado = act.get("enunciado", "")
-            criterios = act.get("criterios_evaluacion", [])
-            crit_str = f" Criterios: {', '.join(criterios)}." if criterios else ""
+            criterios = _rag_texto(act.get("criterios_evaluacion", []))
+            crit_str = f" Criterios: {criterios}." if criterios else ""
 
             act_text = f"Actividad {orden} ({tipo}): {act_nombre}. {act_desc}. Enunciado: {enunciado}.{crit_str}"
 
@@ -2938,8 +2955,9 @@ def _rag_build_chunks():
                 try:
                     data = json.loads(content)
                     chunks.extend(_rag_chunk_json_curso(data, path))
-                except json.JSONDecodeError:
-                    # Non-fatal: if JSON is invalid, fall back to plain text chunking
+                except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
+                    # Non-fatal: JSON invalido o con una forma inesperada. Se
+                    # indexa como texto: un curso raro no tumba la consulta (#260)
                     chunks.extend(_rag_chunk_text(content, path))
             else:
                 chunks.extend(_rag_chunk_text(content, path))
