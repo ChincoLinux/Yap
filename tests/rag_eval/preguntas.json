@@ -1,0 +1,453 @@
+{
+ "descripcion": "Preguntas de alumno con la fuente que las respalda (#214). Una pregunta acierta si un fragmento recuperado viene de la fuente indicada y contiene la marca (sin tildes, sin mayusculas). Los controles no tienen respuesta en el corpus: no deberian recibir contexto.",
+ "preguntas": [
+  {
+   "id": "curso-01",
+   "pregunta": "que aprendo en fundamentos de programacion",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "Curso FPY1101"
+    }
+   ]
+  },
+  {
+   "id": "curso-02",
+   "pregunta": "cuantas horas y semanas dura el curso de fundamentos de programacion",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "Curso FPY1101"
+    }
+   ]
+  },
+  {
+   "id": "curso-03",
+   "pregunta": "que es un algoritmo y cuales son sus componentes",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "Algoritmos y su relacion con la vida diaria"
+    }
+   ]
+  },
+  {
+   "id": "curso-04",
+   "pregunta": "como uso Si Entonces Sino en pseint",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "Tomando decisiones"
+    }
+   ]
+  },
+  {
+   "id": "curso-05",
+   "pregunta": "que ciclos hay en pseudocodigo mientras repetir para",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "Tomando decisiones"
+    }
+   ]
+  },
+  {
+   "id": "curso-06",
+   "pregunta": "como hago un diagrama de flujo con FreeDFD",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "Expresiones y estructuras de entrada y salida"
+    }
+   ]
+  },
+  {
+   "id": "curso-07",
+   "pregunta": "como imprimo hello world en python",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "Hello World"
+    }
+   ]
+  },
+  {
+   "id": "curso-08",
+   "pregunta": "diferencia entre int float y str",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "int, float, str"
+    }
+   ]
+  },
+  {
+   "id": "curso-09",
+   "pregunta": "como funciona if elif else en python",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "if, elif, else"
+    }
+   ]
+  },
+  {
+   "id": "curso-10",
+   "pregunta": "cuando conviene usar while y cuando for",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "while, for"
+    }
+   ]
+  },
+  {
+   "id": "curso-11",
+   "pregunta": "como armo un menu interactivo en python",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "menus interactivos"
+    }
+   ]
+  },
+  {
+   "id": "curso-12",
+   "pregunta": "diferencia entre lista y diccionario",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "Listas y diccionarios"
+    }
+   ]
+  },
+  {
+   "id": "curso-13",
+   "pregunta": "comandos basicos de git clone add commit push",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "clone, add, commit, push"
+    }
+   ]
+  },
+  {
+   "id": "curso-14",
+   "pregunta": "como defino una funcion con parametros que retorne un valor",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "Definir funciones con y sin parametros"
+    }
+   ]
+  },
+  {
+   "id": "curso-15",
+   "pregunta": "que es la evaluacion final transversal",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "Evaluacion Final Transversal"
+    }
+   ]
+  },
+  {
+   "id": "curso-16",
+   "pregunta": "que tengo que lograr en el RA1 sobre algoritmos y pseudocodigo",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "RA RA1"
+    }
+   ]
+  },
+  {
+   "id": "curso-17",
+   "pregunta": "que se evalua del resultado de aprendizaje de arreglos",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "RA RA3"
+    }
+   ]
+  },
+  {
+   "id": "curso-18",
+   "pregunta": "que pide el resultado de aprendizaje de modularizar con funciones",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "RA RA4"
+    }
+   ]
+  },
+  {
+   "id": "curso-19",
+   "pregunta": "de que trata la experiencia EA2 de python",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "EA EA2"
+    }
+   ]
+  },
+  {
+   "id": "curso-20",
+   "pregunta": "que veo en la EA3 de colecciones y funciones",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "EA EA3"
+    }
+   ]
+  },
+  {
+   "id": "curso-21",
+   "pregunta": "que herramientas uso en la EA1",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "EA EA1"
+    }
+   ]
+  },
+  {
+   "id": "curso-22",
+   "pregunta": "cuales son las tres partes de un algoritmo",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "Consolidando aprendizajes"
+    },
+    {
+     "fuente": "FPY1101.json",
+     "marca": "Algoritmos y su relacion con la vida diaria"
+    }
+   ]
+  },
+  {
+   "id": "curso-23",
+   "pregunta": "que operadores logicos existen and or not",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "and, or, not"
+    }
+   ]
+  },
+  {
+   "id": "curso-24",
+   "pregunta": "como guardo variables de distintos tipos incluyendo strings",
+   "aceptables": [
+    {
+     "fuente": "FPY1101.json",
+     "marca": "RA RA2"
+    },
+    {
+     "fuente": "FPY1101.json",
+     "marca": "int, float, str"
+    }
+   ]
+  },
+  {
+   "id": "uso-01",
+   "pregunta": "como abro firefox",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "abre firefox"
+    }
+   ]
+  },
+  {
+   "id": "uso-02",
+   "pregunta": "como veo mi progreso",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "yap progreso"
+    }
+   ]
+  },
+  {
+   "id": "uso-03",
+   "pregunta": "como pauso una sesion y la retomo despues",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "sesion pausar"
+    }
+   ]
+  },
+  {
+   "id": "uso-04",
+   "pregunta": "cuantas sesiones puedo tener abiertas",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "3 sesiones abiertas"
+    }
+   ]
+  },
+  {
+   "id": "uso-05",
+   "pregunta": "como cambio el idioma a ingles",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "perfil idioma en"
+    }
+   ]
+  },
+  {
+   "id": "uso-06",
+   "pregunta": "que datos guarda la telemetria",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "No se registra"
+    }
+   ]
+  },
+  {
+   "id": "uso-07",
+   "pregunta": "como desactivo la telemetria",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "telemetria desactivar"
+    }
+   ]
+  },
+  {
+   "id": "uso-08",
+   "pregunta": "como busco algo en wikipedia",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "Wikipedia"
+    }
+   ]
+  },
+  {
+   "id": "uso-09",
+   "pregunta": "cuantos intentos tengo por actividad",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "Hasta 3 intentos"
+    }
+   ]
+  },
+  {
+   "id": "uso-10",
+   "pregunta": "como se calcula la nota final en escala chilena",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "escala chilena"
+    }
+   ]
+  },
+  {
+   "id": "uso-11",
+   "pregunta": "como pido una pista en un ejercicio",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "pista"
+    }
+   ]
+  },
+  {
+   "id": "uso-12",
+   "pregunta": "como vuelvo a ver el tutorial de bienvenida",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "yap --tutorial"
+    }
+   ]
+  },
+  {
+   "id": "uso-13",
+   "pregunta": "como importa el profesor el progreso desde un usb",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "profesor importar"
+    }
+   ]
+  },
+  {
+   "id": "uso-14",
+   "pregunta": "donde se guarda mi progreso",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "progress.json"
+    }
+   ]
+  },
+  {
+   "id": "lista-01",
+   "pregunta": "puedo abrir geogebra",
+   "aceptables": [
+    {
+     "fuente": "apps.conf",
+     "marca": "Geogebra"
+    },
+    {
+     "fuente": "USAGE.md",
+     "marca": "geogebra"
+    }
+   ]
+  },
+  {
+   "id": "lista-02",
+   "pregunta": "que paginas web puedo visitar",
+   "aceptables": [
+    {
+     "fuente": "web.conf",
+     "marca": "wikipedia.org"
+    }
+   ]
+  },
+  {
+   "id": "lista-03",
+   "pregunta": "que programas de programacion hay disponibles",
+   "aceptables": [
+    {
+     "fuente": "USAGE.md",
+     "marca": "PSeInt, Thonny, Scratch"
+    },
+    {
+     "fuente": "apps.conf",
+     "marca": "Thonny"
+    }
+   ]
+  },
+  {
+   "id": "lista-04",
+   "pregunta": "esta permitido khan academy",
+   "aceptables": [
+    {
+     "fuente": "web.conf",
+     "marca": "khanacademy.org"
+    }
+   ]
+  }
+ ],
+ "controles": [
+  "cual es la capital de francia",
+  "quien gano el mundial de 2022",
+  "como se hace la fotosintesis",
+  "receta de empanadas de pino",
+  "cuanto es la raiz cuadrada de 144",
+  "quien escribio cien anos de soledad",
+  "que es la segunda guerra mundial",
+  "como se dice perro en ingles",
+  "cual es el planeta mas grande del sistema solar",
+  "que significa la palabra resiliencia"
+ ]
+}
