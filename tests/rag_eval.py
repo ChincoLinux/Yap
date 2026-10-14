@@ -5,12 +5,13 @@ Mide la recuperacion, no la generacion: no hace falta modelo ni llama-cli.
 Usa el camino real de Yap (`rag_retrieve`, con su recorte por presupuesto
 de tokens) sobre dos corpus:
 
-  * desarrollo: lo que indexa un checkout del repo (docs/, USAGE.md,
-    AGENTS.md, whitelist/ y cursos/).
-  * instalado:  lo que indexa un equipo con el .deb. `yap.py` vive en
-    /opt/yap y el corpus se busca junto a el; build-deb.sh no instala alli
-    docs/ ni whitelist/ ni USAGE.md, asi que solo quedan los cursos de
-    /etc/yap/cursos.
+  * desarrollo: lo que indexa un checkout del repo.
+  * instalado:  lo que indexa un equipo con el .deb, sobre un arbol
+    temporal con su layout (codigo en /opt/yap, USAGE.md en
+    /usr/share/doc/yap, whitelists y cursos en /etc/yap).
+
+Desde #262 los dos deberian indexar lo mismo: cursos, USAGE.md y las dos
+whitelists. Medir ambos detecta si un cambio de empaquetado los separa.
 
 Uso:
 
@@ -22,6 +23,7 @@ Uso:
 import argparse
 import json
 import os
+import shutil
 import statistics
 import sys
 import tempfile
@@ -44,16 +46,65 @@ def cargar_preguntas(path=PREGUNTAS):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+# Rutas que tocan el corpus. Se parchean para simular cada entorno.
+_RUTAS = (
+    "RAIZ_INSTALACION",
+    "DOC_DIR",
+    "WHITELIST_APPS",
+    "WHITELIST_WEB",
+    "CURSOS_DIR",
+)
+
+
+def _arbol_instalado(destino):
+    """Layout de un equipo con el .deb (build-deb.sh + postinst).
+
+    /opt/yap lleva el codigo y nada mas; USAGE.md va a /usr/share/doc/yap;
+    whitelists y cursos acaban en /etc/yap. tests/test_rag_eval.py comprueba
+    que build-deb.sh siga instalando asi.
+    """
+    d = Path(destino)
+    (d / "opt/yap").mkdir(parents=True)
+    (d / "usr/share/doc/yap").mkdir(parents=True)
+    (d / "etc/yap/whitelist").mkdir(parents=True)
+    (d / "etc/yap/cursos").mkdir(parents=True)
+    shutil.copy(RAIZ / "USAGE.md", d / "usr/share/doc/yap/USAGE.md")
+    for n in ("apps.conf", "web.conf"):
+        shutil.copy(RAIZ / "whitelist" / n, d / "etc/yap/whitelist" / n)
+    for c in (RAIZ / "cursos").glob("*.json"):
+        shutil.copy(c, d / "etc/yap/cursos" / c.name)
+    return {
+        "RAIZ_INSTALACION": str(d / "opt/yap"),
+        "DOC_DIR": str(d / "usr/share/doc/yap"),
+        "WHITELIST_APPS": str(d / "etc/yap/whitelist/apps.conf"),
+        "WHITELIST_WEB": str(d / "etc/yap/whitelist/web.conf"),
+        "CURSOS_DIR": str(d / "etc/yap/cursos"),
+    }
+
+
 def corpus(nombre):
     """Rutas del corpus `desarrollo` o `instalado` (ver docstring)."""
-    yap.CURSOS_DIR = str(RAIZ / "cursos")
-    todas = yap._rag_corpus_paths()
     if nombre == "desarrollo":
-        return todas
-    if nombre == "instalado":
-        cursos = os.path.realpath(yap.CURSOS_DIR)
-        return [p for p in todas if os.path.dirname(p) == cursos]
-    raise ValueError(nombre)
+        nada = str(Path(tempfile.mkdtemp(prefix="yap-rag-nada-")) / "no-existe")
+        rutas = {
+            "RAIZ_INSTALACION": str(RAIZ),
+            "DOC_DIR": nada,
+            "WHITELIST_APPS": nada,
+            "WHITELIST_WEB": nada,
+            "CURSOS_DIR": str(RAIZ / "cursos"),
+        }
+    elif nombre == "instalado":
+        rutas = _arbol_instalado(tempfile.mkdtemp(prefix="yap-rag-inst-"))
+    else:
+        raise ValueError(nombre)
+    viejo = {k: getattr(yap, k) for k in _RUTAS}
+    try:
+        for k, v in rutas.items():
+            setattr(yap, k, v)
+        return yap._rag_corpus_paths()
+    finally:
+        for k, v in viejo.items():
+            setattr(yap, k, v)
 
 
 def construir_indice(rutas, chunk_size=None):

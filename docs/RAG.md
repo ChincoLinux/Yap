@@ -72,11 +72,12 @@ Las razones técnicas son:
 ## 2. Funcionamiento del Pipeline
 
 ### A. Descubrimiento de Corpus y Seguridad
-El motor RAG descubre automáticamente los siguientes recursos locales:
+El corpus es **de alumno**, y el mismo en un checkout y en un equipo instalado (#262):
 - `/etc/yap/cursos/*.json`: asignaturas, resultados de aprendizaje (RAs), experiencias (EAs) y actividades (ej. `FPY1101.json`).
-- `docs/*.md`: documentación operativa y guías de desarrollo.
-- `whitelist/*.conf`: listas de aplicaciones y dominios web autorizados.
-- `USAGE.md` y `AGENTS.md`.
+- `USAGE.md`: junto al código (checkout, Windows) o en `/usr/share/doc/yap/` (`.deb`, `.rpm`).
+- `apps.conf` y `web.conf`: las whitelists que Yap aplica (`/etc/yap/whitelist/`), o las del repo si no hay instaladas. Cada fragmento lleva una cabecera («Aplicaciones y programas permitidos…», «Páginas y sitios web permitidos…»): sin ella, una lista de dominios no comparte ni una palabra con «¿qué páginas puedo visitar?».
+
+La documentación de desarrollo (`docs/*.md`, `AGENTS.md`) **no** entra: antes de #262 llegaba al prompt de preguntas de alumno.
 
 > **Seguridad contra Path Traversal**: Todas las rutas descubiertas se canonicen mediante `os.path.realpath()` y se verifica que su prefijo resida estrictamente dentro de los directorios permitidos. Enlaces simbólicos hacia rutas sensibles del sistema operativo son descartados automáticamente.
 
@@ -229,5 +230,26 @@ Un umbral sirve en el corpus instalado y no en el de desarrollo, donde los contr
 ### Pendiente
 
 - **Calidad de la respuesta con y sin RAG.** Necesita `llama-cli` y el modelo; esta medición no los usa. Con lo de arriba, el valor esperado del RAG en el aula hoy se limita a las preguntas sobre el curso.
-- **Corpus del equipo instalado** (#262) y **score mínimo** (#263), en ese orden.
+- **Score mínimo** (#263). El corpus del equipo instalado se corrigió en #262: ver abajo.
+
+### Tras #262 — corpus de alumno
+
+**Fecha:** 2026-10-13. Mismo conjunto, mismos ajustes.
+
+| | antes (instalado) | después (ambos) |
+|---|---|---|
+| ficheros / fragmentos | 1 / 21 | 4 / 188 |
+| preguntas con respuesta en el corpus | 24/42 | **42/42** |
+| recall@1 / @3 / @5 / @8 | 57.1 / 57.1 / 57.1 / 57.1 % | 66.7 / 92.9 / 92.9 / 95.2 % |
+| la respuesta llega al prompt | 57.1 % | **92.9 %** |
+| tokens al prompt (media / máx) | 388 / 508 | 261 / 499 |
+| latencia `rag_retrieve` (mediana) | 0.13 ms | 0.63 ms |
+| documentos de desarrollo en el prompt | — (checkout: sí) | **ninguno** |
+| controles que reciben contexto | 10/10 | 10/10 |
+
+Desarrollo e instalado indexan ahora exactamente lo mismo, y `tests/test_rag_eval.py` lo exige.
+
+Fallan 3 de 42: «¿está permitido Khan Academy?» (`khanacademy.org` no comparte tokens con «khan academy»), «¿qué datos guarda la telemetría?» y «¿cómo vuelvo a ver el tutorial?» (rango 8).
+
+**El umbral de score ya no separa.** Con este corpus, la mediana de score de los aciertos es 11.96 y el máximo de los controles 10.34. Umbral 4: 39/39 aciertos, **0/10** controles bloqueados; umbral 6: pierde 5 aciertos para bloquear 4. La simulación de la primera medición (umbral 4 → 7/10 bloqueados) dependía de un corpus de 21 fragmentos y ya no aplica. #263 tiene que buscar otra señal (stopwords, score normalizado por longitud de consulta, o proporción de términos de la consulta presentes).
 
