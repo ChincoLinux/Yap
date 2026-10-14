@@ -6,24 +6,25 @@ revisor verifica; la misma lista vive en la sección "Checklist previo" de
 
 ## Local (obligatorio)
 
-- [ ] **Formato:** `ruff format --check yap.py tests/` → *already formatted*.
-- [ ] **Lint:** `ruff check yap.py tests/` → sin errores.
-- [ ] **Análisis estático:** `python3 -m pyflakes yap.py tests/` → sin salida.
-- [ ] **Tests:** `python3 -m pytest tests/ -q` → **1055 passed, 24 skipped**, 0 failed.
+- [ ] **Formato:** `ruff format --check *.py yap/ tests/` → *already formatted*.
+- [ ] **Lint:** `ruff check *.py yap/ tests/` → sin errores.
+- [ ] **Análisis estático:** `python3 -m pyflakes *.py yap/ tests/` → sin salida.
+- [ ] **Tests:** `python3 -m pytest tests/ -q` → 0 failed (los skips son pruebas que necesitan un sistema instalado).
 - [ ] **Workflows:** `actionlint .github/workflows/*.yml` → sin errores de sintaxis
       (sólo si la PR toca `.github/workflows/`).
 - [ ] **Scripts de shell:** `python3 -m pytest tests/test_packaging_scripts.py -q`
       → valida `sh -n`/`bash -n` con el intérprete del shebang de cada script
       (obligatorio si tocas `*.sh`, `setup.sh` o `build-deb.sh`).
 - [ ] **Empaquetado:** `./build-deb.sh` genera el `.deb` sin errores
-      (obligatorio si cambia `packaging/`, `setup.sh` o `yap.py`).
+      (obligatorio si cambia `packaging/`, `setup.sh`, `yap.py`, `yap/` o `yap_core.py`).
       En un sistema real, añadir `sh packaging/test-integration-os.sh`
       (ver [docs/INTEGRATION.md](INTEGRATION.md)).
 
 ## Criterios del repositorio
 
-- [ ] **Sin dependencias nuevas:** `yap.py` sigue siendo stdlib-only.
-- [ ] **Prohibido en `yap.py`:** `shell=True`, `eval()`, `os.system()`,
+- [ ] **Sin dependencias nuevas:** el código del agente (`yap.py`, el paquete `yap/`,
+      `yap_core.py`) sigue siendo stdlib-only.
+- [ ] **Prohibido en el código del agente** (`*.py` de la raíz y `yap/`): `shell=True`, `eval()`, `os.system()`,
       `import socket/ctypes/pickle/base64`, `open()` en modo escritura fuera de las
       rutas permitidas, `os.remove` / `shutil.rmtree`.
 - [ ] **Requisito:** todo `subprocess.run()` / `Popen()` lleva `timeout=` y

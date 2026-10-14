@@ -112,7 +112,7 @@ La recomendación P1 de la auditoría anterior. Verificado: **0** ocurrencias. S
 
 El coste es local —el modelo corre en el equipo del alumno—, pero sin límite una consulta en bucle agota CPU y batería en un Celeron sin que el alumno entienda por qué la máquina va lenta.
 
-### H-5 — `docs/REVIEW.md` desactualizado tras #204 — **baja**
+### H-5 — `docs/REVIEW.md` desactualizado tras #204 — **baja** (corregido en #271)
 
 La checklist dice *"Prohibido en `yap.py`"* y manda ejecutar `ruff format --check yap.py tests/`. Con #254, `yap.py` es un shim de 43 líneas y la implementación vive en `yap/__init__.py`. La checklist deja de apuntar al código que hay que revisar.
 
