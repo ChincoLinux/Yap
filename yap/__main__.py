@@ -6,9 +6,9 @@ esto: dentro del paquete ese fichero se importa como `yap`, nunca como
 `__main__`, asi que sin este fichero `-m yap` no arrancaria.
 """
 
-import sys
 
 from yap import main
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # main() no devuelve codigo: sale con sys.exit() donde hace falta.
+    main()

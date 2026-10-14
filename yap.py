@@ -25,4 +25,5 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from yap import main  # noqa: E402  — el import va tras el ajuste de sys.path
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # main() no devuelve codigo: sale con sys.exit() donde hace falta.
+    main()
