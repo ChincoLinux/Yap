@@ -181,7 +181,7 @@ class TestSetupDescargaModelo:
     GGUF_RE = r"Llama-3\.2-[0-9]+B-Instruct-Q4_K_M\.gguf"
 
     def test_yap_py_declara_un_gguf_q4_k_m(self):
-        matches = re.findall(self.GGUF_RE, leer(os.path.join(RAIZ, "yap.py")))
+        matches = re.findall(self.GGUF_RE, leer(yap.__file__))  # la implementacion
         assert matches, "yap.py debe declarar un GGUF Llama-3.2 Q4_K_M"
         assert not matches[0].endswith(")")
         assert matches[0] == "Llama-3.2-3B-Instruct-Q4_K_M.gguf"

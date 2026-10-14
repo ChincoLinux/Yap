@@ -475,23 +475,23 @@ class TestRealConfig:
 
     def test_apps_conf_existe(self):
         """El archivo apps.conf debe existir en el repo."""
-        path = os.path.join(os.path.dirname(yap.__file__), "whitelist", "apps.conf")
+        path = os.path.join(yap.RAIZ_INSTALACION, "whitelist", "apps.conf")
         assert os.path.exists(path), f"No se encuentra: {path}"
 
     def test_web_conf_existe(self):
         """El archivo web.conf debe existir en el repo."""
-        path = os.path.join(os.path.dirname(yap.__file__), "whitelist", "web.conf")
+        path = os.path.join(yap.RAIZ_INSTALACION, "whitelist", "web.conf")
         assert os.path.exists(path), f"No se encuentra: {path}"
 
     def test_apps_conf_tiene_contenido(self):
         """apps.conf debe tener al menos una entrada valida."""
-        path = os.path.join(os.path.dirname(yap.__file__), "whitelist", "apps.conf")
+        path = os.path.join(yap.RAIZ_INSTALACION, "whitelist", "apps.conf")
         apps = yap.load_whitelist(path)
         assert len(apps) > 0, "apps.conf vacio o con solo comentarios"
 
     def test_web_conf_tiene_contenido(self):
         """web.conf debe tener al menos un dominio."""
-        path = os.path.join(os.path.dirname(yap.__file__), "whitelist", "web.conf")
+        path = os.path.join(yap.RAIZ_INSTALACION, "whitelist", "web.conf")
         domains = yap.load_domain_whitelist(path)
         assert len(domains) > 0, "web.conf vacio o con solo comentarios"
 

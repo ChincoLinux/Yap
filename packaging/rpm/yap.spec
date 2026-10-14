@@ -74,6 +74,9 @@ install -d %{buildroot}/usr/share/user-tmpfiles.d
 
 # Agent and runtime
 install -m 755 yap.py %{buildroot}/opt/yap/yap.py
+/opt/yap/yap/
+cp -r yap %{buildroot}/opt/yap/yap
+find %{buildroot}/opt/yap/yap -name __pycache__ -type d -exec rm -rf {} + || true
 install -m 755 llama-cli %{buildroot}/usr/local/bin/llama-cli
 
 # Symlink: /usr/local/bin/yap -> /opt/yap/yap.py
