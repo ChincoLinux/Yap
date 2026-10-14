@@ -54,8 +54,13 @@ jobs:
       - name: Smoke test yap.py (parse + import check)
         run: |
           set -e
-          # Verify yap.py parses cleanly
-          python3 -c "import ast; ast.parse(open('yap.py').read()); print('PASS: yap.py parses')"
+          # Todo el codigo del agente parsea: raiz y paquete yap/ (#267)
+          python3 -c "
+          import ast, glob
+          for f in sorted(glob.glob('*.py') + glob.glob('yap/**/*.py', recursive=True)):
+              ast.parse(open(f).read())
+              print(f'PASS: {f} parses')
+          "
 
           # Verify all test modules import without errors
           python3 -c "
@@ -75,9 +80,10 @@ jobs:
 
           # Verify whitelists load
           python3 -c "
-          import ast
-          tree = ast.parse(open('yap.py').read())
-          print(f'PASS: yap.py has {len([n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)])} functions')
+          import ast, glob
+          for f in sorted(glob.glob('*.py') + glob.glob('yap/**/*.py', recursive=True)):
+              tree = ast.parse(open(f).read())
+              print(f'PASS: {f} has {len([n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)])} functions')
           "
 
       - name: Verify no secrets in diff
