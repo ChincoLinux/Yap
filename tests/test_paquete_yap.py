@@ -15,6 +15,52 @@ from pathlib import Path
 
 import yap
 
+
+_SECCIONES_RPM = (
+    "%prep",
+    "%build",
+    "%install",
+    "%check",
+    "%post",
+    "%preun",
+    "%postun",
+    "%files",
+    "%description",
+    "%package",
+    "%changelog",
+)
+
+
+def _secciones_spec(path):
+    """Texto de cada seccion de un .spec: "%install", "%files", "%files models-1b"...
+
+    Buscar una ruta en todo el fichero no basta: en #265 `/opt/yap/yap/`
+    estaba, pero en %install, donde se ejecuta como comando.
+    """
+    secciones, actual = {}, "preambulo"
+    for linea in Path(path).read_text(encoding="utf-8").splitlines():
+        partes = linea.split()
+        if partes and partes[0] in _SECCIONES_RPM:
+            actual = " ".join(partes[:2])
+            secciones.setdefault(actual, "")
+            continue
+        secciones[actual] = secciones.get(actual, "") + linea + "\n"
+    return secciones
+
+
+def test_install_del_rpm_no_ejecuta_rutas_sueltas():
+    """Una linea que es solo una ruta absoluta en %install es un error de
+    copiar-pegar desde %files: el shell intenta ejecutarla (#265)."""
+    raiz = Path(__file__).resolve().parent.parent
+    install = _secciones_spec(raiz / "packaging/rpm/yap.spec")["%install"]
+    sueltas = [
+        ln
+        for ln in install.splitlines()
+        if ln.strip().startswith("/") and " " not in ln.strip()
+    ]
+    assert not sueltas, f"rutas sueltas en %install: {sueltas}"
+
+
 RAIZ = Path(yap.RAIZ_INSTALACION)
 PAQUETE = RAIZ / "yap"
 SHIM = RAIZ / "yap.py"
@@ -141,9 +187,11 @@ class TestEmpaquetadoDelPaquete:
         assert '"$SCRIPT_DIR/yap"' in t, "build-deb.sh no instala el paquete yap/"
 
     def test_rpm_instala_y_declara_el_paquete(self):
-        t = (self.RAIZ / "packaging/rpm/yap.spec").read_text(encoding="utf-8")
-        assert "cp -r yap" in t
-        assert "/opt/yap/yap/\n" in t + "\n", "falta en %files"
+        secciones = _secciones_spec(self.RAIZ / "packaging/rpm/yap.spec")
+        assert "cp -r yap %{buildroot}/opt/yap/yap" in secciones["%install"]
+        assert (
+            "/opt/yap/yap/" in secciones["%files"].splitlines()
+        ), "falta en %files (#265)"
 
     def test_flatpak_instala_el_paquete(self):
         t = (self.RAIZ / "packaging/flatpak/org.chincolinux.Yap.json").read_text(
