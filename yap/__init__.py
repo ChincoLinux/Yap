@@ -41,6 +41,8 @@ if sys.platform == "win32":
 CONFIG_DIR = "/etc/yap"
 WHITELIST_APPS = f"{CONFIG_DIR}/whitelist/apps.conf"
 WHITELIST_WEB = f"{CONFIG_DIR}/whitelist/web.conf"
+# Documentacion instalada por el .deb y el .rpm (USAGE.md entra al RAG, #262)
+DOC_DIR = "/usr/share/doc/yap"
 
 # Techo de lectura por recurso. Sin esto una URL de dominio permitido puede
 # agotar la RAM del aula (Celeron 4GB) antes de que el techo de text[:3000]
@@ -2867,10 +2869,15 @@ def _is_subpath(target_path, parent_dir):
 
 
 def _rag_corpus_paths():
-    """Enumerate all files in the RAG corpus."""
+    """Corpus de alumno (#262): cursos, guia de uso y whitelists efectivas.
+
+    El mismo en un checkout y en un equipo instalado. Antes se buscaba todo
+    junto al codigo: en un .deb eso es /opt/yap, donde no hay USAGE.md ni
+    whitelists, y el RAG del aula solo veia los cursos. En un checkout
+    pasaba lo contrario: indexaba docs/ de desarrollo (DEPLOY, ROADMAP,
+    SECURITY-AUDIT...) y eso llegaba al prompt de preguntas de alumno.
+    """
     paths = []
-    # Los datos viven junto al paquete, no dentro: dirname(__file__) es yap/
-    base_dir = RAIZ_INSTALACION
 
     # CURSOS_DIR/*.json
     if os.path.isdir(CURSOS_DIR):
@@ -2878,31 +2885,31 @@ def _rag_corpus_paths():
             if _is_subpath(p, CURSOS_DIR):
                 paths.append(os.path.realpath(p))
 
-    # docs/*.md
-    docs_dir = os.path.join(base_dir, "docs")
-    if os.path.isdir(docs_dir):
-        for p in glob.glob(os.path.join(docs_dir, "*.md")):
-            if _is_subpath(p, docs_dir):
-                paths.append(os.path.realpath(p))
+    # Guia de uso: junto al codigo (checkout, Windows) o en la documentacion
+    # del paquete (.deb, .rpm)
+    for usage in (
+        os.path.join(RAIZ_INSTALACION, "USAGE.md"),
+        os.path.join(DOC_DIR, "USAGE.md"),
+    ):
+        if os.path.isfile(usage):
+            paths.append(os.path.realpath(usage))
+            break
 
-    # whitelist/*.conf
-    wl_dir = os.path.join(base_dir, "whitelist")
-    if os.path.isdir(wl_dir):
-        for p in glob.glob(os.path.join(wl_dir, "*.conf")):
-            if _is_subpath(p, wl_dir):
-                paths.append(os.path.realpath(p))
+    # Whitelists: las que Yap aplica de verdad, o las del repo si no hay
+    # ninguna instalada
+    for efectiva, nombre in (
+        (WHITELIST_APPS, "apps.conf"),
+        (WHITELIST_WEB, "web.conf"),
+    ):
+        for candidata in (
+            efectiva,
+            os.path.join(RAIZ_INSTALACION, "whitelist", nombre),
+        ):
+            if os.path.isfile(candidata):
+                paths.append(os.path.realpath(candidata))
+                break
 
-    # USAGE.md
-    usage = os.path.join(base_dir, "USAGE.md")
-    if os.path.isfile(usage) and _is_subpath(usage, base_dir):
-        paths.append(os.path.realpath(usage))
-
-    # AGENTS.md
-    agents = os.path.join(base_dir, "AGENTS.md")
-    if os.path.isfile(agents) and _is_subpath(agents, base_dir):
-        paths.append(os.path.realpath(agents))
-
-    return sorted(list(set(paths)))
+    return sorted(set(paths))
 
 
 def _rag_chunk_text(text, source, chunk_size=RAG_CHUNK_SIZE):
@@ -3019,6 +3026,15 @@ def _rag_chunk_json_curso(data, source):
     return chunks
 
 
+# Un .conf es una lista de binarios o dominios, sin las palabras con que un
+# alumno pregunta ("que paginas puedo visitar", "que programas hay"). Sin
+# contexto, BM25 no lo encuentra nunca (#262).
+_RAG_CABECERA_WHITELIST = {
+    "apps.conf": "Aplicaciones y programas permitidos en Yap (se abren con 'abre <app>'):",
+    "web.conf": "Paginas y sitios web permitidos en Yap (dominios que se pueden visitar):",
+}
+
+
 def _rag_build_chunks():
     """Build chunks from all corpus files."""
     chunks = []
@@ -3034,6 +3050,11 @@ def _rag_build_chunks():
                     # Non-fatal: JSON invalido o con una forma inesperada. Se
                     # indexa como texto: un curso raro no tumba la consulta (#260)
                     chunks.extend(_rag_chunk_text(content, path))
+            elif os.path.basename(path) in _RAG_CABECERA_WHITELIST:
+                cabecera = _RAG_CABECERA_WHITELIST[os.path.basename(path)]
+                for c in _rag_chunk_text(content, path):
+                    c["text"] = f"{cabecera} {c['text']}"
+                    chunks.append(c)
             else:
                 chunks.extend(_rag_chunk_text(content, path))
         except (OSError, UnicodeDecodeError):

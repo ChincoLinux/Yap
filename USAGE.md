@@ -420,7 +420,7 @@ como fortaleza si no se fallo en ninguna actividad: aprobarlo una vez no
 
 ## RAG local (Recuperacion Aumentada Offline)
 
-Yap cuenta con un motor de RAG local basado en **Okapi BM25** (100% biblioteca estandar de Python, 0 dependencias externas) que indexa planes de estudio (`cursos/*.json`), documentacion (`docs/*.md`), listas de aplicaciones/web (`whitelist/*.conf`) y manuales.
+Yap cuenta con un motor de RAG local basado en **Okapi BM25** (100% biblioteca estandar de Python, 0 dependencias externas) que indexa los planes de estudio (`cursos/*.json`), esta guia de uso y las listas de aplicaciones y sitios web permitidos.
 
 Al formular cualquier pregunta al asistente, Yap busca automaticamente los fragmentos mas relevantes y los inyecta en el contexto del modelo, manteniendose estrictamente dentro del limite de tokens configurado (`YAP_RAG_MAX_TOKENS = 512`) para proteger la memoria RAM y la velocidad de inferencia en CPU.
 
