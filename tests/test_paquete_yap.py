@@ -172,3 +172,29 @@ class TestEmpaquetadoDelPaquete:
                 patron in t for patron in ("cp -r yap", '"$SCRIPT_DIR/yap"', "yap\\*")
             )
             assert tiene_paquete, f"{rel} no empaqueta el paquete yap/"
+
+
+class TestDatosJuntoAlPaquete:
+    """Con el codigo en yap/, dirname(__file__) ya no es la raiz de datos.
+
+    El corpus RAG y el contrato del agente se buscaban ahi y quedaban
+    vacios en silencio: la suite pasaba igual.
+    """
+
+    def test_ningun_dirname_de_file_fuera_de_la_raiz(self):
+        import re
+
+        fuente = Path(yap.__file__).read_text(encoding="utf-8")
+        usos = [
+            n
+            for n, linea in enumerate(fuente.splitlines(), 1)
+            if re.search(r"dirname\(os\.path\.abspath\(__file__\)\)", linea)
+        ]
+        assert (
+            not usos
+        ), f"dirname(abspath(__file__)) en lineas {usos}: usa RAIZ_INSTALACION"
+
+    def test_el_corpus_rag_del_checkout_no_esta_vacio(self):
+        nombres = {os.path.basename(p) for p in yap._rag_corpus_paths()}
+        assert "USAGE.md" in nombres
+        assert "apps.conf" in nombres
