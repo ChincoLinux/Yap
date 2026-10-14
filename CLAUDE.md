@@ -20,7 +20,13 @@
 
 ---
 
-## 2. Arquitectura (yap.py)
+## 2. Arquitectura (paquete `yap/`)
+
+Desde #204 la implementación vive en `yap/__init__.py`; `yap.py` es un shim
+(`from yap import main`) y `python3 -m yap` entra por `yap/__main__.py`.
+`yap_core.py` (#152) es el motor con streaming que usa la GUI. Los datos
+(`i18n/`, `whitelist/`, `cursos/`) se buscan en `RAIZ_INSTALACION`, el
+directorio padre del paquete, nunca con `dirname(__file__)`.
 
 Flujo principal: `entrada → classify_intent() → handle_action() → cmd_*()`.
 
@@ -94,7 +100,9 @@ El hook `.githooks/post-checkout` informa del cambio de modelo al hacer `git che
 
 ```
 Yap/
-├── yap.py                 # Agente principal + cliente Gradio Cloud Run (#91)
+├── yap.py                 # Shim de entrada (#204)
+├── yap/                   # Paquete del agente (implementación en __init__.py)
+├── yap_core.py            # Motor con streaming (#152)
 ├── setup.sh               # Instalador de desarrollo (compila llama.cpp)
 ├── build-deb.sh           # Genera yap_*.deb y yap-models-*.deb (#31)
 ├── packaging/             # Plantillas DEBIAN (control, postinst, prerm, postrm)
@@ -109,7 +117,7 @@ Yap/
 │   └── run_tests.py            # Ejecutor: 5 archivos, chequeos, 26 requisitos
 ├── .githooks/post-checkout    # Hook informativo de rama
 ├── .github/
-│   ├── workflows/              # 11 workflows (CI, A-Dev, releases, quality gates)
+│   ├── workflows/              # 12 workflows (CI, A-Dev, releases, quality gates)
 │   └── adev/                   # Configuración A-Dev (ver sección 7)
 ├── docs/                  # ROADMAP, PACKAGING, TRUNK-BASED, SECURITY-AUDIT, SUPER-YAP
 └── USAGE.md              # Guía de uso
@@ -121,12 +129,12 @@ Yap/
 
 ```bash
 pip install pytest
-python3 -m pytest tests/ -v          # 1079 pruebas (sin LLM/GPU/Internet)
+python3 -m pytest tests/ -v          # suite completa (sin LLM/GPU/Internet)
 python3 tests/run_tests.py --report  # Reporte TXT
 python3 tests/run_tests.py --vm      # Infra (solo en VM)
 ```
 
-**Cobertura:** 30 archivos, 1079 pruebas. `run_tests.py` ejecuta 5 de ellos
+**Cobertura:** más de 1200 pruebas. `run_tests.py` ejecuta 5 archivos
 (237 pruebas) + 5 chequeos de infraestructura + 5 estáticos + mapeo de 26
 requisitos. Detalle en [tests/README.md](tests/README.md).
 
