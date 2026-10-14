@@ -60,9 +60,27 @@ def test_ningun_gate_niega_grep_bajo_errexit():
     assert not malos, "gates que no pueden fallar:\n" + "\n".join(malos)
 
 
-def test_build_packages_se_dispara_y_empaqueta_el_paquete():
+def test_build_packages_se_dispara_y_empaqueta_el_codigo():
+    """El spec de RPM instala yap.py, yap/ y yap_core.py desde el tarball."""
     t = _texto("build-packages.yml")
-    assert "- 'yap/**'" in t, "un cambio en yap/ no dispara la construccion"
-    assert re.search(
-        r"tar czf .*\n\s+--transform .*\n\s+yap\.py yap/ ", t
-    ), "el tarball del RPM no incluye yap/"
+    for ruta in ("yap.py", "yap/**", "yap_core.py"):
+        assert f"- '{ruta}'" in t, f"un cambio en {ruta} no dispara la construccion"
+    tarball = re.search(r"tar czf .*?\n((?:.*\\\n)*.*)", t).group(1)
+    for fichero in ("yap.py", "yap/", "yap_core.py"):
+        assert (
+            f" {fichero} " in f" {tarball} "
+        ), f"el tarball del RPM no incluye {fichero}"
+
+
+def test_el_tarball_cubre_lo_que_instala_el_spec():
+    """Cada fichero de la raiz que el spec instala debe ir en el tarball."""
+    spec = (WORKFLOWS.parent.parent / "packaging/rpm/yap.spec").read_text(
+        encoding="utf-8"
+    )
+    instalados = set(re.findall(r"^install -m \d+ (\S+\.py) ", spec, re.M))
+    tarball = re.search(
+        r"tar czf .*?\n((?:.*\\\n)*.*)", _texto("build-packages.yml")
+    ).group(1)
+    faltan = [f for f in sorted(instalados) if f" {f} " not in f" {tarball} "]
+    assert instalados, "el spec ya no instala .py: el test no mide nada"
+    assert not faltan, f"el spec instala {faltan} pero el tarball no los lleva"
