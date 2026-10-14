@@ -31,6 +31,7 @@
     "domain_blocked": "[ERROR] Domain '{domain}' is blocked.\nAllowed domains: {allowed}",
     "fetch": "[ERROR] Error fetching {url}: {error}",
     "too_large": "[ERROR] {url} exceeds the {max_kb} KB limit. Resource not downloaded.",
+    "rate_limited": "[WARN] Too many queries in a row ({max} per minute). Wait {segundos} s: the model runs on this machine and a loop starves its CPU.",
     "timeout": "[WARN] Timed out (120s)",
     "llama_missing": "[ERROR] llama-cli is not installed. Run Yap setup.",
     "no_exercises": "[ERROR] No exercises configured in {path}",
