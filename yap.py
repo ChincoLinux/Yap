@@ -22,17 +22,20 @@ import re
 import atexit
 import unicodedata
 import math
+from collections import deque
 
 if sys.platform == "win32":
     if hasattr(sys.stdout, "reconfigure"):
         try:
             sys.stdout.reconfigure(encoding="utf-8")
         except Exception:
+            # Consola que no admite utf-8: se sigue con su codificacion.
             pass
     if hasattr(sys.stderr, "reconfigure"):
         try:
             sys.stderr.reconfigure(encoding="utf-8")
         except Exception:
+            # Consola que no admite utf-8: se sigue con su codificacion.
             pass
 
 CONFIG_DIR = "/etc/yap"
@@ -2879,6 +2882,29 @@ def _rag_chunk_text(text, source, chunk_size=RAG_CHUNK_SIZE):
     return chunks
 
 
+def _rag_texto(valor):
+    """Texto plano de un campo de curso, sea cual sea su forma (#260).
+
+    Los cursos reales mezclan formas: `indicadores` es una lista de objetos
+    {id, descripcion}, `herramientas` una lista de strings. Suponer strings
+    tumbaba toda consulta con TypeError en los equipos instalados.
+    """
+    if valor is None:
+        return ""
+    if isinstance(valor, str):
+        return valor
+    if isinstance(valor, dict):
+        ident = _rag_texto(valor.get("id", ""))
+        partes = (
+            _rag_texto(valor.get(k)) for k in ("nombre", "descripcion", "enunciado")
+        )
+        cuerpo = " ".join(x for x in partes if x)
+        return f"{ident}: {cuerpo}" if ident and cuerpo else (ident or cuerpo)
+    if isinstance(valor, (list, tuple)):
+        return ", ".join(x for x in (_rag_texto(v) for v in valor) if x)
+    return str(valor)
+
+
 def _rag_chunk_json_curso(data, source):
     """Chunk a course JSON into semantic pieces."""
     chunks = []
@@ -2895,8 +2921,7 @@ def _rag_chunk_json_curso(data, source):
     for ra in ras:
         ra_id = ra.get("id", "")
         ra_desc = ra.get("descripcion", "")
-        inds = ra.get("indicadores", [])
-        inds_str = ", ".join(inds) if isinstance(inds, list) else str(inds)
+        inds_str = _rag_texto(ra.get("indicadores", []))
         text = f"RA {ra_id}: {ra_desc}. Indicadores: {inds_str}."
         chunks.append({"text": text, "source": source})
 
@@ -2906,12 +2931,7 @@ def _rag_chunk_json_curso(data, source):
         ea_nombre = ea.get("nombre", "")
         ea_desc = ea.get("descripcion", "")
         ea_horas = ea.get("horas", 0)
-        herramientas = ea.get("herramientas", [])
-        herrs_str = (
-            ", ".join(herramientas)
-            if isinstance(herramientas, list)
-            else str(herramientas)
-        )
+        herrs_str = _rag_texto(ea.get("herramientas", []))
         text = f"EA {ea_id}: {ea_nombre}. {ea_desc}. {ea_horas} horas. Herramientas: {herrs_str}."
         chunks.append({"text": text, "source": source})
 
@@ -2921,8 +2941,8 @@ def _rag_chunk_json_curso(data, source):
             act_nombre = act.get("nombre", "")
             act_desc = act.get("descripcion", "")
             enunciado = act.get("enunciado", "")
-            criterios = act.get("criterios_evaluacion", [])
-            crit_str = f" Criterios: {', '.join(criterios)}." if criterios else ""
+            criterios = _rag_texto(act.get("criterios_evaluacion", []))
+            crit_str = f" Criterios: {criterios}." if criterios else ""
 
             act_text = f"Actividad {orden} ({tipo}): {act_nombre}. {act_desc}. Enunciado: {enunciado}.{crit_str}"
 
@@ -2971,8 +2991,9 @@ def _rag_build_chunks():
                 try:
                     data = json.loads(content)
                     chunks.extend(_rag_chunk_json_curso(data, path))
-                except json.JSONDecodeError:
-                    # Non-fatal: if JSON is invalid, fall back to plain text chunking
+                except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
+                    # Non-fatal: JSON invalido o con una forma inesperada. Se
+                    # indexa como texto: un curso raro no tumba la consulta (#260)
                     chunks.extend(_rag_chunk_text(content, path))
             else:
                 chunks.extend(_rag_chunk_text(content, path))
@@ -7177,8 +7198,14 @@ def cmd_super_modo(valor):
     return cmd_super_status()
 
 
-def cmd_query_super(prompt, context=None, store_history=True, skip_local=False):
+def cmd_query_super(
+    prompt, context=None, store_history=True, skip_local=False, contar=True
+):
     """Delegate to Super Yap with local HISTORY; fall back to llama local."""
+    if contar:
+        rechazo = _rechazo_por_limite()
+        if rechazo:
+            return rechazo
     if not _super_habilitado() or not super_configurada():
         _actualizar_estado_super(False)
         if skip_local:
@@ -7188,6 +7215,7 @@ def cmd_query_super(prompt, context=None, store_history=True, skip_local=False):
             context=context,
             store_history=store_history,
             allow_super_fallback=False,
+            contar=False,
         )
     payload = _payload_super(prompt, context=context)
     data, err = _post_super(payload)
@@ -7202,6 +7230,7 @@ def cmd_query_super(prompt, context=None, store_history=True, skip_local=False):
             context=context,
             store_history=store_history,
             allow_super_fallback=False,
+            contar=False,
         )
         return f"[WARN] Super Yap no disponible, usando LLM local. ({motivo})\n{local}"
     _actualizar_estado_super(True)
@@ -7303,15 +7332,63 @@ def _responder_super_por_fallback(prompt, context, store_history, motivo):
         context=context,
         store_history=store_history,
         skip_local=True,
+        contar=False,
     )
     if out and not out.startswith("[WARN]") and not out.startswith("[ERROR]"):
         return f"[INFO] {motivo} Respuesta de Super Yap:\n{out}"
     return None
 
 
+# Rate limiting de consultas (#256). El modelo corre en el equipo del
+# alumno: el riesgo no es coste por token, es que un bucle (un while True en
+# un ejercicio, un script mal escrito) deje un Celeron sin CPU durante la
+# clase. Ventana deslizante en memoria: se resetea al reiniciar, a proposito.
+RATE_MAX_CONSULTAS = 30
+RATE_VENTANA_S = 60.0
+_CONSULTAS_RECIENTES = deque()
+
+
+def _consulta_permitida(ahora=None):
+    """Registra la consulta si cabe en la ventana.
+
+    Devuelve (True, 0) si se admite, o (False, segundos) con la espera
+    restante hasta que la mas antigua salga de la ventana. Una consulta
+    rechazada no cuenta: reintentar no alarga la espera.
+    """
+    ahora = time.monotonic() if ahora is None else ahora
+    while _CONSULTAS_RECIENTES and ahora - _CONSULTAS_RECIENTES[0] >= RATE_VENTANA_S:
+        _CONSULTAS_RECIENTES.popleft()
+    if len(_CONSULTAS_RECIENTES) >= RATE_MAX_CONSULTAS:
+        espera = RATE_VENTANA_S - (ahora - _CONSULTAS_RECIENTES[0])
+        return False, max(1, math.ceil(espera))
+    _CONSULTAS_RECIENTES.append(ahora)
+    return True, 0
+
+
+def _rechazo_por_limite():
+    """Mensaje de rechazo si se supera el limite, o None si se admite."""
+    permitida, espera = _consulta_permitida()
+    if permitida:
+        return None
+    return t("error.rate_limited", max=RATE_MAX_CONSULTAS, segundos=espera)
+
+
 def cmd_query(
-    prompt, context=None, store_history=True, allow_super_fallback=True, on_token=None
+    prompt,
+    context=None,
+    store_history=True,
+    allow_super_fallback=True,
+    on_token=None,
+    contar=True,
 ):
+    """Consulta al LLM. contar=False solo para el fallback interno de una
+    consulta ya contada (#256): una pregunta del alumno cuenta una vez.
+    on_token: streaming via yap_core, tambien sujeto al limite."""
+    # El limite va antes de cualquier invocacion, local, nube o streaming (#256).
+    if contar:
+        rechazo = _rechazo_por_limite()
+        if rechazo:
+            return rechazo
     if on_token is not None:
         import yap_core
 
@@ -7721,6 +7798,7 @@ def classify_intent(user_input):
             ):
                 return action, param
     except (subprocess.TimeoutExpired, FileNotFoundError):
+        # Clasificador lento o sin llama-cli: se cae al fallback de abajo.
         pass
 
     return "query", user_input.strip()

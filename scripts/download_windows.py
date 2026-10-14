@@ -7,7 +7,6 @@ import sys
 import os
 import urllib.request
 import zipfile
-import shutil
 import time
 
 if sys.platform == "win32":
@@ -34,8 +33,7 @@ def download_with_progress(url: str, dest_path: str, desc: str = "Descargando"):
     last_print = 0
 
     req = urllib.request.Request(
-        url,
-        headers={"User-Agent": "Yap-Windows-Downloader/1.0"}
+        url, headers={"User-Agent": "Yap-Windows-Downloader/1.0"}
     )
 
     with urllib.request.urlopen(req) as response, open(dest_path, "wb") as out_file:
@@ -64,7 +62,9 @@ def download_with_progress(url: str, dest_path: str, desc: str = "Descargando"):
                     )
                 else:
                     mb_down = downloaded / (1024 * 1024)
-                    sys.stdout.write(f"\r    {mb_down:.1f} MB descargados ({speed_mb:.2f} MB/s)    ")
+                    sys.stdout.write(
+                        f"\r    {mb_down:.1f} MB descargados ({speed_mb:.2f} MB/s)    "
+                    )
                 sys.stdout.flush()
 
     print("\n    ✓ Descarga completada.")
@@ -78,7 +78,9 @@ def setup_llama_binaries():
         return
 
     zip_path = os.path.join(BIN_DIR, "llama-win.zip")
-    download_with_progress(LLAMA_ZIP_URL, zip_path, "Descargando llama-cli precompilado para Windows")
+    download_with_progress(
+        LLAMA_ZIP_URL, zip_path, "Descargando llama-cli precompilado para Windows"
+    )
 
     print("[+] Extrayendo binarios...")
     with zipfile.ZipFile(zip_path, "r") as zf:
@@ -91,17 +93,23 @@ def setup_model():
     os.makedirs(MODELS_DIR, exist_ok=True)
     target_path = os.path.join(MODELS_DIR, MODEL_3B_FILENAME)
     if os.path.isfile(target_path) and os.path.getsize(target_path) > 1_500_000_000:
-        print(f"\n[✓] El modelo {MODEL_3B_FILENAME} ya existe ({os.path.getsize(target_path) / (1024*1024):.1f} MB).")
+        print(
+            f"\n[✓] El modelo {MODEL_3B_FILENAME} ya existe ({os.path.getsize(target_path) / (1024*1024):.1f} MB)."
+        )
         return
 
     part_path = target_path + ".part"
-    download_with_progress(MODEL_3B_URL, part_path, f"Descargando {MODEL_3B_FILENAME} desde Hugging Face")
+    download_with_progress(
+        MODEL_3B_URL, part_path, f"Descargando {MODEL_3B_FILENAME} desde Hugging Face"
+    )
 
     # Verificar magic GGUF
     with open(part_path, "rb") as f:
         magic = f.read(4)
     if magic != b"GGUF":
-        raise ValueError(f"El archivo descargado no es un GGUF válido (magic: {magic!r})")
+        raise ValueError(
+            f"El archivo descargado no es un GGUF válido (magic: {magic!r})"
+        )
 
     if os.path.exists(target_path):
         os.remove(target_path)

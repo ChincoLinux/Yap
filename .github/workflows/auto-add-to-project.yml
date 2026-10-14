@@ -6,6 +6,9 @@ on:
   pull_request:
     types: [opened]
 
+# El GITHUB_TOKEN no se usa: se le quita todo (#255).
+permissions: {}
+
 jobs:
   add-to-project:
     runs-on: ubuntu-latest
@@ -13,4 +16,8 @@ jobs:
       - uses: actions/add-to-project@244f685bbc3b7adfa8466e08b698b5577571133e  # v1.0.2
         with:
           project-url: https://github.com/orgs/ChincoLinux/projects/3
+          # PAT: secreto de ORGANIZACION, no del repo. Hace falta porque el
+          # GITHUB_TOKEN no puede escribir en un Project v2 de la org. El bloque
+          # permissions: de arriba NO limita a un PAT; su alcance es el que se
+          # le dio al crearlo (project). Ver #255.
           github-token: ${{ secrets.PROJECT_PAT }}

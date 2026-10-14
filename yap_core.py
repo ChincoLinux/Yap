@@ -102,6 +102,7 @@ class YapTask:
                 try:
                     self._proc.terminate()
                 except OSError:
+                    # El proceso ya termino: nada que matar.
                     pass
 
     def is_cancelled(self) -> bool:
@@ -222,6 +223,7 @@ def stream_llama(
         try:
             proc.kill()
         except OSError:
+            # El proceso ya termino: nada que matar.
             pass
         return f"[ERROR] Error durante la inferencia: {err}"
     finally:
@@ -614,6 +616,7 @@ class YapCore:
             try:
                 sub(event)
             except Exception:
+                # Un callback de la GUI que falla no debe tumbar el hilo del motor.
                 pass
 
     def _worker_loop(self):
@@ -640,6 +643,7 @@ class YapCore:
                     try:
                         task.on_token(token)
                     except Exception:
+                        # Un callback de la GUI que falla no debe tumbar el hilo del motor.
                         pass
 
             def _status_cb(st: str):
@@ -648,6 +652,7 @@ class YapCore:
                     try:
                         task.on_status(st)
                     except Exception:
+                        # Un callback de la GUI que falla no debe tumbar el hilo del motor.
                         pass
 
             try:
@@ -698,6 +703,7 @@ class YapCore:
                             try:
                                 task.on_done(out)
                             except Exception:
+                                # Un callback de la GUI que falla no debe tumbar el hilo del motor.
                                 pass
 
             except Exception as err:
@@ -708,6 +714,7 @@ class YapCore:
                     try:
                         task.on_error(str(err))
                     except Exception:
+                        # Un callback de la GUI que falla no debe tumbar el hilo del motor.
                         pass
 
             finally:
@@ -1003,6 +1010,7 @@ def instalar_llama_automaticamente(
                 try:
                     os.remove(part_dest)
                 except Exception:
+                    # Limpieza del .part: si falla, la proxima descarga lo sobrescribe.
                     pass
             _status(f"[ERROR] Error descargando modelo: {err}")
             return False

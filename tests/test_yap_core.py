@@ -13,6 +13,7 @@ Verifica:
 
 import sys
 import os
+from pathlib import Path
 import time
 import threading
 import unittest.mock as mock
@@ -610,30 +611,30 @@ class TestEmpaquetadoDeYapCore:
     RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     def test_deb_lo_instala(self):
-        texto = open(os.path.join(self.RAIZ, "build-deb.sh"), encoding="utf-8").read()
+        texto = Path(os.path.join(self.RAIZ, "build-deb.sh")).read_text(
+            encoding="utf-8"
+        )
         assert "yap_core.py" in texto, "build-deb.sh no instala yap_core.py"
 
     def test_rpm_lo_instala_y_lo_declara(self):
-        texto = open(
-            os.path.join(self.RAIZ, "packaging", "rpm", "yap.spec"), encoding="utf-8"
-        ).read()
+        texto = Path(os.path.join(self.RAIZ, "packaging", "rpm", "yap.spec")).read_text(
+            encoding="utf-8"
+        )
         assert "install -m 644 yap_core.py" in texto
         assert (
             "/opt/yap/yap_core.py\n" in texto + "\n"
         ), "falta en la seccion %files del RPM"
 
     def test_flatpak_lo_instala(self):
-        texto = open(
-            os.path.join(self.RAIZ, "packaging", "flatpak", "org.chincolinux.Yap.json"),
-            encoding="utf-8",
-        ).read()
+        texto = Path(
+            os.path.join(self.RAIZ, "packaging", "flatpak", "org.chincolinux.Yap.json")
+        ).read_text(encoding="utf-8")
         assert "yap_core.py" in texto
 
     def test_instalador_de_windows_lo_incluye(self):
-        texto = open(
-            os.path.join(self.RAIZ, "packaging", "windows", "yap-installer.iss"),
-            encoding="utf-8",
-        ).read()
+        texto = Path(
+            os.path.join(self.RAIZ, "packaging", "windows", "yap-installer.iss")
+        ).read_text(encoding="utf-8")
         assert 'Source: "yap_core.py"' in texto
 
     def test_yap_importa_yap_core(self):
@@ -652,5 +653,5 @@ class TestEmpaquetadoDeYapCore:
             os.path.join("packaging", "windows", "yap-installer.iss"),
         ]
         for rel in rutas:
-            texto = open(os.path.join(self.RAIZ, rel), encoding="utf-8").read()
+            texto = Path(os.path.join(self.RAIZ, rel)).read_text(encoding="utf-8")
             assert "yap_core.py" in texto, f"{rel} no empaqueta yap_core.py"
