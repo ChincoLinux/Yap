@@ -11,6 +11,7 @@ Verifica:
   6. Cancelación segura de tareas y procesos.
 """
 
+import subprocess
 import sys
 import os
 from pathlib import Path
@@ -655,3 +656,34 @@ class TestEmpaquetadoDeYapCore:
         for rel in rutas:
             texto = Path(os.path.join(self.RAIZ, rel)).read_text(encoding="utf-8")
             assert "yap_core.py" in texto, f"{rel} no empaqueta yap_core.py"
+
+
+class TestImportCiclico:
+    """yap_core importa yap al cargar; yap importa yap_core en diferido.
+
+    CodeQL lo marca como import ciclico. Es intencional, y estos tests
+    sostienen que ningun orden deja un modulo a medio inicializar. Cada
+    caso en un proceso nuevo: en este ya estan los dos en sys.modules.
+    """
+
+    @pytest.mark.parametrize(
+        "orden",
+        ["import yap_core, yap", "import yap, yap_core"],
+        ids=["core-primero", "yap-primero"],
+    )
+    def test_ambos_ordenes_de_importacion(self, orden):
+        codigo = (
+            f"{orden}; "
+            "assert callable(yap.cmd_query); "
+            "assert callable(yap_core.get_engine); "
+            "assert yap_core.yap is yap"
+        )
+        r = subprocess.run(
+            [sys.executable, "-c", codigo],
+            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            stdin=subprocess.DEVNULL,
+        )
+        assert r.returncode == 0, r.stderr
