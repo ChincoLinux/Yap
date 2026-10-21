@@ -208,9 +208,9 @@ class TestFindYapScriptRutas(unittest.TestCase):
             # usando YAP_SCRIPT vacío y forzando que shutil.which falle.
             original_exists = Path.exists
             # Resolver el candidato 1 real para poder bloquearlo
-            import yap_desktop.daemon as _dm
+            from yap_desktop.daemon import __file__ as _daemon_file
 
-            candidate1 = (Path(_dm.__file__).parent.parent / "yap.py").resolve()
+            candidate1 = (Path(_daemon_file).parent.parent / "yap.py").resolve()
 
             def fake_exists(p):
                 """Devuelve False para rutas del sistema y el candidato 1 del checkout."""
