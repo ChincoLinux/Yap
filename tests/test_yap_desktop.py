@@ -221,7 +221,9 @@ class TestFindYapScriptRutas(unittest.TestCase):
                 try:
                     if Path(p).resolve() == candidate1:
                         return False
-                except Exception:
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    # Si no se puede resolver la ruta, conservar comportamiento
+                    # por defecto y delegar en exists real.
                     pass
                 return original_exists(p)
 
