@@ -65,9 +65,9 @@ def validar_dominio(dominio, dominios_permitidos):
 
 | Regla | Verificación | Política |
 |---|---|---|
-| ❌ `shell=True` | `grep -rn "shell=True" yap.py` | HD-YAP-SEC-001 |
-| ❌ `eval()` | `grep -rn "eval(" yap.py` | HD-YAP-SEC-001 |
-| ❌ `os.system()` | `grep -rn "os.system(" yap.py` | HD-YAP-SEC-001 |
+| ❌ `shell=True` | `grep -rn "shell=True" *.py yap/` | HD-YAP-SEC-001 |
+| ❌ `eval()` | `grep -rn "eval(" *.py yap/` | HD-YAP-SEC-001 |
+| ❌ `os.system()` | `grep -rn "os.system(" *.py yap/` | HD-YAP-SEC-001 |
 | ❌ `open()` escritura fuera whitelist | Análisis estático | HD-YAP-SEC-001 |
 | ❌ `os.remove`, `shutil.rmtree` | Análisis estático | HD-YAP-SEC-001 |
 | ✅ `timeout=` en todo `subprocess.run()` | Test `test_timeout_en_subprocess` | HD-YAP-SEC-001 |
@@ -180,9 +180,7 @@ Sin `shell=True`, con `timeout=10`.
 
 ## Referencias de código
 
-- `yap.py:29-43` — `load_whitelist`
-- `yap.py:45-53` — `load_domain_whitelist`
-- `yap.py:56-64` — `notify`
-- `yap.py:67-101` — `cmd_open_app`
-- `yap.py:104-133` — `cmd_webfetch`
-- `tests/test_yap_security.py` — suite completa (25 pruebas)
+- `yap/__init__.py` — implementación de `load_whitelist`, `load_domain_whitelist`, `cmd_open_app`, `cmd_webfetch`
+- `yap.py` — shim de entrada
+- `yap_core.py` — motor asíncrono seguro
+- `tests/test_yap_security.py` — suite completa de seguridad (25 pruebas dedicadas)

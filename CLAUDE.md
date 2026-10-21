@@ -1,6 +1,6 @@
 # CLAUDE.md — Yap (ChincoLinux)
 
-> **Marco A-Dev:** Este proyecto opera bajo la doctrina de [A-Dev](https://github.com/scanalesespinoza/adev). Lee `ADEV.md` (doctrina) y `.github/adev/` (políticas locales) antes de cualquier cambio.
+> **Marco A-Dev y Fuente de Verdad:** Este proyecto opera bajo la doctrina de [A-Dev](https://github.com/scanalesespinoza/adev). La **guía operativa y contrato de ejecución para agentes** está en [AGENTS.md](AGENTS.md). Este archivo es un resumen técnico de arquitectura y ejecución complementario.
 
 ---
 
@@ -20,11 +20,11 @@
 
 ---
 
-## 2. Arquitectura (paquete `yap/`)
+## 2. Arquitectura (paquete `yap/` y `yap_core.py`)
 
-Desde #204 la implementación vive en `yap/__init__.py`; `yap.py` es un shim
+Desde #204 la implementación vive en el paquete `yap/__init__.py`; `yap.py` es un shim
 (`from yap import main`) y `python3 -m yap` entra por `yap/__main__.py`.
-`yap_core.py` (#152) es el motor con streaming que usa la GUI. Los datos
+`yap_core.py` (#152) es el motor desacoplado con streaming que usa la GUI (`yap_desktop/`). Los datos
 (`i18n/`, `whitelist/`, `cursos/`) se buscan en `RAIZ_INSTALACION`, el
 directorio padre del paquete, nunca con `dirname(__file__)`.
 
@@ -32,18 +32,19 @@ Flujo principal: `entrada → classify_intent() → handle_action() → cmd_*()`
 
 ### Funciones clave
 
-| Función | Líneas | Rol |
+| Función | Módulo | Rol |
 |---|---|---|
-| `load_whitelist()` | 96–106 | Carga `apps.conf` → `{nombre: [binarios]}` |
-| `load_domain_whitelist()` | 109–117 | Carga `web.conf` → `[dominios]` |
-| `cargar_ejercicios()` | 120–139 | Lee `ejercicios.conf` PSeInt |
-| `cargar_curso()` / `listar_cursos()` | 142–190 | Descubre cursos JSON en `CURSOS_DIR` |
-| `cmd_open_app()` | 67–101 (ref README) | Lanza app de whitelist con `shutil.which()` |
-| `cmd_webfetch()` | 104–133 | Valida dominio, limpia HTML, limita 3000 chars |
-| `cmd_query()` | 136–178 | Prompt Llama 3.2 + historial |
-| `classify_intent()` | 178–216 | Clasifica: `open_app`\|`search`\|`webfetch`\|`query`\|`pseint` |
-| `handle_action()` | 240–270 | Centraliza acciones + historial |
-| `main()` | 222–236 | Loop interactivo `while True` |
+| `load_whitelist()` | `yap/__init__.py` | Carga `apps.conf` → `{nombre: [binarios]}` |
+| `load_domain_whitelist()` | `yap/__init__.py` | Carga `web.conf` → `[dominios]` |
+| `cargar_ejercicios()` | `yap/__init__.py` | Lee `ejercicios.conf` PSeInt |
+| `cargar_curso()` / `listar_cursos()` | `yap/__init__.py` | Descubre cursos JSON en `CURSOS_DIR` |
+| `cmd_open_app()` | `yap/__init__.py` | Lanza app de whitelist con `shutil.which()` |
+| `cmd_webfetch()` | `yap/__init__.py` | Valida dominio, limpia HTML, limita 3000 chars |
+| `cmd_query()` | `yap/__init__.py` | Prompt Llama 3.2 + historial |
+| `classify_intent()` | `yap/__init__.py` | Clasifica: `open_app`\|`search`\|`webfetch`\|`query`\|`pseint` |
+| `handle_action()` | `yap/__init__.py` | Centraliza acciones + historial |
+| `stream_query()` | `yap_core.py` | Generación y streaming asíncrono para interfaces gráficas |
+| `main()` | `yap/__init__.py` | Loop interactivo `while True` en terminal |
 
 ### Constantes críticas
 
@@ -68,13 +69,13 @@ PROGRESS_FILE = ~/.config/yap/progress.json
 - **`whitelist/apps.conf`** — `Nombre:bin1,bin2` (multi-binario con fallback)
 - **`whitelist/web.conf`** — dominios exactos o subdominio directo (`d == domain or domain.endswith("."+d)`)
 
-### Reglas de código (CI verifica)
+### Reglas de código (CI verifica estrictamente)
 - ❌ `shell=True`, `eval()`, `os.system()` — prohibidos
 - ❌ `open()` en modo escritura fuera de paths permitidos
 - ❌ `os.remove`, `shutil.rmtree` en código fuente
 - ✅ Todo `subprocess.run()` debe tener `timeout=`
 - ✅ Contenido webfetch limitado a 3000 chars
-- ✅ Sin imports: `socket`, `ctypes`, `pickle`, `base64`
+- ✅ Sin imports peligrosos: `socket`, `ctypes`, `pickle`, `base64`
 
 ### Acciones bloqueadas por diseño
 Comandos arbitrarios · red fuera de whitelist · instalar/eliminar software · modificar archivos del sistema.
@@ -103,6 +104,7 @@ Yap/
 ├── yap.py                 # Shim de entrada (#204)
 ├── yap/                   # Paquete del agente (implementación en __init__.py)
 ├── yap_core.py            # Motor con streaming (#152)
+├── yap_desktop/           # Aplicación gráfica de escritorio (PyQt6/PySide6)
 ├── setup.sh               # Instalador de desarrollo (compila llama.cpp)
 ├── build-deb.sh           # Genera yap_*.deb y yap-models-*.deb (#31)
 ├── packaging/             # Plantillas DEBIAN (control, postinst, prerm, postrm)
@@ -110,8 +112,8 @@ Yap/
 │   ├── apps.conf          # Apps permitidas
 │   └── web.conf           # Dominios permitidos
 ├── cursos/                # JSON de cursos (FPY1101, etc.)
-├── tests/
-│   ├── test_yap_security.py    # 25 pruebas (de 21 archivos)
+├── tests/                 # Suite de tests (más de 1200 pruebas)
+│   ├── test_yap_security.py    # 25 pruebas dedicadas
 │   ├── test_yap_functional.py  # 59 pruebas
 │   ├── conftest.py             # Aísla Super Yap (YAP_SUPER_*=0)
 │   └── run_tests.py            # Ejecutor: 5 archivos, chequeos, 26 requisitos
@@ -128,7 +130,7 @@ Yap/
 ## 6. Tests
 
 ```bash
-pip install pytest
+pip install pytest pytest-cov ruff==0.6.9 pyflakes==3.2.0
 python3 -m pytest tests/ -v          # suite completa (sin LLM/GPU/Internet)
 python3 tests/run_tests.py --report  # Reporte TXT
 python3 tests/run_tests.py --vm      # Infra (solo en VM)
@@ -168,19 +170,19 @@ Las políticas, skills, agents y RAG de este proyecto viven en `.github/adev/`:
 - Políticas: `.github/adev/policies/`
 - Skills: `.github/adev/skills/`
 
-Cualquier agente debe leer `.github/adev/README.md` en el primer prompt para ubicar estas rutas.
+Cualquier agente debe leer `.github/adev/README.md` y [AGENTS.md](AGENTS.md) para ubicar contratos y mapa de módulos.
 
 ---
 
 ## 8. Flujo de trabajo (A-Dev + Yap)
 
-1. **Leer** `.github/adev/README.md` → localizar agents/RAG/policies.
+1. **Leer** [AGENTS.md](AGENTS.md) y `.github/adev/README.md`.
 2. **Inspeccionar** con `yap-read-only-inspection` (sin efectos).
 3. **Rama fresca** por cambio: `git checkout -b fix/issue-NNN`.
 4. **Commits atómicos** con Conventional Commits.
-5. **Tests** locales antes de push: `pytest tests/`.
-6. **PR** → workflow de revisión automática evaluá `HD-YAP-TEST-001`.
-7. **Auto-merge** si CI pasa; si no, `request-changes`.
+5. **Tests** locales antes de push: `pytest tests/` + `ruff format --check` + `ruff check`.
+6. **PR** → workflow de revisión automática evalúa políticas Hardness.
+7. **Revisión humana** por `core-devs` y merge nativo.
 
 ---
 
@@ -195,6 +197,7 @@ Cualquier agente debe leer `.github/adev/README.md` en el primer prompt para ubi
 
 ## 10. Referencias
 
+- [AGENTS.md](AGENTS.md) — Guía y contrato operativo principal para agentes de IA
 - [A-Dev upstream](https://github.com/scanalesespinoza/adev)
 - [Yap issues](https://github.com/ChincoLinux/Yap/issues)
 - [llama.cpp](https://github.com/ggerganov/llama.cpp)

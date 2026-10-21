@@ -1,6 +1,6 @@
 {
   "id": "HD-YAP-TEST-001",
-  "statement": "Todos los 81 tests (25 seguridad + 56 funcional + 5 infra) deben pasar en CI antes de merge. Cero regresiones toleradas.",
+  "statement": "Todos los tests de la suite (más de 1200 pruebas) deben pasar en CI antes de merge. Cero regresiones toleradas.",
   "level": "MUST",
   "scope": {
     "repositories": ["ChincoLinux/Yap"],
@@ -25,7 +25,7 @@
     "requirements": [
       "unit-tests job success",
       "branch-check job success",
-      "81/81 tests passed en logs"
+      "suite de tests pasada en verde en logs (más de 1200 pruebas)"
     ],
     "retention": "repository-record"
   },
