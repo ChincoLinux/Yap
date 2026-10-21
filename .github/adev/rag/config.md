@@ -158,7 +158,7 @@ debian.org
 
 | Job | Qué hace | Rama |
 |---|---|---|
-| `unit-tests` | 81 tests pytest + verif. estática (`grep shell=True/eval/os.system`) + validación whitelists | main, lowmem, ultra-lowmem |
+| `unit-tests` | más de 1200 pruebas pytest + verif. estática (`grep shell=True/eval/os.system`) + validación whitelists | main, lowmem, ultra-lowmem |
 | `branch-check` | Verifica `MODEL_PATH` en cada rama apunta al modelo correcto | main, lowmem, ultra-lowmem |
 | `results` | Resumen pipeline (siempre corre) | main, lowmem, ultra-lowmem |
 

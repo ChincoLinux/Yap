@@ -41,7 +41,7 @@ cat .github/adev/agents/yap-reviewer.md
 | ID | Nivel | Descripción |
 |---|---|---|
 | `HD-YAP-SEC-001` | MUST | Whitelists obligatorias — apps y dominios validados antes de ejecutar |
-| `HD-YAP-TEST-001` | MUST | 81 tests CI deben pasar (25 seg + 56 func) |
+| `HD-YAP-TEST-001` | MUST | Todos los tests de CI deben pasar (más de 1200 pruebas) |
 | `HD-YAP-BRANCH-001` | SHOULD | Rama fresca por cambio, commits Conventional, PR atómico |
 
 Ver `.github/adev/policies/*.json` para estructura completa.
@@ -79,4 +79,4 @@ La doctrina completa está en `ADEV.md` (raíz del repo) y en el upstream:
 Si añades políticas/skills/RAG/agentes:
 1. Actualiza este `README.md` (índice)
 2. Actualiza `CLAUDE.md` (sección 7)
-3. Sigue flujo A-Dev: rama → PR → tests → auto-merge
+3. Sigue flujo A-Dev: rama → PR → tests CI → revisión humana y merge

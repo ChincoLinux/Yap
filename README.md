@@ -131,19 +131,86 @@ etiquetados y sin tocar.
 
 ## Tabla de contenidos
 
+- [Resumen](#resumen)
+- [Estructura del repositorio](#estructura-del-repositorio)
 - [Frontend y backend en repositorios separados](#frontend-y-backend-en-repositorios-separados)
+  - [Por que](#por-que)
+  - [Que queda aqui](#que-queda-aqui)
+  - [Que NO cambia](#que-no-cambia)
 - [1. Objetivos](#1-objetivos)
 - [2. Especificaciones tecnicas](#2-especificaciones-tecnicas)
+  - [2.1 Constantes de configuracion](#21-constantes-de-configuracion)
 - [3. Arquitectura del sistema](#3-arquitectura-del-sistema)
+  - [3.1 Diagrama de capas](#31-diagrama-de-capas)
+  - [3.2 Flujo de una consulta](#32-flujo-de-una-consulta)
+  - [3.3 Componentes del sistema](#33-componentes-del-sistema)
+  - [3.4 Mapa de modulos (ficheros con mas de 200 lineas)](#34-mapa-de-modulos-ficheros-con-mas-de-200-lineas)
 - [4. Componentes del stack tecnologico](#4-componentes-del-stack-tecnologico)
+  - [4.1 Bash - Script de instalacion (`setup.sh`)](#41-bash---script-de-instalacion-setupsh)
+  - [4.2 Python - Agente principal (paquete `yap/`)](#42-python---agente-principal-paquete-yap)
+  - [4.3 llama.cpp y GGUF](#43-llamacpp-y-gguf)
+  - [4.4 CMake - Sistema de compilacion](#44-cmake---sistema-de-compilacion)
+  - [4.5 VirtualBox - Entorno de desarrollo](#45-virtualbox---entorno-de-desarrollo)
+  - [4.6 Debian Linux - Paquetes del sistema base](#46-debian-linux---paquetes-del-sistema-base)
 - [5. Seguridad](#5-seguridad)
+  - [5.1 Capas de defensa](#51-capas-de-defensa)
+  - [5.2 Whitelist de aplicaciones (`/etc/yap/whitelist/apps.conf`)](#52-whitelist-de-aplicaciones-etcyapwhitelistappsconf)
+  - [5.3 Whitelist de dominios (`/etc/yap/whitelist/web.conf`)](#53-whitelist-de-dominios-etcyapwhitelistwebconf)
+  - [5.4 Confirmacion humana para acciones sensibles (#12)](#54-confirmacion-humana-para-acciones-sensibles-12)
+  - [5.5 AppArmor (#14)](#55-apparmor-14)
+  - [5.6 Datos que el agente puede tocar](#56-datos-que-el-agente-puede-tocar)
+  - [5.7 Acciones bloqueadas por diseno](#57-acciones-bloqueadas-por-diseno)
+  - [5.8 Auditoria](#58-auditoria)
 - [6. Instalacion](#6-instalacion)
+  - [6.1 Requisitos del sistema](#61-requisitos-del-sistema)
+  - [6.2 Paquete .deb (recomendado en aulas)](#62-paquete-deb-recomendado-en-aulas)
+  - [6.3 Procedimiento de desarrollo (`setup.sh`)](#63-procedimiento-de-desarrollo-setupsh)
+  - [6.4 Despliegue en un laboratorio](#64-despliegue-en-un-laboratorio)
+  - [6.5 Actualizacion](#65-actualizacion)
 - [7. Ramas de configuracion](#7-ramas-de-configuracion)
+  - [7.1 Cambio entre ramas](#71-cambio-entre-ramas)
+  - [7.2 Hook post-checkout - informacion automatica al cambiar de rama](#72-hook-post-checkout---informacion-automatica-al-cambiar-de-rama)
+  - [7.3 Gestion de modelos](#73-gestion-de-modelos)
+  - [7.4 Optimizaciones aplicadas por rama](#74-optimizaciones-aplicadas-por-rama)
 - [8. Uso](#8-uso)
+  - [8.1 Modo interactivo (TUI)](#81-modo-interactivo-tui)
+  - [8.2 Modo comando directo](#82-modo-comando-directo)
+  - [8.3 Acciones soportadas](#83-acciones-soportadas)
+  - [8.4 Ordenes que no pasan por el LLM](#84-ordenes-que-no-pasan-por-el-llm)
+  - [8.5 Clasificacion de intenciones](#85-clasificacion-de-intenciones)
+  - [8.6 Flujo del tutorial PSeInt](#86-flujo-del-tutorial-pseint)
+    - [8.6.1 Practica evaluada (`yap ejercicios`)](#861-practica-evaluada-yap-ejercicios)
+  - [8.7 Sistema de Cursos](#87-sistema-de-cursos)
+    - [8.7.1 Iniciar un curso](#871-iniciar-un-curso)
+    - [8.7.2 Iniciar una Experiencia de Aprendizaje](#872-iniciar-una-experiencia-de-aprendizaje)
+    - [8.7.3 Flujo de una sesion EA](#873-flujo-de-una-sesion-ea)
+    - [8.7.4 Progreso y persistencia](#874-progreso-y-persistencia)
+    - [8.7.5 Agregar mas cursos](#875-agregar-mas-cursos)
+  - [8.8 Guia rapida integrada](#88-guia-rapida-integrada)
+  - [8.9 Perfil del estudiante (#24)](#89-perfil-del-estudiante-24)
+  - [8.10 Accesibilidad (#37)](#810-accesibilidad-37)
+  - [8.11 Sesiones e historial (#21, #13)](#811-sesiones-e-historial-21-13)
+  - [8.12 Telemetria local (#38)](#812-telemetria-local-38)
+  - [8.13 RAG local (#118)](#813-rag-local-118)
+  - [8.14 Super Yap - Gradio en Cloud Run (#91)](#814-super-yap---gradio-en-cloud-run-91)
+  - [8.15 Dificultad adaptativa (#30)](#815-dificultad-adaptativa-30)
 - [9. Limitaciones](#9-limitaciones)
 - [10. Trabajo futuro](#10-trabajo-futuro)
+  - [Fase 1 - MVP (completada)](#fase-1---mvp-completada)
+  - [Fase 2 - Optimizacion y seguridad (completada)](#fase-2---optimizacion-y-seguridad-completada)
+  - [Fase 3 - Entorno pedagogico (completada)](#fase-3---entorno-pedagogico-completada)
+  - [Fase 4 - En desarrollo](#fase-4---en-desarrollo)
+  - [Vision a largo plazo](#vision-a-largo-plazo)
 - [11. Licencia](#11-licencia)
 - [12. Pruebas y verificacion](#12-pruebas-y-verificacion)
+  - [12.1 Como ejecutar](#121-como-ejecutar)
+  - [12.2 Los dos ejecutores, y cuando usar cada uno](#122-los-dos-ejecutores-y-cuando-usar-cada-uno)
+    - [Requisitos de `run_tests.py`](#requisitos-de-run_testspy)
+    - [Los 26 requisitos catalogados](#los-26-requisitos-catalogados)
+  - [12.3 Integracion continua (GitHub Actions)](#123-integracion-continua-github-actions)
+  - [12.4 Pruebas de seguridad (`test_yap_security.py`, 25)](#124-pruebas-de-seguridad-test_yap_securitypy-25)
+  - [12.5 Mecanismo de pruebas](#125-mecanismo-de-pruebas)
+  - [12.6 Resultados](#126-resultados)
 - [13. Contribuir](#13-contribuir)
 
 ---
@@ -281,6 +348,43 @@ de entorno cuando el caso lo pide:
 | **Accesibilidad** | Alto contraste, fuentes 2x, deteccion de Orca, teclado (#37) |
 | **Telemetria** | Contadores locales anonimos, exportables y desactivables (#38) |
 | **Notificador** | Alertas graficas mediante `notify-send` |
+
+### 3.4 Mapa de modulos (ficheros con mas de 200 lineas)
+
+Para facilitar la comprension del codebase a agentes y desarrolladores sin exploracion a ciegas:
+
+| Fichero / Modulo | Lineas aprox. | Rol / Responsabilidad principal |
+|---|---|---|
+| `yap/__init__.py` | ~7325 | Agente interactivo, TUI ANSI, enrutador `interpret()`, clasificador LLM, handlers `cmd_*()`, RAG BM25, cursos JSON, PSeInt, perfiles y telemetria |
+| `tests/test_yap_evaluacion.py` | ~919 | Evaluacion formativa, rubricas y feedback de ejercicios |
+| `yap_core.py` | ~894 | Motor asincrono desacoplado: streaming de inferencia (`stream_query`), cola de tareas en background (`TaskQueue`) para GUI y servicios |
+| `tests/test_yap_functional.py` | ~698 | Comandos CLI, TUI, lanzamiento de apps, webfetch, LLM e historial |
+| `tests/test_yap_rag.py` | ~632 | Motor de retrieval BM25 local, cobertura lexica y relevancia |
+| `tests/test_yap_super.py` | ~622 | Fallback e integracion con Super Yap (Gradio en Cloud Run) |
+| `tests/test_yap_core.py` | ~559 | Pruebas de concurrencia, hilos y streaming de `yap_core.py` |
+| `setup.sh` | ~546 | Script Bash de setup: compila llama.cpp estatico, descarga modelo GGUF segun rama, instala `/etc/yap/` y symlinks |
+| `tests/test_yap_accesibilidad.py` | ~541 | Modos alto contraste, integracion Orca, zoom y atajos accesibles |
+| `tests/test_yap_deb.py` | ~528 | Empaquetado Debian: control de permisos, presencia de ficheros en `/opt/yap/`, symlinks y scripts de maintainer |
+| `tests/test_yap_adaptive.py` | ~520 | Ajuste de dificultad adaptativa segun desempeno escolar |
+| `tests/test_yap_sessions.py` | ~494 | Persistencia, archivo y reanudacion de sesiones de chat |
+| `tests/test_yap_ejercicios.py` | ~476 | Catalogo de ejercicios PSeInt, pistas graduales y evaluacion |
+| `tests/run_tests.py` | ~472 | Runner unificado: suite, infraestructura, modo `--vm` y 26 requisitos |
+| `tests/test_yap_profesor.py` | ~462 | Modo profesor, bloqueo de configuracion de aula y PIN docente |
+| `tests/test_yap_security.py` | ~422 | Whitelist de apps/web, inyecciones, timeouts y contencion |
+| `tests/test_yap_perfil.py` | ~416 | Perfil del estudiante (nombre, nivel, idioma) y progreso JSON |
+| `tests/rag_eval.py` | ~352 | Evaluacion cuantitativa del RAG frente a preguntas curriculares |
+| `build-deb.sh` | ~328 | Generador de paquetes Debian (`yap_*.deb`, `yap-models-*.deb`) |
+| `tests/test_checksums_modelos.py` | ~305 | Integridad criptografica (SHA-256) de binarios y modelos GGUF |
+| `yap_desktop/widget.py` | ~304 | Ventana flotante de chat en PyQt6/PySide6 con formateo Markdown a HTML |
+| `tests/test_yap_confirmation.py` | ~278 | Dialogo interactivo de confirmacion previa para acciones sensibles |
+| `tests/test_yap_apparmor.py` | ~264 | Perfil AppArmor `/etc/apparmor.d/usr.local.bin.yap` y contencion |
+| `tests/test_yap_feedback.py` | ~262 | Feedback pedagogico y metricas formativas del alumno |
+| `tests/test_yap_i18n.py` | ~261 | Internacionalizacion (es, en, arn) y consistencia de claves |
+| `tests/test_yap_desktop.py` | ~257 | Tests sin DISPLAY de `yap_desktop`: daemon, bandeja, hotkey |
+| `tests/test_yap_telemetry.py` | ~254 | Metricas locales de latencia e inferencia offline |
+| `deploy-yap.sh` | ~233 | Despliegue masivo por red local SSH para salas de computacion |
+| `tests/benchmark.py` | ~216 | Medicion de tiempos de arranque, latencia CPU y memoria RAM |
+| `tests/test_yap_security_audit.py` | ~214 | Auditoria estatica de directivas de seguridad |
 
 ---
 

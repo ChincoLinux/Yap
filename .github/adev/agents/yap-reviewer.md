@@ -63,7 +63,7 @@
 2. **Obtener** diff del PR + lista de archivos modificados
 3. **Evaluar** cada política aplicable:
    - `HD-YAP-SEC-001` (MUST): ¿Cambia seguridad? ¿Tests de seguridad pasan?
-   - `HD-YAP-TEST-001` (MUST): ¿CI verde? ¿81/81 tests?
+   - `HD-YAP-TEST-001` (MUST): ¿CI verde? ¿Todos los tests pasan (más de 1200 pruebas)?
    - `HD-YAP-BRANCH-001` (SHOULD): ¿Rama fresca? ¿Commits Conventional? ¿PR atómico?
 4. **Decidir**:
    - Si **alguna MUST falla** → `REQUEST_CHANGES`
@@ -118,12 +118,12 @@
 
 ---
 
-## Configuración de auto-merge (GitHub)
+## Integración con CI y Workflow de Revisión
 
-Este agente trabaja en conjunto con `.github/workflows/auto-merge.yml`:
-- Si revisión = `APPROVE` + CI verde → auto-merge
-- Si revisión = `REQUEST_CHANGES` → no merge, notificar autor
-
+Este agente opera mediante .github/workflows/pr-review.yml:
+- Emite un comentario consultivo (advisory) evaluando las políticas Hardness.
+- No reemplaza la decisión humana: la aprobación final corresponde a miembros de core-devs.
+- uto-merge.yml no existe; el auto-merge nativo de GitHub o la fusión manual operan tras aprobación humana y CI verde.
 ---
 
 ## Behavioral Evaluations
