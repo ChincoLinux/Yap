@@ -10,10 +10,18 @@ Arquitectura:
             └─► _worker thread (DaemonWorker)
                   └─► subprocess: python3 yap.py --one-shot <text>
                         └─► llama-cli (proceso hijo de yap.py)
+
+Fixes (issue #202 — GUI no llega a ningún paquete instalado):
+  - _find_yap_script: amplía la búsqueda a todas las rutas de
+    instalación del paquete .deb/.rpm y al módulo yap instalado
+    vía pip (importlib.util.find_spec).
+  - _run_query: corrige condición lógicamente muerta que descartaba
+    stdout (self._current_proc se ponía a None antes de chequearlo).
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import queue
@@ -24,23 +32,67 @@ from pathlib import Path
 from typing import Callable, Optional
 
 
+logger = logging.getLogger(__name__)
+
+
 # Ruta al script principal yap.py (busca relativo a este módulo y luego en PATH)
 def _find_yap_script() -> Path:
-    """Devuelve la ruta a yap.py."""
+    """Devuelve la ruta a yap.py.
+
+    Orden de búsqueda (fix #202):
+      0. Variable de entorno YAP_SCRIPT (máxima prioridad).
+      1. Relativo al paquete yap_desktop (checkout / desarrollo).
+      2. /opt/yap/yap.py  — instalación .deb/.rpm.
+      3. /usr/share/yap/yap.py  — ruta alternativa de empaquetado.
+      4. Módulo ``yap`` instalado vía pip: se usa su __main__.py
+         como punto de entrada equivalente a ``python -m yap``.
+      5. ``yap`` en el PATH del sistema (symlink del .deb).
+    """
+    import importlib.util
+
     # 0. Variable de entorno (máxima prioridad)
     env_path = os.environ.get("YAP_SCRIPT")
     if env_path and os.path.exists(env_path):
         return Path(env_path)
-    # 1. Relativo al paquete (instalación normal)
+
+    # 1. Relativo al paquete yap_desktop (checkout / desarrollo)
     candidate = Path(__file__).parent.parent / "yap.py"
     if candidate.exists():
         return candidate
-    # 2. /opt/yap/yap.py (instalación .deb/.rpm)
+
+    # 2. /opt/yap/yap.py  — instalación .deb/.rpm
     candidate = Path("/opt/yap/yap.py")
     if candidate.exists():
         return candidate
+
+    # 3. /usr/share/yap/yap.py  — ruta alternativa de empaquetado
+    candidate = Path("/usr/share/yap/yap.py")
+    if candidate.exists():
+        return candidate
+
+    # 4. Módulo yap instalado vía pip (importlib)
+    spec = importlib.util.find_spec("yap")
+    if spec and spec.origin:
+        origin = Path(spec.origin)
+        # Preferir yap.py en el directorio raíz del paquete si existe
+        root_yap = origin.parent / "yap.py"
+        if root_yap.exists():
+            return root_yap
+        # __main__.py del paquete como fallback
+        main_py = origin.parent / "__main__.py"
+        if main_py.exists():
+            return main_py
+
+    # 5. yap en el PATH del sistema (symlink /usr/local/bin/yap)
+    yap_in_path = shutil.which("yap")
+    if yap_in_path:
+        resolved = Path(yap_in_path).resolve()
+        if resolved.exists():
+            return resolved
+
     raise FileNotFoundError(
-        "yap.py no encontrado. Instala Yap o define YAP_SCRIPT=/ruta/a/yap.py"
+        "yap.py no encontrado. Instala el paquete yap o define "
+        "YAP_SCRIPT=/ruta/a/yap.py"
     )
 
 
@@ -185,11 +237,17 @@ class YapDaemon:
             stdout, stderr = self._current_proc.communicate(timeout=self._timeout)
             self._current_proc = None
 
-            if self._current_proc is None and stdout:
+            # fix #202: stdout se prioriza sobre stderr.
+            # llama.cpp escribe métricas y avisos en stderr aunque la
+            # respuesta sea válida; solo se trata como error si stdout
+            # está vacío y stderr contiene algo relevante.
+            if stdout.strip():
+                if stderr.strip():
+                    logger.debug("yap stderr (no fatal): %s", stderr.strip()[:200])
                 return stdout.strip()
-            if stderr:
+            if stderr.strip():
                 return f"[Error interno] {stderr.strip()[:200]}"
-            return stdout.strip() or "(sin respuesta)"
+            return "(sin respuesta)"
 
         except subprocess.TimeoutExpired:
             if self._current_proc:

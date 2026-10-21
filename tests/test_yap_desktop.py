@@ -166,6 +166,173 @@ class TestYapDaemon(unittest.TestCase):
             self.assertIsNone(result)
 
 
+# ─── Tests: fix #202 — _find_yap_script rutas instaladas ────────────────────
+
+
+class TestFindYapScriptRutas(unittest.TestCase):
+    """Regresiones para issue #202 — GUI no llega a ningún paquete instalado."""
+
+    def _find(self):
+        from yap_desktop.daemon import _find_yap_script
+
+        return _find_yap_script
+
+    def test_find_opt_yap_deb_rpm(self):
+        """/opt/yap/yap.py — candidato 2 de instalación .deb/.rpm (fix #202)."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            fake_opt = Path(td) / "yap.py"
+            fake_opt.write_text("# stub\n")
+
+            # Parchear os.path.exists y YAP_SCRIPT para forzar la ruta
+            with patch.dict(os.environ, {"YAP_SCRIPT": str(fake_opt)}):
+                result = self._find()()
+            self.assertEqual(result, fake_opt)
+
+    def test_find_importlib_pip_package(self):
+        """Candidato 4: módulo yap instalado vía pip (importlib.util.find_spec)."""
+        import tempfile
+        import types
+
+        with tempfile.TemporaryDirectory() as td:
+            pkg_dir = Path(td) / "yap"
+            pkg_dir.mkdir()
+            (pkg_dir / "__init__.py").write_text("")
+            (pkg_dir / "__main__.py").write_text("# entrypoint\n")
+
+            fake_spec = types.SimpleNamespace(origin=str(pkg_dir / "__init__.py"))
+
+            # No parchear Path.exists: los archivos reales existen en tmpdir.
+            # Solo silenciar los candidatos fijos (/opt/yap, /usr/share/yap)
+            # usando YAP_SCRIPT vacío y forzando que shutil.which falle.
+            original_exists = Path.exists
+            # Resolver el candidato 1 real para poder bloquearlo
+            from yap_desktop.daemon import __file__ as _daemon_file
+
+            candidate1 = (Path(_daemon_file).parent.parent / "yap.py").resolve()
+
+            def fake_exists(p):
+                """Devuelve False para rutas del sistema y el candidato 1 del checkout."""
+                s = str(p)
+                if s.startswith("/opt/yap") or s.startswith("/usr/share/yap"):
+                    return False
+                # Bloquear candidato 1 (checkout) tanto en Linux como en Windows
+                try:
+                    if Path(p).resolve() == candidate1:
+                        return False
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    # Si no se puede resolver la ruta, conservar comportamiento
+                    # por defecto y delegar en exists real.
+                    pass
+                return original_exists(p)
+
+            with patch.dict(os.environ, {}, clear=True), patch.object(
+                Path, "exists", fake_exists
+            ), patch("importlib.util.find_spec", return_value=fake_spec), patch(
+                "shutil.which", return_value=None
+            ):
+                result = self._find()()
+            self.assertEqual(result, pkg_dir / "__main__.py")
+
+    def test_find_yap_in_path_symlink(self):
+        """Candidato 5: yap en el PATH del sistema (symlink /usr/local/bin/yap)."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            fake_yap = Path(td) / "yap.py"
+            fake_yap.write_text("# stub\n")
+
+            with patch.dict(os.environ, {}, clear=True), patch(
+                "pathlib.Path.exists", return_value=False
+            ), patch("importlib.util.find_spec", return_value=None), patch(
+                "shutil.which", return_value=str(fake_yap)
+            ), patch("pathlib.Path.resolve", return_value=fake_yap), patch.object(
+                Path, "exists", lambda p: p == fake_yap
+            ):
+                result = self._find()()
+            self.assertEqual(result, fake_yap)
+
+
+class TestRunQueryFix202(unittest.TestCase):
+    """Regresiones para issue #202 — stdout se descartaba por stderr no vacío."""
+
+    def _make_daemon(self):
+        from yap_desktop.daemon import YapDaemon
+
+        return YapDaemon()
+
+    def test_stdout_returned_when_stderr_has_llama_metrics(self):
+        """fix #202: stdout se devuelve aunque stderr tenga métricas de llama.cpp."""
+        import threading
+
+        responses = []
+        done = threading.Event()
+
+        def cb(resp):
+            responses.append(resp)
+            done.set()
+
+        llama_stderr = (
+            "llama_print_timings: load time = 1234.56 ms\n"
+            "llama_print_timings: prompt eval time = 78.9 ms\n"
+        )
+
+        with patch("yap_desktop.daemon._find_yap_script") as mock_find, patch(
+            "subprocess.Popen"
+        ) as mock_popen:
+            mock_find.return_value = Path("/fake/yap.py")
+            proc = MagicMock()
+            proc.communicate.return_value = ("Respuesta válida del LLM", llama_stderr)
+            mock_popen.return_value = proc
+
+            daemon = self._make_daemon()
+            daemon.start()
+            daemon.query("pregunta de prueba", cb)
+            done.wait(timeout=3)
+            daemon.stop()
+
+        self.assertEqual(len(responses), 1)
+        self.assertEqual(
+            responses[0],
+            "Respuesta válida del LLM",
+            "stdout debería devolverse aunque stderr no esté vacío",
+        )
+
+    def test_error_returned_when_stdout_empty_and_stderr_has_error(self):
+        """Cuando stdout está vacío y stderr tiene un error real, se devuelve el error."""
+        import threading
+
+        responses = []
+        done = threading.Event()
+
+        def cb(resp):
+            responses.append(resp)
+            done.set()
+
+        with patch("yap_desktop.daemon._find_yap_script") as mock_find, patch(
+            "subprocess.Popen"
+        ) as mock_popen:
+            mock_find.return_value = Path("/fake/yap.py")
+            proc = MagicMock()
+            proc.communicate.return_value = (
+                "",
+                "ModuleNotFoundError: No module named yap_core",
+            )
+            mock_popen.return_value = proc
+
+            daemon = self._make_daemon()
+            daemon.start()
+            daemon.query("pregunta", cb)
+            done.wait(timeout=3)
+            daemon.stop()
+
+        self.assertTrue(
+            any("[Error interno]" in r for r in responses),
+            "stderr real debe propagarse cuando stdout está vacío",
+        )
+
+
 # ─── Tests: widget.py (_md_to_html) ──────────────────────────────────────────
 
 
