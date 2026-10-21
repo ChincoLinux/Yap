@@ -34,6 +34,7 @@ from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
+
 # Ruta al script principal yap.py (busca relativo a este módulo y luego en PATH)
 def _find_yap_script() -> Path:
     """Devuelve la ruta a yap.py.
