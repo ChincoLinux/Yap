@@ -219,11 +219,19 @@ def _modelo_local_path(raw=""):
     else:
         target = MODEL_3B_PATH
 
-    # Si la ruta por defecto (/opt/yap/models/...) no existe, buscar en carpeta models/ local
+    # Si la ruta por defecto (/opt/yap/models/...) no existe, buscar en carpeta models/ local o del sistema
     if not os.path.exists(target):
         cand = os.path.join(LOCAL_MODELS_DIR, os.path.basename(target))
         if os.path.exists(cand):
             return cand
+        for alt in (
+            MODEL_1B_PATH,
+            MODEL_3B_PATH,
+            os.path.join(LOCAL_MODELS_DIR, MODEL_1B_NAME),
+            os.path.join(LOCAL_MODELS_DIR, MODEL_3B_NAME),
+        ):
+            if os.path.exists(alt):
+                return alt
     return target
 
 
@@ -283,7 +291,7 @@ SUPER_PROMPT_MAX = 4000
 SUPER_RESPUESTA_MAX = 8000
 # Estimacion grosera (chars/4). El local usa ctx 2048 y -n 384.
 SUPER_TOKEN_LOCAL_MAX = 1200
-SUPER_LOCAL_TIMEOUT = 180  # 3 min; luego Gradio Cloud Run (SUSPENDIDO)
+SUPER_LOCAL_TIMEOUT = 240  # 4 min; luego Gradio Cloud Run (SUSPENDIDO)
 SUPER_GRADIO_HTML_TIMEOUT = 30
 SUPER_GRADIO_JOIN_TIMEOUT = 30
 SUPER_GRADIO_SSE_TIMEOUT = 180
@@ -325,8 +333,13 @@ FOOTER = "<|end_header_id|>"
 EOT = "<|eot_id|>"
 
 SYSTEM_PROMPT = (
-    "Eres Yap, un asistente educativo en espanol para ChincoLinux. "
-    "Responde de forma clara, breve y precisa. Si no sabes algo, dilo."
+    "Eres Yap, asistente educativo en espanol para ChincoLinux de la asignatura "
+    "Fundamentos de Programacion (FPY1101). Solo respondes dudas de programacion, "
+    "algoritmos, PSeInt, Python, GitHub y uso de ChincoLinux. Si te preguntan "
+    "sobre temas ajenos (finanzas como VAN o TIR, historia, etc.), NO inventes "
+    "informacion y responde: 'No tengo acceso a ese tipo de informacion, pero "
+    "puedo ayudarte en todo lo relacionado a la asignatura de fundamentos de "
+    "programacion, ¿alguna pregunta de PSeInt o Python?'."
 )
 
 HISTORY = []
@@ -1346,7 +1359,15 @@ def _system_prompt():
     Solo inyecta nombre, nivel y curso_activo; las estadísticas quedan
     fuera para no desperdiciar KV cache/tokens en cada consulta.
     """
-    default_sp = "Eres Yap, un asistente educativo en espanol para ChincoLinux. Responde de forma clara, breve y precisa. Si no sabes algo, dilo."
+    default_sp = (
+        "Eres Yap, asistente educativo en espanol para ChincoLinux de la asignatura "
+        "Fundamentos de Programacion (FPY1101). Solo respondes dudas de programacion, "
+        "algoritmos, PSeInt, Python, GitHub y uso de ChincoLinux. Si te preguntan "
+        "sobre temas ajenos (finanzas como VAN o TIR, historia, etc.), NO inventes "
+        "informacion y responde: 'No tengo acceso a ese tipo de informacion, pero "
+        "puedo ayudarte en todo lo relacionado a la asignatura de fundamentos de "
+        "programacion, ¿alguna pregunta de PSeInt o Python?'."
+    )
     base = SYSTEM_PROMPT if SYSTEM_PROMPT != default_sp else system_prompt()
     contexto = []
     try:
@@ -3893,7 +3914,7 @@ def _llamar_llm_evaluacion(prompt):
             stdin=subprocess.DEVNULL,
             text=True,
         )
-        stdout, stderr = proc.communicate(timeout=120)
+        stdout, stderr = proc.communicate(timeout=180)
         result = subprocess.CompletedProcess(
             cmd,
             proc.returncode if proc.returncode is not None else 0,
@@ -7646,7 +7667,7 @@ def cmd_pseint(query):
             cmd,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=180,
             stdin=subprocess.DEVNULL,
         )
         _registrar_consumo(result.stderr)
@@ -7857,7 +7878,7 @@ def classify_intent(user_input):
             cmd,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=90,
             stdin=subprocess.DEVNULL,
         )
         _registrar_consumo(result.stderr)

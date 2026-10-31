@@ -136,7 +136,15 @@ echo ""
 # ponytail: extraer el .gguf con regex, no sed sobre os.environ.get(...)
 # (el sed anterior dejaba un ')' final y construía una URL inválida)
 extraer_nombre_modelo() {
-  grep -oE 'Llama-3\.2-[0-9]+B-Instruct-Q4_K_M\.gguf' "$SCRIPT_DIR/yap.py" | head -n1
+  local src="$SCRIPT_DIR/yap/__init__.py"
+  [[ -f "$src" ]] || src="$SCRIPT_DIR/yap.py"
+  grep -oE 'Llama-3\.2-[0-9]+B-Instruct-Q4_K_M\.gguf' "$src" | head -n1
+}
+
+detectar_ram_mb() {
+  local mem_kb
+  mem_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+  echo $(( mem_kb / 1024 ))
 }
 
 es_gguf_valido() {
@@ -268,18 +276,45 @@ descargar_modelo() {
 
 # Detectar archivos de modelo existentes
 MODELOS_EXISTENTES=()
+MODELO_VALIDO_EXISTENTE=""
 shopt -s nullglob
-for f in "$MODEL_DIR"/*.gguf; do
+for f in "$MODEL_DIR"/*.gguf "$SCRIPT_DIR/models"/*.gguf; do
   MODELOS_EXISTENTES+=("$f")
+  if [[ -z "$MODELO_VALIDO_EXISTENTE" ]]; then
+    min_f=$MIN_BYTES_1B
+    [[ "$(basename "$f")" == *"3B"* ]] && min_f=$MIN_BYTES_3B
+    if es_gguf_valido "$f" "$min_f"; then
+      MODELO_VALIDO_EXISTENTE="$f"
+    fi
+  fi
 done
 shopt -u nullglob
 
-# Determinar qué modelo necesita esta rama
+# Determinar qué modelo necesita esta rama o hardware (<= 4.5 GB RAM -> 1B)
+RAM_TOTAL_MB="$(detectar_ram_mb)"
 MODEL_FILENAME="$(extraer_nombre_modelo)"
 if [[ -z "$MODEL_FILENAME" ]]; then
   echo "  [ERROR] No se pudo detectar el GGUF Q4_K_M declarado en yap.py"
   exit 1
 fi
+
+if [[ "$RAM_TOTAL_MB" -gt 0 && "$RAM_TOTAL_MB" -le 4608 ]]; then
+  echo "  [RECURSOS LIMITADOS] Detectados ${RAM_TOTAL_MB} MB de RAM (<= 4.5 GB)."
+  echo "  Seleccionando modelo ligero de 1B: Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+  MODEL_FILENAME="Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+fi
+
+# Si ya hay un modelo GGUF válido instalado y el objetivo no existe aún, no forzar otra descarga
+if [[ ! -f "$MODEL_DIR/$MODEL_FILENAME" && -n "$MODELO_VALIDO_EXISTENTE" ]]; then
+  echo "  [INFO] Ya existe un modelo GGUF válido instalado: $MODELO_VALIDO_EXISTENTE"
+  echo "  Se reutilizará sin forzar una nueva descarga."
+  MODEL_FILENAME="$(basename "$MODELO_VALIDO_EXISTENTE")"
+  if [[ "$MODELO_VALIDO_EXISTENTE" != "$MODEL_DIR/$MODEL_FILENAME" ]]; then
+    sudo mkdir -p "$MODEL_DIR"
+    sudo ln -sf "$MODELO_VALIDO_EXISTENTE" "$MODEL_DIR/$MODEL_FILENAME" 2>/dev/null || true
+  fi
+fi
+
 SIZE="$(echo "$MODEL_FILENAME" | grep -oE '[0-9]+B' | head -n1)"
 MODEL_FILE="$MODEL_DIR/$MODEL_FILENAME"
 MODEL_URL="https://huggingface.co/bartowski/Llama-3.2-${SIZE}-Instruct-GGUF/resolve/main/${MODEL_FILENAME}?download=true"
@@ -406,7 +441,7 @@ if [ -d "$SCRIPT_DIR/i18n" ]; then
   echo "  OK: traducciones instaladas en $CONFIG_DIR/i18n/"
 fi
 # ── Agente opencode ──────────────────────────────────────────
-sudo mkdir -p "$CONFIG_DIR/agent"
+sudo mkdir -p "$CONFIG_DIR/agent" "$YAP_DIR"
 if [ -f "$SCRIPT_DIR/yap-agent.md" ]; then
   sudo cp "$SCRIPT_DIR/yap-agent.md" "$CONFIG_DIR/agent/yap.md"
   echo "  OK: agente Yap instalado en $CONFIG_DIR/agent/"
@@ -414,6 +449,13 @@ else
   echo "  • yap-agent.md no existe en el repo — saltando copia (no es error)"
 fi
 sudo cp "$SCRIPT_DIR/yap.py" "$YAP_DIR/yap.py"
+if [ -f "$SCRIPT_DIR/yap_core.py" ]; then
+  sudo cp "$SCRIPT_DIR/yap_core.py" "$YAP_DIR/yap_core.py"
+fi
+if [ -d "$SCRIPT_DIR/yap" ]; then
+  sudo rm -rf "$YAP_DIR/yap"
+  sudo cp -r "$SCRIPT_DIR/yap" "$YAP_DIR/yap"
+fi
 sudo chmod +x "$YAP_DIR/yap.py"
 sudo ln -sf "$SCRIPT_DIR/yap.py" "$BIN_DIR/yap"
 # ── Unidades systemd (#129) ──────────────────────────────────
@@ -455,42 +497,79 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  PASO 5/6 — Instalación de aplicaciones sugeridas"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "  Aplicaciones incluidas en la whitelist (instalacion opcional):"
+echo "  Aplicaciones básicas para Fundamentos de Programación y whitelist:"
+echo "    • pseint         — Entorno de pseudocódigo y diagramas (via .tgz)"
+echo "    • python3        — Intérprete Python 3"
+echo "    • thonny         — IDE educativo de Python"
+echo "    • git            — Control de versiones (GitHub)"
+echo "    • micro          — Editor de texto en terminal"
 echo "    • libreoffice    — Suite ofimatica"
 echo "    • evince         — Visor de PDF"
 echo "    • firefox-esr    — Navegador web"
-echo "    • micro          — Editor de texto en terminal"
 echo "    • htop           — Monitor de procesos"
-echo "    • pseint         — Entorno de programacion (via .run)"
 echo ""
 echo "  ──────────────────────────────────────────────────────────────"
-echo "  [EJECUTANDO] Instalacion de PSeInt + apt-get"
+echo "  [EJECUTANDO] Revisión e instalación de PSeInt + programas básicos"
 echo "  ──────────────────────────────────────────────────────────────"
 echo ""
 
-# Instalar PSeInt via .run (detecta si ya esta instalado)
+# Instalar PSeInt (detecta si ya esta instalado en /opt/pseint o en PATH)
 PSEINT_RUN="/opt/pseint/pseint"
-if [ ! -x "$PSEINT_RUN" ]; then
+if [ ! -x "$PSEINT_RUN" ] && ! command -v pseint >/dev/null 2>&1; then
     echo "    Descargando e instalando PSeInt..."
     PSEINT_TMP=$(mktemp -d)
     sudo wget -q "https://downloads.sourceforge.net/project/pseint/20230531/pseint-l64-20230531.tgz" -O "$PSEINT_TMP/pseint.tgz" 2>/dev/null || true
-    if [ -f "$PSEINT_TMP/pseint.tgz" ]; then
+    if [ -s "$PSEINT_TMP/pseint.tgz" ]; then
         sudo mkdir -p /opt/pseint
+        sudo tar xzf "$PSEINT_TMP/pseint.tgz" --strip-components=1 -C /opt/pseint 2>/dev/null || \
         sudo tar xzf "$PSEINT_TMP/pseint.tgz" -C /opt/pseint 2>/dev/null || true
+        if [ -x "/opt/pseint/pseint/pseint" ] && [ ! -x "$PSEINT_RUN" ]; then
+            sudo ln -sf /opt/pseint/pseint/pseint "$PSEINT_RUN" 2>/dev/null || true
+        fi
+        if [ -x "$PSEINT_RUN" ]; then
+            sudo ln -sf "$PSEINT_RUN" "$BIN_DIR/pseint" 2>/dev/null || true
+        fi
         rm -rf "$PSEINT_TMP"
-        echo "    PSeInt instalado en /opt/pseint/"
+        echo "    ✓ PSeInt instalado en /opt/pseint/"
     else
+        rm -rf "$PSEINT_TMP"
         echo "    [AVISO] No se pudo descargar PSeInt. Instalalo manualmente desde pseint.sourceforge.net"
         echo "            El tutorial funcionara igual sin PSeInt grafico."
     fi
 else
-    echo "    PSeInt ya instalado en /opt/pseint/"
+    if [ -x "$PSEINT_RUN" ] && ! command -v pseint >/dev/null 2>&1; then
+        sudo ln -sf "$PSEINT_RUN" "$BIN_DIR/pseint" 2>/dev/null || true
+    fi
+    echo "    ✓ PSeInt ya instalado"
 fi
 echo ""
 
-sudo apt-get install -y -qq \
-  libreoffice evince firefox-esr micro htop \
-  --no-install-recommends 2>/dev/null || true
+# Revisar e instalar programas básicos de Fundamentos de Programación y whitelist que falten
+PAQUETES_FALTANTES=()
+declare -A MAPA_CMDS=(
+  ["python3"]="python3"
+  ["thonny"]="thonny"
+  ["git"]="git"
+  ["micro"]="micro"
+  ["libreoffice"]="libreoffice"
+  ["evince"]="evince"
+  ["firefox-esr"]="firefox-esr"
+  ["htop"]="htop"
+)
+for cmd_bin in python3 thonny git micro libreoffice evince firefox-esr htop; do
+  if command -v "$cmd_bin" >/dev/null 2>&1 || { [ "$cmd_bin" = "firefox-esr" ] && command -v firefox >/dev/null 2>&1; }; then
+    echo "    ✓ $cmd_bin ya está instalado"
+  else
+    echo "    • $cmd_bin no encontrado — se instalará '${MAPA_CMDS[$cmd_bin]}'"
+    PAQUETES_FALTANTES+=("${MAPA_CMDS[$cmd_bin]}")
+  fi
+done
+
+if [ ${#PAQUETES_FALTANTES[@]} -gt 0 ]; then
+  sudo apt-get install -y -qq \
+    "${PAQUETES_FALTANTES[@]}" \
+    --no-install-recommends 2>/dev/null || true
+fi
 
 echo "  ✓ Aplicaciones instaladas (o ya existentes)."
 echo ""
@@ -553,15 +632,19 @@ echo ""
 
 echo "  Estado de componentes:"
 echo "  +----------------------+--------------------------------+"
-LLAMA_OK=$(command -v llama-cli && echo "OK" || echo "FALLO")
+LLAMA_OK=$(command -v llama-cli >/dev/null 2>&1 && echo "OK" || echo "FALLO")
 MODELO_OK=$(ls -lh "$MODEL_FILE" 2>/dev/null | awk '{print $5}' || echo "NO ENCONTRADO")
-YAP_OK=$(command -v yap && echo "OK" || echo "FALLO")
-NOTIFY_OK=$(command -v notify-send && echo "OK" || echo "FALLO")
-APPS_OK=$( [ -f $WHITELIST_DIR/apps.conf ] && echo "CONFIGURADO" || echo "FALTANTE")
-WEB_OK=$( [ -f $WHITELIST_DIR/web.conf ] && echo "CONFIGURADO" || echo "FALTANTE")
+YAP_OK=$(command -v yap >/dev/null 2>&1 && echo "OK" || echo "FALLO")
+PSEINT_OK=$( ( [ -x "$PSEINT_RUN" ] || command -v pseint >/dev/null 2>&1 ) && echo "OK" || echo "NO INSTALADO")
+THONNY_OK=$(command -v thonny >/dev/null 2>&1 && echo "OK" || echo "NO INSTALADO")
+NOTIFY_OK=$(command -v notify-send >/dev/null 2>&1 && echo "OK" || echo "FALLO")
+APPS_OK=$( [ -f "$WHITELIST_DIR/apps.conf" ] && echo "CONFIGURADO" || echo "FALTANTE")
+WEB_OK=$( [ -f "$WHITELIST_DIR/web.conf" ] && echo "CONFIGURADO" || echo "FALTANTE")
 printf "  | %-20s | %-30s |\n" "llama-cli"     "$LLAMA_OK"
 printf "  | %-20s | %-30s |\n" "Modelo activo" "$MODELO_OK"
 printf "  | %-20s | %-30s |\n" "yap (comando)"  "$YAP_OK"
+printf "  | %-20s | %-30s |\n" "PSeInt"        "$PSEINT_OK"
+printf "  | %-20s | %-30s |\n" "Thonny (IDE)"  "$THONNY_OK"
 printf "  | %-20s | %-30s |\n" "notify-send"   "$NOTIFY_OK"
 printf "  | %-20s | %-30s |\n" "Whitelist apps" "$APPS_OK"
 printf "  | %-20s | %-30s |\n" "Whitelist web"  "$WEB_OK"

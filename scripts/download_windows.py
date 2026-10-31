@@ -5,6 +5,7 @@ scripts/download_windows.py — Descarga de modelo GGUF y llama-cli para Windows
 
 import sys
 import os
+import subprocess
 import urllib.request
 import zipfile
 import time
@@ -22,6 +23,30 @@ MODELS_DIR = os.path.join(BASE_DIR, "models")
 LLAMA_ZIP_URL = "https://github.com/ggerganov/llama.cpp/releases/download/b5097/llama-b5097-bin-win-avx2-x64.zip"
 MODEL_3B_URL = "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf?download=true"
 MODEL_3B_FILENAME = "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+MODEL_1B_URL = "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf?download=true"
+MODEL_1B_FILENAME = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+
+
+def detectar_ram_mb() -> int:
+    try:
+        res = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            stdin=subprocess.DEVNULL,
+        )
+        salida = res.stdout.strip()
+        if salida.isdigit():
+            return int(salida) // (1024 * 1024)
+    except Exception:
+        pass
+    return 0
 
 
 def download_with_progress(url: str, dest_path: str, desc: str = "Descargando"):
@@ -89,19 +114,36 @@ def setup_llama_binaries():
     print(f"[✓] Binarios extraídos exitosamente en: {BIN_DIR}")
 
 
-def setup_model():
+def setup_model() -> str:
     os.makedirs(MODELS_DIR, exist_ok=True)
-    target_path = os.path.join(MODELS_DIR, MODEL_3B_FILENAME)
-    if os.path.isfile(target_path) and os.path.getsize(target_path) > 1_500_000_000:
-        print(
-            f"\n[✓] El modelo {MODEL_3B_FILENAME} ya existe ({os.path.getsize(target_path) / (1024*1024):.1f} MB)."
-        )
-        return
+    ram_mb = detectar_ram_mb()
+    usar_1b = 0 < ram_mb <= 4608
+    filename = MODEL_1B_FILENAME if usar_1b else MODEL_3B_FILENAME
+    url = MODEL_1B_URL if usar_1b else MODEL_3B_URL
+    min_bytes = 700_000_000 if usar_1b else 1_500_000_000
 
+    if usar_1b:
+        print(
+            f"\n[!] Equipo de escasos recursos detectado ({ram_mb} MB RAM <= 4.5 GB)."
+        )
+        print(f"    Se seleccionará el modelo ligero 1B: {MODEL_1B_FILENAME}")
+
+    # Si ya existe algún modelo GGUF válido (1B o 3B), no forzar nueva descarga
+    for cand_name, cand_min in (
+        (filename, min_bytes),
+        (MODEL_1B_FILENAME, 700_000_000),
+        (MODEL_3B_FILENAME, 1_500_000_000),
+    ):
+        cand_path = os.path.join(MODELS_DIR, cand_name)
+        if os.path.isfile(cand_path) and os.path.getsize(cand_path) > cand_min:
+            print(
+                f"\n[✓] El modelo {cand_name} ya existe ({os.path.getsize(cand_path) / (1024*1024):.1f} MB)."
+            )
+            return cand_name
+
+    target_path = os.path.join(MODELS_DIR, filename)
     part_path = target_path + ".part"
-    download_with_progress(
-        MODEL_3B_URL, part_path, f"Descargando {MODEL_3B_FILENAME} desde Hugging Face"
-    )
+    download_with_progress(url, part_path, f"Descargando {filename} desde Hugging Face")
 
     # Verificar magic GGUF
     with open(part_path, "rb") as f:
@@ -115,6 +157,7 @@ def setup_model():
         os.remove(target_path)
     os.rename(part_path, target_path)
     print(f"\n[✓] Modelo guardado y verificado en: {target_path}")
+    return filename
 
 
 def main():
@@ -122,13 +165,13 @@ def main():
     print("  Yap — Instalador de Componentes Locales para Windows")
     print("=" * 65)
     setup_llama_binaries()
-    setup_model()
+    chosen_model = setup_model()
     print("\n" + "=" * 65)
     print("  ¡Instalación completada exitosamente!")
     print("=" * 65)
     print("\nPara ejecutar Yap en Windows con tu nuevo modelo:")
     print(f'  $env:Path += ";{BIN_DIR}"')
-    print(f'  $env:YAP_MODEL_PATH = "{os.path.join(MODELS_DIR, MODEL_3B_FILENAME)}"')
+    print(f'  $env:YAP_MODEL_PATH = "{os.path.join(MODELS_DIR, chosen_model)}"')
     print('  python yap.py "que es un algoritmo?"\n')
 
 

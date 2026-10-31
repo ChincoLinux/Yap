@@ -477,6 +477,45 @@ class TestChecksumsEnYapCore:
         assert yap_core.hash_esperado(f.name, "nosquien") is None
         assert yap_core.verificar_checksum(str(f), "nosquien") is None
 
+    def test_escasos_recursos_elige_modelo_1b(self, monkeypatch, tmp_path):
+        """En un equipo de <= 4.5 GB de RAM sin modelo previo, descarga el 1B Q4_K_M."""
+        cuerpo = b"GGUF" + os.urandom(2048)
+        import hashlib
+
+        esperado = hashlib.sha256(cuerpo).hexdigest()
+        original = yap_core.CHECKSUMS_MODELOS
+        try:
+            checks = tmp_path / "c.sha256"
+            checks.write_text(
+                "Llama-3.2-1B-Instruct-Q4_K_M.gguf  bartowski  "
+                + esperado
+                + f"  {len(cuerpo)}\n"
+            )
+            yap_core.CHECKSUMS_MODELOS = str(checks)
+            monkeypatch.setattr(yap_core, "LOCAL_MODELS_DIR", str(tmp_path))
+            monkeypatch.setattr(yap_core, "detectar_ram_mb", lambda: 3800)
+            monkeypatch.setattr(
+                yap_core.yap, "MODEL_PATH", str(tmp_path / "no-existe.gguf")
+            )
+            monkeypatch.setattr(
+                yap_core.shutil, "which", lambda *_a, **_k: "/usr/local/bin/llama-cli"
+            )
+            monkeypatch.setattr(
+                urllib.request,
+                "urlopen",
+                lambda *_a, **_k: TestElAutoInstaladorVerificaDeVerdad._Respuesta(
+                    cuerpo
+                ),
+            )
+            salidas = []
+            _ok = yap_core.instalar_llama_automaticamente(
+                on_status=lambda m: salidas.append(m)
+            )
+            assert (tmp_path / "Llama-3.2-1B-Instruct-Q4_K_M.gguf").exists()
+            assert any("1B" in s for s in salidas)
+        finally:
+            yap_core.CHECKSUMS_MODELOS = original
+
     def test_fichero_ausente_no_finge_verificar(self, tmp_path):
         """Si no hay checksums, avisa (None) en vez de dar por bueno."""
         original = yap_core.CHECKSUMS_MODELOS
@@ -546,13 +585,28 @@ class TestElAutoInstaladorVerificaDeVerdad:
             "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
             raising=False,
         )
+        monkeypatch.setattr(
+            yap_core.yap,
+            "MODEL_1B_NAME",
+            "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+            raising=False,
+        )
         salidas = []
+        monkeypatch.setattr(
+            yap_core.shutil,
+            "which",
+            lambda *_a, **_k: "/usr/local/bin/llama-cli",
+        )
+        monkeypatch.setattr(
+            yap_core,
+            "es_equipo_escasos_recursos",
+            lambda *_a, **_k: False,
+        )
         monkeypatch.setattr(
             urllib.request,
             "urlopen",
             lambda *a, **k: self._Respuesta(cuerpo),
         )
-        # shutil.which devolvio None en Linux, asi que avisa y sigue.
         return yap_core.instalar_llama_automaticamente(
             on_status=lambda m: salidas.append(m)
         ), salidas

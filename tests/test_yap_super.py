@@ -400,15 +400,15 @@ class TestCmdSuperStatus(SuperTestBase):
         assert "Llama-3.1-8B" not in out
         assert "presente" in out
         assert "Timeout:" in out
-        assert "180" in out
+        assert "240" in out
         assert "Modo:" in out
         assert "Internet:" in out
         assert "Modelo:" not in out
 
     def test_timeout_local_es_3_min(self):
-        assert yap.SUPER_LOCAL_TIMEOUT == 180
+        assert yap.SUPER_LOCAL_TIMEOUT == 240
         assert yap.SUPER_GRADIO_SSE_TIMEOUT == 180
-        assert yap._local_llama_timeout() == 180
+        assert yap._local_llama_timeout() == 240
 
     @_CLOUD_SKIP
     def test_familia_modelo_llama_u_otro(self):
@@ -555,12 +555,12 @@ class TestFallbackLocalASuper(SuperTestBase):
         self.habilitar()
         from subprocess import TimeoutExpired
 
-        mock_run.side_effect = TimeoutExpired("llama-cli", 180)
+        mock_run.side_effect = TimeoutExpired("llama-cli", 240)
         out = yap.cmd_query("hola", store_history=False)
         mock_super.assert_called_once()
         assert "desde-nube" in out
         assert "modelo local tardo demasiado" in out.lower() or "tardo demasiado" in out
-        assert mock_run.call_args.kwargs.get("timeout") == 180
+        assert mock_run.call_args.kwargs.get("timeout") == 240
 
     @patch("yap.cmd_query_super", return_value="desde-nube")
     @patch("subprocess.run")
