@@ -12,6 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 ### Fixed
+- Alucinacion en consultas fuera del curso (#278): ante «¿que es el VAN y el TIR de
+  un proyecto?» el modelo inventaba una respuesta, porque el prompt del sistema solo
+  nombraba ChincoLinux y no acotaba el ambito. El prompt delimita ahora el ambito
+  (algoritmos, PSeInt, Python y el uso de Yap) y prohibe inventar. Ademas,
+  `_fuera_de_ambito()` decide en codigo cuando una pregunta libre no tiene nada del
+  curso —ni vocabulario de programacion, ni material del RAG, ni es charla o un
+  seguimiento— y en ese caso responde un mensaje fijo sin llamar al modelo. Pedirle
+  esa decision al modelo no funciono: el de 1B siguio inventando y el de 3B empezo a
+  rechazar seguimientos legitimos como «¿y para que sirve?»
 
 ## [1.0.5] - 2026-10-12
 

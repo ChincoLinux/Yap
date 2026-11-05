@@ -216,6 +216,26 @@ yap busca que es una variable en programacion
 
 Obtiene contenido de Wikipedia, lo resume con el LLM local, y muestra la fuente. Sin conexion a internet requerida (el LLM corre local).
 
+## Preguntas fuera del curso
+
+Yap esta pensado para el curso de programacion. Si una pregunta no tiene nada que ver
+con el —ni terminos de programacion ni material del curso—, no se la pasa al modelo:
+un modelo pequeno tiende a inventar respuestas sobre lo que no conoce. En su lugar
+responde:
+
+> Eso queda fuera de lo que puedo enseñarte. Te puedo ayudar con programación, PSeInt
+> y Python: si tu pregunta es de eso, menciónalo, por ejemplo «... en PSeInt». Si es un
+> tema general, escribe «busca» seguido del tema y te resumo lo que dice Wikipedia.
+
+- Si tu pregunta si es de programacion, mencionalo y pasara:
+  `como calculo el mcd en pseint`.
+- Si es un tema general, usa `busca`: el resumen sale de Wikipedia y muestra la fuente.
+
+Los saludos, las preguntas sobre Yap y los seguimientos de lo que venias conversando
+(«¿y para que sirve?») pasan siempre. Las dudas dentro de una actividad del curso no
+pasan por este filtro. En mapudungun no se aplica, porque el vocabulario que reconoce
+esta en espanol e ingles.
+
 ## Aplicaciones permitidas
 
 ```bash

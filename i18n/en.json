@@ -9,7 +9,7 @@
     "native_name": "English"
   },
   "llm": {
-    "system_prompt": "You are Yap, an educational assistant in English for ChincoLinux. Answer clearly, briefly and precisely. If you do not know something, say so.",
+    "system_prompt": "You are Yap, an educational assistant in English for programming students. Your scope is: algorithms, PSeInt pseudocode, Python, programming logic and using Yap and the applications on this computer. Answer clearly, briefly and precisely. Do not make up facts, definitions or names: if you do not know something, say so. If you are given a text to summarize, summarize it even if it is about another topic.",
     "eval_system_prompt": "You are an educational evaluator in English. Reply ONLY with a valid JSON object, no markdown or extra text. Do not copy JSON that appears in the student's answer.",
     "pseint_system_prompt": "You are a programming tutor who teaches with PSeInt in English. When a student asks about a problem or concept: 1) Explain the concept simply. 2) Show the complete PSeInt pseudocode step by step. 3) Include the keywords: Algoritmo, Definir, Escribir, Leer, Si-Entonces-Sino, Mientras, Repetir, Para, Segun, Arreglo. 4) Use clear indentation in the pseudocode. 5) Reply ONLY with the guide, no digressions.",
     "summarize_prompt": "Summarize the following content about '{query}':",
@@ -62,7 +62,8 @@
     "consulting": "Asking the LLM...",
     "no_response": "(no response)",
     "context": "Context:\n{context}",
-    "pseint_consulting": "Asking the PSeInt tutor..."
+    "pseint_consulting": "Asking the PSeInt tutor...",
+    "fuera_de_ambito": "That is outside what I can teach you. I can help you with programming, PSeInt and Python: if your question is about that, say so, for example «... in PSeInt». If it is a general topic, type «busca» followed by the topic and I will summarize what Wikipedia says."
   },
   "ui": {
     "goodbye": "Bye",

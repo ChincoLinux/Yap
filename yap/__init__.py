@@ -325,9 +325,17 @@ FOOTER = "<|end_header_id|>"
 EOT = "<|eot_id|>"
 
 SYSTEM_PROMPT = (
-    "Eres Yap, un asistente educativo en espanol para ChincoLinux. "
-    "Responde de forma clara, breve y precisa. Si no sabes algo, dilo."
+    "Eres Yap, un asistente educativo en espanol para estudiantes de programacion. "
+    "Tu ambito es: algoritmos, pseudocodigo en PSeInt, Python, logica de programacion "
+    "y el uso de Yap y de las aplicaciones del equipo. "
+    "Responde de forma clara, breve y precisa. "
+    "No inventes datos, definiciones ni nombres: si no sabes algo, dilo. "
+    "Si te entregan un texto para resumir, resumelo aunque trate de otro tema."
 )
+# ponytail: el prompt nombraba solo ChincoLinux y no acotaba el ambito, asi que
+# ante un termino desconocido el modelo inventaba que era software de Linux (#278).
+# Se compara contra esta copia para saber si un test o un integrador lo cambio.
+_SYSTEM_PROMPT_POR_DEFECTO = SYSTEM_PROMPT
 
 HISTORY = []
 
@@ -1346,8 +1354,7 @@ def _system_prompt():
     Solo inyecta nombre, nivel y curso_activo; las estadísticas quedan
     fuera para no desperdiciar KV cache/tokens en cada consulta.
     """
-    default_sp = "Eres Yap, un asistente educativo en espanol para ChincoLinux. Responde de forma clara, breve y precisa. Si no sabes algo, dilo."
-    base = SYSTEM_PROMPT if SYSTEM_PROMPT != default_sp else system_prompt()
+    base = SYSTEM_PROMPT if SYSTEM_PROMPT != _SYSTEM_PROMPT_POR_DEFECTO else system_prompt()
     contexto = []
     try:
         perfil = cargar_perfil()
@@ -3322,6 +3329,80 @@ def _rag_context_for_query(prompt):
         txt = r.get("text", "")
         lines.append(f"— [{src}] {txt}")
     return "\n".join(lines)
+
+
+# Lo que ata una pregunta al curso aunque el RAG no tenga material sobre ella.
+# Sin tildes ni mayusculas: se compara contra el texto normalizado.
+_TERMINOS_DEL_CURSO = frozenset(
+    """
+    algoritmo algoritmos pseudocodigo pseudocode pseint python programa programas
+    programar programacion programming program code codigo software script scripts
+    lenguaje variable variables constante constantes funcion funciones function
+    functions procedimiento subproceso subprocesos metodo metodos method clase clases
+    class objeto objetos object ciclo ciclos bucle bucles loop loops for while mientras
+    repetir segun condicional condicionales conditional condicion condiciones condition
+    if else arreglo arreglos array arrays vector vectores matriz matrices matrix lista
+    listas list tupla tuplas tuple diccionario diccionarios dictionary cadena cadenas
+    string strings entero enteros integer int flotante float booleano booleanos boolean
+    bool recursividad recursivo recursiva recursion compilar compilador compiler
+    interprete interpreter depurar depuracion debug bug bugs sintaxis syntax excepcion
+    excepciones exception modulo modulos module libreria librerias library import print
+    input operador operadores operator retorno parametro parametros parameter argumento
+    argumentos argument indice indices index iteracion iterar iterate dato datos data
+    pila stack puntero pointer memoria memory terminal consola console comando comandos
+    command git github html css javascript java sql c++ c# diagrama diagramas logica
+    logic binario binary bit byte computador computadora computer ordenador archivo
+    archivos file files carpeta folder linux debian ubuntu windows chincolinux numero
+    numeros number numbers promedio factorial fibonacci primo primos impar suma sumar
+    multiplicar multiplicacion tabla calculo calcular area circulo celsius fahrenheit
+    convertir convierto ordenar ordeno ordenamiento menor mayor guardar guardo
+    yap fpy1101 curso cursos course actividad actividades ejercicio ejercicios exercise
+    progreso nota notas sesion sesiones perfil menu aplicacion aplicaciones app apps libreoffice
+    firefox thonny scratch geogebra krita kalzium gcompris hola gracias ayuda ayudame
+    ayudar hello help thanks
+    """.split()
+)
+
+# Comienzos que no traen tema propio: hablan de lo que se venia conversando.
+_SEGUIMIENTOS = (
+    "y ", "pero ", "entonces", "ademas", "tambien", "por que", "porque", "dame",
+    "muestrame", "explica", "otro", "otra", "ejemplo", "no entendi", "no entiendo",
+    "mas ", "sigue", "continua", "and ", "but ", "why", "give me", "show me", "explain",
+    "another", "example", "more ", "continue",
+)
+
+# Charla: preguntarle a Yap por si mismo no es salirse del curso.
+_CHARLA = (
+    "buenos", "buenas", "quien eres", "que puedes", "que sabes", "como te llamas",
+    "hi ", "thank", "who are you", "what can you", "what are you",
+)
+
+
+def _fuera_de_ambito(pregunta):
+    """True when a free-form question is clearly outside the course.
+
+    Decided in code, not by the model: a 1B/3B model cannot tell reliably. When
+    asked to, it kept inventing answers and began turning down programming
+    questions (#278).
+
+    Errs towards answering, since a question let through only gets today's
+    behavior: it is turned down only when nothing ties it to the course.
+    """
+    # ponytail: el vocabulario esta en espanol e ingles; en mapudungun ninguna
+    # pregunta coincidiria y se rechazaria todo
+    if get_lang() not in ("es", "en"):
+        return False
+    palabras = re.findall(r"[a-z0-9+#]+", _normalizar_respuesta(pregunta))
+    if len(palabras) <= 2:
+        return False
+    if not _TERMINOS_DEL_CURSO.isdisjoint(palabras):
+        return False
+    texto = " ".join(palabras)
+    if texto.startswith(_CHARLA):
+        return False
+    if HISTORY and texto.startswith(_SEGUIMIENTOS):
+        return False
+    return not _rag_context_for_query(pregunta)
 
 
 def cmd_rag(sub=""):
@@ -8426,6 +8507,9 @@ def handle_action(action, param, original_input):
 
     elif action == "query_local":
         # Eleccion explicita del estudiante: no delegar a la nube ni por red.
+        if _fuera_de_ambito(original_input):
+            print(t("query.fuera_de_ambito"))
+            return
         print("Consultando LLM local...")
         print(cmd_query(original_input, allow_super_fallback=False))
         _cons = linea_consumo()
@@ -8444,6 +8528,9 @@ def handle_action(action, param, original_input):
         print()
 
     else:
+        if _fuera_de_ambito(original_input):
+            print(t("query.fuera_de_ambito"))
+            return
         print(t("query.consulting"))
         print(cmd_query(original_input))
         _cons = linea_consumo()

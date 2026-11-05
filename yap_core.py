@@ -514,6 +514,8 @@ def execute_action_headless(
 
     else:
         # Consulta libre al LLM
+        if yap._fuera_de_ambito(original_input):
+            return yap.t("query.fuera_de_ambito")
         return query_stream(
             original_input,
             on_token=on_token,
