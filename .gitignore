@@ -19,3 +19,6 @@ resultado-*.txt
 # Paquetes Debian generados (#31)
 dist/
 *.deb
+
+# Binarios locales de inferencia
+bin/
