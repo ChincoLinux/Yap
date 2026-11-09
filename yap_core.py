@@ -141,6 +141,32 @@ def stream_llama(
     Usa subprocess.Popen sin shell (seguro contra inyecciones) y con stdin DEVNULL.
     Emite tokens o fragmentos conforme se producen y respeta estrictamente el timeout.
     """
+    # Inferencia de bajo nivel en memoria C/C++ vía ctypes si está disponible (ultralow-mem2)
+    if os.environ.get("YAP_USE_CTYPES", "1") != "0" and "pytest" not in sys.modules:
+        try:
+            from yap.llm_ctypes import query_ctypes, es_ctypes_disponible
+            if es_ctypes_disponible() and "-m" in cmd and "-p" in cmd:
+                m_path = cmd[cmd.index("-m") + 1]
+                p_text = cmd[cmd.index("-p") + 1]
+                if os.path.isfile(m_path):
+                    if task is not None:
+                        task.status = TaskStatus.RUNNING
+                    res = query_ctypes(
+                        prompt=p_text,
+                        modelo_path=m_path,
+                        timeout_s=timeout_s,
+                        on_token=on_token,
+                        cancel_event=cancel_event,
+                    )
+                    if res is not None:
+                        out_text, _ = res
+                        if task is not None:
+                            task.status = TaskStatus.COMPLETED
+                            task.result = out_text
+                        return out_text
+        except Exception:
+            pass
+
     bin_name = cmd[0] if cmd else "llama-cli"
     if shutil.which(bin_name) is None:
         return "[ERROR] llama-cli no instalado. Ejecuta el setup de Yap."

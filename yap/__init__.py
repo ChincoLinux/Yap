@@ -7725,6 +7725,33 @@ def cmd_query(
 
         yap_core.asegurar_llama_instalado(auto_instalar=True)
 
+    timeout_s = _local_llama_timeout()
+
+    # Inferencia de bajo nivel en memoria C/C++ vía ctypes (ultralow-mem2)
+    if os.environ.get("YAP_USE_CTYPES", "1") != "0" and "pytest" not in sys.modules:
+        try:
+            from yap.llm_ctypes import query_ctypes, es_ctypes_disponible
+            if es_ctypes_disponible() and os.path.isfile(MODEL_PATH):
+                ctypes_res = query_ctypes(
+                    prompt=full_prompt,
+                    modelo_path=MODEL_PATH,
+                    n_ctx=MAX_CTX,
+                    n_threads=LLAMA_THREADS,
+                    max_tokens=384,
+                    temperature=LLAMA_TEMP_QUERY,
+                    on_token=on_token,
+                    timeout_s=timeout_s,
+                )
+                if ctypes_res is not None:
+                    out_text, stats = ctypes_res
+                    if store_history and out_text not in (t("query.no_response"), ""):
+                        HISTORY.append((prompt, out_text))
+                        if len(HISTORY) > MAX_HISTORY:
+                            HISTORY.pop(0)
+                    return out_text
+        except Exception:
+            pass
+
     cmd = [
         "llama-cli",
         "-m",
