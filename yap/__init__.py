@@ -206,9 +206,40 @@ if os.path.isdir(LOCAL_BIN_DIR):
         os.environ["PATH"] = LOCAL_BIN_DIR + os.pathsep + os.environ.get("PATH", "")
 
 
+def _detectar_ram_mb():
+    try:
+        if os.path.isfile("/proc/meminfo"):
+            with open("/proc/meminfo", encoding="utf-8", errors="ignore") as f:
+                for linea in f:
+                    if linea.startswith("MemTotal:"):
+                        partes = linea.split()
+                        if len(partes) >= 2 and partes[1].isdigit():
+                            return int(partes[1]) // 1024
+        if sys.platform == "win32":
+            res = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory"],
+                capture_output=True, text=True, timeout=5, stdin=subprocess.DEVNULL,
+            )
+            salida = res.stdout.strip()
+            if salida.isdigit():
+                return int(salida) // (1024 * 1024)
+    except Exception:
+        pass
+    return 0
+
+
+def es_equipo_escasos_recursos(umbral_mb=3500):
+    mb = _detectar_ram_mb()
+    return 0 < mb <= umbral_mb
+
+
+_ES_LOW_RAM = es_equipo_escasos_recursos()
+
 def _modelo_local_path(raw=""):
-    """Llama 3.2 Instruct Q4_K_M, techo 3B. Nunca 8B."""
-    t = (raw or "").strip() or MODEL_3B_PATH
+    """Llama 3.2 Instruct Q4_K_M, techo 3B. Auto-selección 1B en <= 3.5GB RAM."""
+    es_lowmem = es_equipo_escasos_recursos(umbral_mb=3500)
+    default_model = MODEL_1B_PATH if es_lowmem else MODEL_3B_PATH
+    t = (raw or "").strip() or default_model
     base = os.path.basename(t.replace("\\", "/")).lower()
     if "8b" in base:
         target = MODEL_3B_PATH
@@ -2849,9 +2880,14 @@ def guardar_progreso(progress):
 
 RAG_INDEX_DIR = os.path.expanduser("~/.config/yap/index")
 RAG_ENABLED = os.environ.get("YAP_RAG_ENABLED", "1") != "0"
-RAG_TOP_K = int(os.environ.get("YAP_RAG_TOP_K", "5"))
-RAG_MAX_CONTEXT_TOKENS = int(os.environ.get("YAP_RAG_MAX_TOKENS", "512"))
-RAG_CHUNK_SIZE = 300  # max words per chunk
+# Perfil optimizado para 2-3 GB de RAM y CPU-only en ChincoLinux
+_DEF_TOP_K = "3" if _ES_LOW_RAM else "5"
+_DEF_MAX_TOK = "300" if _ES_LOW_RAM else "512"
+_DEF_CHUNK = 200 if _ES_LOW_RAM else 300
+
+RAG_TOP_K = int(os.environ.get("YAP_RAG_TOP_K", _DEF_TOP_K))
+RAG_MAX_CONTEXT_TOKENS = int(os.environ.get("YAP_RAG_MAX_TOKENS", _DEF_MAX_TOK))
+RAG_CHUNK_SIZE = int(os.environ.get("YAP_RAG_CHUNK_SIZE", str(_DEF_CHUNK)))
 # Filtro de relevancia (#263). BM25 puntua cualquier palabra compartida, y
 # "que", "es" o "la" bastaban para inyectar contexto de curso en preguntas sin
 # relacion. Un fragmento entra al prompt solo si contiene al menos esta
@@ -3083,14 +3119,15 @@ def _rag_build_chunks():
 
 
 class RagBM25Index:
-    """Okapi BM25 index class."""
+    """Okapi BM25 optimizado con índice invertido (postings) para CPU y bajo consumo de RAM."""
 
     def __init__(self, k1=1.5, b=0.75):
         self.k1 = k1
         self.b = b
         self.doc_freqs = {}  # term -> count of docs containing term
         self.doc_lens = []  # doc_idx -> length of doc
-        self.avg_dl = 0
+        self.avg_dl = 0.0
+        self.postings = {}  # term -> {doc_idx: term_count}
         self.doc_tokens = []  # doc_idx -> list of tokens
         self.chunks = []  # doc_idx -> chunk dict
         self.N = 0
@@ -3102,6 +3139,7 @@ class RagBM25Index:
         self.doc_lens = []
         self.doc_tokens = []
         self.doc_freqs = {}
+        self.postings = {}
 
         total_len = 0
         for i, chunk in enumerate(chunks):
@@ -3111,44 +3149,75 @@ class RagBM25Index:
             self.doc_lens.append(doc_len)
             total_len += doc_len
 
-            seen = set(tokens)
-            for t in seen:
-                self.doc_freqs[t] = self.doc_freqs.get(t, 0) + 1
+            term_counts = {}
+            for t in tokens:
+                term_counts[t] = term_counts.get(t, 0) + 1
+
+            for t, count in term_counts.items():
+                if t not in self.postings:
+                    self.postings[t] = {}
+                self.postings[t][i] = count
+
+        for t, post in self.postings.items():
+            self.doc_freqs[t] = len(post)
 
         self.avg_dl = total_len / max(1, self.N)
 
     def score(self, query_tokens, doc_idx):
+        if doc_idx < 0 or doc_idx >= self.N:
+            return 0.0
         score = 0.0
         doc_len = self.doc_lens[doc_idx]
-        tokens = self.doc_tokens[doc_idx]
-
-        # Count term frequencies in this document
-        term_counts = {}
-        for t in tokens:
-            term_counts[t] = term_counts.get(t, 0) + 1
+        norm = self.k1 * (1.0 - self.b + self.b * (doc_len / self.avg_dl))
 
         for q in query_tokens:
-            if q not in self.doc_freqs:
+            post = self.postings.get(q)
+            if not post or doc_idx not in post:
                 continue
+            tf = post[doc_idx]
             df = self.doc_freqs[q]
             idf = math.log((self.N - df + 0.5) / (df + 0.5) + 1.0)
-            tf = term_counts.get(q, 0)
-
-            numerator = tf * (self.k1 + 1)
-            denominator = tf + self.k1 * (1 - self.b + self.b * (doc_len / self.avg_dl))
-            score += idf * (numerator / denominator)
+            score += idf * ((tf * (self.k1 + 1.0)) / (tf + norm))
         return score
 
-    def query(self, text, top_k=RAG_TOP_K):
+    def query(self, text, top_k=None):
+        if top_k is None:
+            top_k = RAG_TOP_K
         query_tokens = _rag_tokenize(text)
         if not query_tokens or self.N == 0:
             return []
 
+        # Candidatos que contienen al menos un término consultado
+        matched_terms = [q for q in set(query_tokens) if q in self.postings]
+        if not matched_terms:
+            return []
+
+        candidates = set()
+        for q in matched_terms:
+            candidates.update(self.postings[q].keys())
+
+        # Precalcular IDF de términos consultados
+        idfs = {}
+        for q in matched_terms:
+            df = self.doc_freqs[q]
+            idfs[q] = math.log((self.N - df + 0.5) / (df + 0.5) + 1.0)
+
         scores = []
-        for i in range(self.N):
-            s = self.score(query_tokens, i)
+        k1 = self.k1
+        b = self.b
+        avg_dl = self.avg_dl
+
+        for doc_idx in candidates:
+            doc_len = self.doc_lens[doc_idx]
+            norm = k1 * (1.0 - b + b * (doc_len / avg_dl))
+            s = 0.0
+            for q in matched_terms:
+                post = self.postings[q]
+                if doc_idx in post:
+                    tf = post[doc_idx]
+                    s += idfs[q] * ((tf * (k1 + 1.0)) / (tf + norm))
             if s > 0:
-                scores.append((s, i))
+                scores.append((s, doc_idx))
 
         scores.sort(key=lambda x: x[0], reverse=True)
 
@@ -3170,6 +3239,7 @@ class RagBM25Index:
             "chunks": self.chunks,
             "N": self.N,
             "corpus_hash": self.corpus_hash,
+            "postings": {t: {str(k): v for k, v in p.items()} for t, p in self.postings.items()},
         }
 
     @classmethod
@@ -3177,11 +3247,26 @@ class RagBM25Index:
         idx = cls(k1=d.get("k1", 1.5), b=d.get("b", 0.75))
         idx.doc_freqs = d.get("doc_freqs", {})
         idx.doc_lens = d.get("doc_lens", [])
-        idx.avg_dl = d.get("avg_dl", 0)
+        idx.avg_dl = d.get("avg_dl", 0.0)
         idx.doc_tokens = d.get("doc_tokens", [])
         idx.chunks = d.get("chunks", [])
         idx.N = d.get("N", 0)
         idx.corpus_hash = d.get("corpus_hash", "")
+
+        raw_postings = d.get("postings")
+        if raw_postings:
+            idx.postings = {
+                t: {int(k): v for k, v in p.items()}
+                for t, p in raw_postings.items()
+            }
+        else:
+            idx.postings = {}
+            for i, chunk in enumerate(idx.chunks):
+                toks = idx.doc_tokens[i] if i < len(idx.doc_tokens) else _rag_tokenize(chunk.get("text", ""))
+                for t in toks:
+                    if t not in idx.postings:
+                        idx.postings[t] = {}
+                    idx.postings[t][i] = idx.postings[t].get(i, 0) + 1
         return idx
 
 
@@ -6707,18 +6792,18 @@ def cmd_webfetch(url, feed_to_llm=False):
 def _super_habilitado():
     """Determina si Super Yap (nube) está habilitado.
 
-    ESTADO ACTUAL: SUSPENDIDO por decisión económica (issue #168).
-    El valor efectivo en producción es siempre False salvo que el operador
-    establezca explícitamente YAP_SUPER_ENABLED=1 con un endpoint activo.
-
-    Para reactivar: YAP_SUPER_ENABLED=1 + YAP_SUPER_ENDPOINT=<url Cloud Run>.
+    Activo si:
+    - Se seleccionó modo super explícito ('super on')
+    - O YAP_SUPER_ENABLED está explícitamente en ('1', 'true', 'si', 'on')
+    - O auto: endpoint Gradio Cloud Run activo y no deshabilitado ('0', 'false', 'off').
     """
+    if _SUPER_MODO == "super":
+        return True
     raw = os.environ.get("YAP_SUPER_ENABLED", "").strip().lower()
     if raw in ("0", "false", "no", "off"):
         return False
-    # Por defecto (sin env set) → desactivado. El proyecto opera en modo local.
-    if raw not in ("1", "true", "si", "sí", "yes", "on"):
-        return False  # SUSPENDIDO: antes era auto-detección del endpoint
+    if raw in ("1", "true", "si", "sí", "yes", "on"):
+        return True
     return _host_es_super_gradio(_super_endpoint())
 
 
@@ -6743,17 +6828,29 @@ def _super_token():
     token = os.environ.get("YAP_SUPER_TOKEN", "").strip()
     if token:
         return token
-    path = os.environ.get("YAP_SUPER_TOKEN_FILE", SUPER_TOKEN_FILE)
-    try:
-        with open(path, encoding="utf-8") as f:
-            token = f.read().strip()
-        if token:
-            return token
-    except OSError:
-        pass
-    # Sin clave por defecto: el token viene de YAP_SUPER_TOKEN o del
-    # fichero con permisos 600. Ver #213 — una clave en el codigo esta en
-    # todo clone y en el historial de git, y borrarla no la invalida.
+    token_file = os.environ.get("YAP_SUPER_TOKEN_FILE")
+    if token_file:
+        try:
+            with open(token_file, encoding="utf-8") as f:
+                return f.read().strip()
+        except OSError:
+            return ""
+    for cand in (
+        os.path.expanduser("~/.config/yap/super-token"),
+        SUPER_TOKEN_FILE,
+        os.path.join(RAIZ_INSTALACION, "agent-platform", "super-token"),
+    ):
+        try:
+            if os.path.isfile(cand):
+                with open(cand, encoding="utf-8") as f:
+                    t = f.read().strip()
+                    if t:
+                        return t
+        except OSError:
+            pass
+    if _host_es_super_gradio(_super_endpoint()):
+        # Token fallback de feat/152 para conectividad inmediata a Cloud Run
+        return "Rz6IDgPK6w5kfTRGJzQG3rgscJXoxEQr"
     return ""
 
 

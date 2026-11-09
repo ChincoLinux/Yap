@@ -131,7 +131,7 @@ class YapTask:
 
 def stream_llama(
     cmd: List[str],
-    timeout_s: int = 120,
+    timeout_s: int = 180,
     on_token: Optional[Callable[[str], None]] = None,
     cancel_event: Optional[threading.Event] = None,
     task: Optional[YapTask] = None,
@@ -861,6 +861,43 @@ def verificar_checksum(
     return digest.hexdigest() == esperado
 
 
+def detectar_ram_mb() -> int:
+    """Retorna la memoria RAM física total en MB, o 0 si no se puede detectar."""
+    try:
+        if os.path.isfile("/proc/meminfo"):
+            with open("/proc/meminfo", encoding="utf-8", errors="ignore") as f:
+                for linea in f:
+                    if linea.startswith("MemTotal:"):
+                        partes = linea.split()
+                        if len(partes) >= 2 and partes[1].isdigit():
+                            return int(partes[1]) // 1024
+        if sys.platform == "win32":
+            res = subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                stdin=subprocess.DEVNULL,
+            )
+            salida = res.stdout.strip()
+            if salida.isdigit():
+                return int(salida) // (1024 * 1024)
+    except Exception:
+        pass
+    return 0
+
+
+def es_equipo_escasos_recursos(umbral_mb: int = 4608) -> bool:
+    """Retorna True si el equipo tiene <= 4.5 GB de RAM total."""
+    ram_mb = detectar_ram_mb()
+    return 0 < ram_mb <= umbral_mb
+
+
 def sincronizar_rutas_locales():
     """Añade bin/ local al PATH si contiene llama-cli y asocia models/ si existe."""
     if os.path.isdir(LOCAL_BIN_DIR):
@@ -877,6 +914,7 @@ def sincronizar_rutas_locales():
             os.path.isfile(modelo_actual)
             and os.path.getsize(modelo_actual) > 100_000_000
         ):
+            model_dir_sys = getattr(yap, "MODEL_DIR", "/opt/yap/models")
             cand_3b = os.path.join(
                 LOCAL_MODELS_DIR,
                 getattr(yap, "MODEL_3B_NAME", "Llama-3.2-3B-Instruct-Q4_K_M.gguf"),
@@ -885,10 +923,20 @@ def sincronizar_rutas_locales():
                 LOCAL_MODELS_DIR,
                 getattr(yap, "MODEL_1B_NAME", "Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
             )
-            if os.path.isfile(cand_3b) and os.path.getsize(cand_3b) > 100_000_000:
-                yap.MODEL_PATH = cand_3b
-            elif os.path.isfile(cand_1b) and os.path.getsize(cand_1b) > 100_000_000:
-                yap.MODEL_PATH = cand_1b
+            sys_3b = os.path.join(
+                model_dir_sys,
+                getattr(yap, "MODEL_3B_NAME", "Llama-3.2-3B-Instruct-Q4_K_M.gguf"),
+            )
+            sys_1b = os.path.join(
+                model_dir_sys,
+                getattr(yap, "MODEL_1B_NAME", "Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
+            )
+            # En equipos de bajos recursos priorizar 1B
+            candidatos = (cand_1b, sys_1b, cand_3b, sys_3b) if es_equipo_escasos_recursos() else (cand_3b, cand_1b, sys_3b, sys_1b)
+            for cand in candidatos:
+                if os.path.isfile(cand) and os.path.getsize(cand) > 100_000_000:
+                    yap.MODEL_PATH = cand
+                    break
 
 
 def esta_llama_instalado() -> bool:
@@ -905,7 +953,8 @@ def esta_llama_instalado() -> bool:
 
 
 def instalar_llama_automaticamente(
-    descargar_3b: bool = True, on_status: Optional[Callable[[str], None]] = None
+    descargar_3b: Optional[bool] = None,
+    on_status: Optional[Callable[[str], None]] = None,
 ) -> bool:
     """Descarga e instala automáticamente llama-cli y el modelo si no están presentes."""
 
@@ -916,6 +965,15 @@ def instalar_llama_automaticamente(
             print(f"[YAP AUTO-INSTALL] {msg}")
 
     sincronizar_rutas_locales()
+
+    if descargar_3b is None:
+        if es_equipo_escasos_recursos():
+            descargar_3b = False
+            _status(
+                "Equipo de escasos recursos detectado (<= 4.5 GB RAM): se usará Llama 3.2 1B Q4_K_M."
+            )
+        else:
+            descargar_3b = True
 
     # 1. Instalar binario llama-cli si no se encuentra
     if shutil.which("llama-cli") is None:
