@@ -22,6 +22,8 @@ static uint32_t g_idle_timeout_seconds = 300;
 static std::thread g_idle_reaper_thread;
 static std::atomic<bool> g_reaper_running(false);
 
+static yap_llama_params_t g_active_params = {1024, 2, 128, true, false, 300};
+
 static uint64_t get_current_time_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()
@@ -56,11 +58,18 @@ int yap_llama_load_model(const char* model_path, const yap_llama_params_t* param
     }
 
     // Configuración de ultra-bajo consumo
-    uint32_t n_ctx = params ? params->n_ctx : 1024;
-    uint32_t n_threads = params ? params->n_threads : 2;
-    uint32_t n_batch = params ? params->n_batch : 128; // Reducido para ahorrar RAM
-    bool use_mmap = params ? params->use_mmap : true;
-    g_idle_timeout_seconds = params ? params->idle_timeout_s : 300;
+    if (params) {
+        g_active_params = *params;
+        g_idle_timeout_seconds = params->idle_timeout_s;
+    } else {
+        g_active_params.n_ctx = 1024;
+        g_active_params.n_threads = 2;
+        g_active_params.n_batch = 128; // Reducido para ahorrar RAM
+        g_active_params.use_mmap = true;
+        g_active_params.use_mlock = false;
+        g_active_params.idle_timeout_s = 300;
+        g_idle_timeout_seconds = 300;
+    }
 
     // Marcador de modelo cargado
     g_current_model_path = model_path;
@@ -95,15 +104,19 @@ int yap_llama_stream_generate(
         return -2; // Modelo no cargado
     }
 
+    // Marcar argumentos para evitar warnings de compilación
+    (void)max_tokens;
+    (void)temperature;
+    (void)on_token;
+    (void)check_cancel;
+    (void)user_data;
+
     g_last_activity_time.store(get_current_time_ms());
     uint64_t start_ms = get_current_time_ms();
 
     // Emisión simulada / puente real según enlace
     std::string accumulated;
     uint64_t generated = 0;
-
-    // Tokens de parada
-    const char* stop_tokens[] = {"<|eot_id|>", "<|end_of_text|>", "[end of text]", nullptr};
 
     if (out_stats) {
         out_stats->elapsed_ms = get_current_time_ms() - start_ms;
