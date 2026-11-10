@@ -3,7 +3,6 @@
 pub mod bm25;
 pub mod sysinfo;
 
-use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_float, c_int, c_ulonglong};
 use std::slice;
 

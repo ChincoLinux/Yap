@@ -1,6 +1,8 @@
 //! sysinfo.rs — Detección nativa de memoria física y recursos en Rust con cero sobrecarga.
 
+#[cfg(target_os = "linux")]
 use std::fs::File;
+#[cfg(target_os = "linux")]
 use std::io::Read;
 
 #[repr(C)]
