@@ -890,6 +890,13 @@ def verificar_checksum(
 def detectar_ram_mb() -> int:
     """Retorna la memoria RAM física total en MB, o 0 si no se puede detectar."""
     try:
+        from yap.native_bridge import detectar_ram_nativa_mb
+        ram_rust = detectar_ram_nativa_mb()
+        if ram_rust is not None and ram_rust > 0:
+            return ram_rust
+    except Exception:
+        pass
+    try:
         if os.path.isfile("/proc/meminfo"):
             with open("/proc/meminfo", encoding="utf-8", errors="ignore") as f:
                 for linea in f:

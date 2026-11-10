@@ -20,6 +20,8 @@ from typing import Optional, Callable, Generator, List, Dict, Any, Tuple
 
 # Ubicaciones estándar donde buscar libllama.so / llama.dll en ChincoLinux y local
 CANDIDATOS_LIBLLAMA = [
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), "bin", "yap_cpp_llama.dll" if sys.platform == "win32" else "libyap_cpp_llama.so"),
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), "native", "yap_cpp_llama", "yap_cpp_llama.dll" if sys.platform == "win32" else "libyap_cpp_llama.so"),
     os.path.join(os.path.dirname(os.path.dirname(__file__)), "bin", "libllama.so"),
     os.path.join(os.path.dirname(os.path.dirname(__file__)), "bin", "llama.dll"),
     "/opt/yap/lib/libllama.so",
@@ -109,7 +111,7 @@ class LibLlamaEngine:
                         model_path=modelo_path,
                         n_ctx=n_ctx,
                         n_threads=n_threads,
-                        n_batch=512,
+                        n_batch=int(os.environ.get("YAP_LLAMA_BATCH", "128")),
                         verbose=False,
                     )
                     self._modelo_cargado_path = modelo_path

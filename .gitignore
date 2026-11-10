@@ -20,5 +20,12 @@ resultado-*.txt
 dist/
 *.deb
 
-# Binarios locales de inferencia
+# Binarios locales de inferencia y compilación
 bin/
+target/
+native/**/target/
+*.so
+*.dll
+*.dylib
+*.o
+*.a

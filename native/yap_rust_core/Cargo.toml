@@ -1,0 +1,20 @@
+[package]
+name = "yap_rust_core"
+version = "0.2.0"
+edition = "2021"
+authors = ["ChincoLinux Core Devs <dev@chincolinux.org>"]
+description = "Motor nativo de alto rendimiento en Rust para Yap (ChincoLinux): BM25 invertido y monitor de memoria"
+license = "MIT"
+
+[lib]
+name = "yap_rust_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

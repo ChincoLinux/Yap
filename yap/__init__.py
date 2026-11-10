@@ -208,6 +208,13 @@ if os.path.isdir(LOCAL_BIN_DIR):
 
 def _detectar_ram_mb():
     try:
+        from yap.native_bridge import detectar_ram_nativa_mb
+        ram_rust = detectar_ram_nativa_mb()
+        if ram_rust is not None and ram_rust > 0:
+            return ram_rust
+    except Exception:
+        pass
+    try:
         if os.path.isfile("/proc/meminfo"):
             with open("/proc/meminfo", encoding="utf-8", errors="ignore") as f:
                 for linea in f:
@@ -3162,6 +3169,17 @@ class RagBM25Index:
             self.doc_freqs[t] = len(post)
 
         self.avg_dl = total_len / max(1, self.N)
+        try:
+            from yap.native_bridge import BM25RustWrapper
+            rust_wrapper = BM25RustWrapper(k1=self.k1, b=self.b)
+            if rust_wrapper.esta_disponible():
+                for idx_doc, c_doc in enumerate(chunks):
+                    rust_wrapper.agregar_documento(idx_doc, c_doc.get("text", ""))
+                self._rust_bm25 = rust_wrapper
+            else:
+                self._rust_bm25 = None
+        except Exception:
+            self._rust_bm25 = None
 
     def score(self, query_tokens, doc_idx):
         if doc_idx < 0 or doc_idx >= self.N:
@@ -3183,6 +3201,11 @@ class RagBM25Index:
     def query(self, text, top_k=None):
         if top_k is None:
             top_k = RAG_TOP_K
+        if getattr(self, "_rust_bm25", None) and self._rust_bm25.esta_disponible():
+            rust_res = self._rust_bm25.buscar(text, top_k=top_k)
+            if rust_res:
+                return [(s, idx) for idx, s in rust_res]
+
         query_tokens = _rag_tokenize(text)
         if not query_tokens or self.N == 0:
             return []
