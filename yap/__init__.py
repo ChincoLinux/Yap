@@ -145,6 +145,11 @@ def _menu_principal():
             "",
         ),
         (f"Modelo: {etiqueta_familia_modelo()}", "", ""),
+        (
+            "Bajo — descargar modelo 1B (ultra-bajo consumo de RAM)",
+            "bajo",
+            "",
+        ),
     ]
     try:
         if es_profesor():
@@ -162,6 +167,44 @@ def _menu_principal():
         ]
     )
     return opciones
+
+
+def cmd_descargar_modelo_bajo():
+    """Descarga e instala el modelo Llama 3.2 1B (1 mil millones de parámetros) para ultra-bajo consumo."""
+    global MODEL_PATH
+    import yap_core
+
+    cand_local = os.path.join(LOCAL_MODELS_DIR, MODEL_1B_NAME)
+    cand_sys = os.path.join(MODEL_DIR, MODEL_1B_NAME)
+
+    for cand in (cand_local, cand_sys):
+        if os.path.isfile(cand) and os.path.getsize(cand) > 100_000_000:
+            MODEL_PATH = cand
+            return (
+                f"\n{C['GREEN']}✓ El modelo 1B ({MODEL_1B_NAME}) ya se encuentra instalado.{C['RESET']}\n"
+                f"  Ruta: {cand}\n"
+                f"  {C['BOLD']}Modelo activo cambiado a Llama 3.2 1B (ultra-bajo consumo).{C['RESET']}"
+            )
+
+    print(f"\n{C['BOLD']}{C['CYAN']}Iniciando descarga del modelo Llama 3.2 1B (1 mil millones de parámetros)...{C['RESET']}")
+    print("  Optimizado para ultra-bajo consumo en equipos con 2 a 3 GB de RAM (CPU-only).")
+    print("  Tamaño estimado de descarga: ~800 MB.\n")
+
+    exito = yap_core.instalar_llama_automaticamente(descargar_3b=False, on_status=print)
+    if exito:
+        for cand in (cand_local, cand_sys):
+            if os.path.isfile(cand) and os.path.getsize(cand) > 100_000_000:
+                MODEL_PATH = cand
+                break
+        return (
+            f"\n{C['GREEN']}✓ Modelo Llama 3.2 1B descargado e instalado exitosamente.{C['RESET']}\n"
+            f"  {C['BOLD']}Yap ha activado el modelo Llama 3.2 1B en modo ultra-bajo consumo.{C['RESET']}"
+        )
+    else:
+        return f"\n{C['RED']}[ERROR] No se pudo completar la descarga del modelo 1B. Revisa tu conexión a Internet.{C['RESET']}"
+
+
+cmd_bajo = cmd_descargar_modelo_bajo
 
 
 def cmd_menu():
@@ -8270,6 +8313,17 @@ def interpret(user_input, interactivo=False):
         if pregunta:
             return "super_query", pregunta
         return "super", ""
+    if stripped in (
+        "bajo",
+        "descargar bajo",
+        "modelo bajo",
+        "1b",
+        "modelo 1b",
+        "descargar 1b",
+        "modo bajo",
+    ):
+        return "bajo", ""
+
     if stripped in ("menu", "menú", "opciones"):
         return "menu", ""
     # exportar [--csv|--html] [flags] [ruta]  ->  ("exportar", "<flags>")
@@ -8632,6 +8686,9 @@ def handle_action(action, param, original_input):
     elif action == "super_query":
         print("Consultando Super Yap...")
         print(cmd_query_super(param or original_input))
+
+    elif action == "bajo":
+        print(cmd_bajo())
 
     elif action == "apparmor_status":
         print(cmd_apparmor_status())

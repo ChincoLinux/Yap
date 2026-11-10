@@ -94,3 +94,43 @@ def test_candidatos_cpp_llama_en_llm_ctypes():
     from yap.llm_ctypes import CANDIDATOS_LIBLLAMA
     rutas_str = " ".join(CANDIDATOS_LIBLLAMA)
     assert "yap_cpp_llama" in rutas_str
+
+
+def test_opcion_menu_bajo():
+    import yap
+    menu = yap._menu_principal()
+    cmds = [cmd for _, cmd, _ in menu]
+    assert "bajo" in cmds
+
+    idx = next(i for i, (lbl, cmd, _) in enumerate(menu, 1) if cmd == "bajo")
+    assert yap.interpret(str(idx)) == ("bajo", "")
+    assert yap.interpret("bajo") == ("bajo", "")
+    assert yap.interpret("descargar bajo") == ("bajo", "")
+    assert yap.interpret("1b") == ("bajo", "")
+
+
+def test_cmd_descargar_modelo_bajo_ya_instalado(tmp_path):
+    import yap
+    fake_model = tmp_path / yap.MODEL_1B_NAME
+    fake_model.write_bytes(b"GGUF" + b"\x00" * 100_000_100)
+
+    with patch.object(yap, "LOCAL_MODELS_DIR", str(tmp_path)):
+        res = yap.cmd_descargar_modelo_bajo()
+        assert "ya se encuentra instalado" in res
+        assert yap.MODEL_PATH == str(fake_model)
+
+
+def test_cmd_descargar_modelo_bajo_descarga(tmp_path):
+    import yap
+    fake_model = tmp_path / yap.MODEL_1B_NAME
+
+    def mock_instalar(descargar_3b, on_status=None):
+        fake_model.write_bytes(b"GGUF" + b"\x00" * 100_000_100)
+        return True
+
+    with patch.object(yap, "LOCAL_MODELS_DIR", str(tmp_path)), \
+         patch.object(yap, "MODEL_DIR", str(tmp_path / "sys")), \
+         patch("yap_core.instalar_llama_automaticamente", side_effect=mock_instalar):
+        res = yap.cmd_descargar_modelo_bajo()
+        assert "descargado e instalado exitosamente" in res
+        assert yap.MODEL_PATH == str(fake_model)
